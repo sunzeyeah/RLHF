@@ -27,7 +27,7 @@ c).  下载盘古-2.6B模型:
     https://huggingface.co/imone/pangu_2_6B
 ```
 
-4).  基于模型的输出收集人工反馈数据集（待开源）
+d).  基于模型的输出收集人工反馈数据集（待开源）
     保存至: ./reward_data_dir
 
 
