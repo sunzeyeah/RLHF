@@ -19,6 +19,7 @@ b).  准备webtext数据集:
 ```bash
     https://paperswithcode.com/dataset/webtext
 ```
+    保存至: ./dialogue_dir
 
 c).  下载盘古-2.6B模型: 
 
@@ -30,15 +31,15 @@ c).  下载盘古-2.6B模型:
 
 1). 监督微调 (SFT):
 
-    cd sft/ && deepspeed train_gptj_summarize.py
+    cd sft/ && deepspeed train_SFT.py
 
 2). 训练 Reward 模型:
 
-    cd reward_model/ && deepspeed train_reward_model_gptj.py
+    cd reward_model/ && deepspeed train_reward_model.py
 
 3). 使用PPO算法强化学习:
 
-    accelerate launch --config_file configs/default_accelerate_config.yaml trlx_pangu_dialogue.py
+    accelerate launch --config_file configs/default_accelerate_config.yaml trlx_pangu_rlhf.py
 
    备注: 至少需要1张V100显卡。
 
