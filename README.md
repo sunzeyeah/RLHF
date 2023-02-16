@@ -1,4 +1,4 @@
-## 使用RLHF训练Pangu 2.6B中文对话模型pipeline
+## 使用RLHF训练Pangu 2.6B中文对话模型
 
 我们的pipeline是基于OpenAI论文 "[Learning to Summarize from human feedback](https://arxiv.org/abs/2009.01325)"的开源代码进行修改。
 
