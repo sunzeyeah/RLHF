@@ -19,7 +19,7 @@ b).  准备webtext数据集:
 ```bash
     https://paperswithcode.com/dataset/webtext
 ```
-    保存至: ./dialogue_dir
+保存至: ./dialogue_dir
 
 c).  下载盘古-2.6B模型: 
 
@@ -28,7 +28,7 @@ c).  下载盘古-2.6B模型:
 ```
 
 d).  基于模型的输出收集人工反馈数据集（待开源）
-    保存至: ./reward_data_dir
+保存至: ./reward_data_dir
 
 
 ### 训练步骤
