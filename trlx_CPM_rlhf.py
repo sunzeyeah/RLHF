@@ -27,16 +27,11 @@ logging.basicConfig(
 )
 
 
-REWARD_CHECKPOINT_PATH = "/userhome/Research_HUB/RLHF/trlx/examples/dialogue_rlhf/reward_model/rm_checkpoint/checkpoint-3625/pytorch_model.bin"
+REWARD_CHECKPOINT_PATH = "./pytorch_model.bin"
 
-if not os.path.exists(REWARD_CHECKPOINT_PATH):
-    os.makedirs("reward_model/rm_checkpoint", exist_ok=True)
-    os.system(
-        f"wget -O {REWARD_CHECKPOINT_PATH} \
-        https://huggingface.co/CarperAI/openai_summarize_tldr_rm_checkpoint/resolve/main/pytorch_model.bin"
-    )
-SFT_MODEL_PATH = "/userhome/Research_HUB/RLHF/trlx/examples/dialogue_rlhf/sft/CPM_dialogue/checkpoint-3000"
-T_PATH = "/userhome/Research_HUB/RLHF/trlx/examples/dialogue_rlhf/CPM_chk"
+
+SFT_MODEL_PATH = "./checkpoint-3000"
+T_PATH = "TsinghuaAI/CPM-Generate"
 
 
 def load_dataset(path, split, max_samples):
@@ -63,11 +58,11 @@ if __name__ == "__main__":
 
     model_path = "chinese_gpt_chk"
     token_path = "tokenizer_chk"
-    data_path = "/userhome/Research_HUB/RLHF/trlx/examples/dialogue_rlhf/dialogue_dir"
+    data_path = "./dialogue_dir"
 
     # Load the pre-trained reward model
     rw_tokenizer = AutoTokenizer.from_pretrained(token_path)
-    rw_model = GPTRewardModel("/userhome/Research_HUB/RLHF/trlx/examples/dialogue_rlhf/sft/gptj-supervised-summarize-checkpoint/checkpoint-20000",rw_tokenizer)
+    rw_model = GPTRewardModel("./checkpoint-20000",rw_tokenizer)
     rw_model.load_state_dict(torch.load(REWARD_CHECKPOINT_PATH))
 
     ###
