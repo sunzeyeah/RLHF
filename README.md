@@ -5,7 +5,7 @@
 
 ### 准备阶段
 
-a).  需要配置trlx库相关环境，参考 "[trlx] (https://github.com/CarperAI/trlx)"
+1).  需要配置trlx库相关环境，参考 "[trlx] (https://github.com/CarperAI/trlx)"
 
 ```bash
 git clone https://github.com/CarperAI/trlx.git
@@ -14,18 +14,22 @@ pip install torch --extra-index-url https://download.pytorch.org/whl/cu116 # for
 pip install -e .
 ```
 
-b).  准备webtext数据集: 
-
-```bash
-    https://paperswithcode.com/dataset/webtext
-```
-    保存至: ./dialogue_dir
-
-c).  下载盘古-2.6B模型: 
+2).  下载盘古-2.6B模型: 
 
 ```bash
     https://huggingface.co/imone/pangu_2_6B
 ```
+
+3).  准备webtext数据集: 
+
+```bash
+    https://paperswithcode.com/dataset/webtext
+```
+保存至: ./dialogue_dir/demo.json
+
+4).  收集人工反馈数据
+保存至: ./reward_data_dir/processed/demo.json
+
 
 ### 训练步骤
 
