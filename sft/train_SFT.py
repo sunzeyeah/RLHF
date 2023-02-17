@@ -95,7 +95,7 @@ if __name__ == "__main__":
         per_device_train_batch_size=train_batch_size,
         per_device_eval_batch_size=eval_batch_size,
         gradient_checkpointing=True,
-        half_precision_backend=True,
+        half_precision_backend="auto",
         fp16=True,
         adam_beta1=0.9,
         adam_beta2=0.95,
