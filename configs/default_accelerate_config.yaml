@@ -2,7 +2,11 @@ command_file: null
 commands: null
 compute_environment: LOCAL_MACHINE
 deepspeed_config:
+<<<<<<< HEAD
   deepspeed_config_file: configs/ds_config_trlx_gptj_summarize.json
+=======
+  deepspeed_config_file: configs/ds_config_trlx_pangu.json
+>>>>>>> 8d9fb60e1075f1df94c7bdd1fd1d8bb2c4440bb1
   zero3_init_flag: false
 distributed_type: DEEPSPEED
 downcast_bf16: 'no'

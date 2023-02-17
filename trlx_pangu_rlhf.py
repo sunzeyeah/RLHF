@@ -3,6 +3,7 @@ import pathlib
 from typing import List
 import json
 import torch
+<<<<<<< HEAD
 
 from reward_model.reward_model import GPTRewardModel
 from tqdm import tqdm
@@ -34,6 +35,33 @@ SFT_MODEL_PATH = "./Pangu_chk"
 
 T_PATH = "imone/pangu_2_6B"
 
+=======
+from reward_model.reward_model import GPTRewardModel
+from tqdm import tqdm
+from transformers import AutoTokenizer,AutoConfig
+import trlx
+from trlx.data.configs import TRLConfig
+import datetime
+import logging
+def beijing(sec, what):
+    beijing_time = datetime.datetime.now() + datetime.timedelta(hours=8)
+    return beijing_time.timetuple()
+logging.Formatter.converter = beijing
+logging.basicConfig(
+    format="%(asctime)s - %(pathname)s[line:%(lineno)d] %(levelname)s: %(message)s",
+    level=logging.INFO,
+    datefmt="%Y-%m-%d %H:%M:%S")
+
+##################################################################################################################
+
+SFT_MODEL_PATH = "<SFT Pangu path>"
+SFT_Data_PATH = "<SFT dataset path>"
+RM_Token_PATH = "<reward model tokenizer path>"
+RM_Model_PATH = "<reward model checkpoint path>"
+GPT_Token_PATH = "<Pangu tokenizer path>"
+
+##################################################################################################################
+>>>>>>> 8d9fb60e1075f1df94c7bdd1fd1d8bb2c4440bb1
 
 def load_dataset(path, split, max_samples):
     discard = 0
@@ -57,6 +85,7 @@ def load_dataset(path, split, max_samples):
 
 if __name__ == "__main__":
 
+<<<<<<< HEAD
     model_path = "chinese_gpt_chk"
     token_path = "tokenizer_chk"
     data_path = "./dialogue_dir"
@@ -67,20 +96,40 @@ if __name__ == "__main__":
     rw_model.load_state_dict(torch.load(REWARD_CHECKPOINT_PATH))
 
     ###
+=======
+    # Prepare RM
+    rw_tokenizer = AutoTokenizer.from_pretrained(RM_Token_PATH)
+
+    rw_config = AutoConfig.from_pretrained(RM_Model_PATH)
+    rw_model = GPTRewardModel(rw_config,rw_tokenizer)
+    rw_model.load_state_dict(torch.load(f"{RM_Model_PATH}/pytorch_model.bin"))
+    logging.info(f"Now, the RM is reloaded from {RM_Model_PATH}/pytorch_model.bin")
+
+
+    # Prepare RM config
+>>>>>>> 8d9fb60e1075f1df94c7bdd1fd1d8bb2c4440bb1
     assert rw_tokenizer.pad_token_id == rw_tokenizer.eos_token_id
     rw_model.config.end_token_id = rw_tokenizer.eos_token_id
     rw_model.config.pad_token_id = rw_model.config.eos_token_id
     rw_model.config.bos_token_id = rw_tokenizer.bos_token_id
     rw_model.config.eos_token_id = rw_tokenizer.eos_token_id
+<<<<<<< HEAD
     ###
 
+=======
+>>>>>>> 8d9fb60e1075f1df94c7bdd1fd1d8bb2c4440bb1
 
     rw_model.half()
     rw_model.eval()
     rw_device = torch.device("cuda:{}".format(7))  # set reward model device
+<<<<<<< HEAD
 
 
     rw_model.to(rw_device)
+=======
+    rw_model.to(rw_device)
+    ###
+>>>>>>> 8d9fb60e1075f1df94c7bdd1fd1d8bb2c4440bb1
 
     def get_scores(samples: List[str]):# ...<text>... TL;DR: <text>
         scores_list = []
@@ -118,14 +167,23 @@ if __name__ == "__main__":
             ).strip()
             # tmp = prompts[i] + "\nTL;DR:"
             formatted_prompts.append(tmp)
+<<<<<<< HEAD
 
+=======
+>>>>>>> 8d9fb60e1075f1df94c7bdd1fd1d8bb2c4440bb1
         return formatted_prompts
 
     def reward_fn(samples: List[str], **kwargs):# ...<text>... TL;DR: <text>
 
+<<<<<<< HEAD
         for i in range(5):
             if i < len(samples):
                 logging.info(f"Line 122: demo samples-{i+1} {samples[0]}")
+=======
+        rank =  torch.distributed.get_rank()
+        if rank==0:
+            logging.info(f"[rank-{rank}]: {samples[0]}")
+>>>>>>> 8d9fb60e1075f1df94c7bdd1fd1d8bb2c4440bb1
 
         original_samples = [text.split("模型回答:")[0] + "模型回答:" for text in samples]
         original_samples = [text + post_summary_dict[text.strip()] for text in original_samples]
@@ -136,6 +194,7 @@ if __name__ == "__main__":
 
     config_path = pathlib.Path(__file__).parent.joinpath("configs/ppo_config_summ_gptj.yml")
     config = TRLConfig.load_yaml(config_path)
+<<<<<<< HEAD
 
     config.model.model_path = SFT_MODEL_PATH
     config.tokenizer.tokenizer_path = T_PATH
@@ -154,6 +213,19 @@ if __name__ == "__main__":
     # Store data into prompt and label pairs
     train_set = [(sample["prompt"], sample["label"]) for sample in  load_dataset(data_path,"train",200000)]
     val_set = [(sample["prompt"], sample["label"])  for sample in  load_dataset(data_path,"valid",2000)]
+=======
+    config.model.model_path = SFT_MODEL_PATH
+    config.tokenizer.tokenizer_path = GPT_Token_PATH
+    tokenizer=AutoTokenizer.from_pretrained(config.tokenizer.tokenizer_path)
+    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"
+    print(config)
+    max_length_input = config.train.seq_length - config.method.gen_kwargs["max_new_tokens"]
+
+    # Store data into prompt and label pairs
+    train_set = [(sample["prompt"], sample["label"]) for sample in  load_dataset(SFT_Data_PATH,"train",200000)]
+    val_set = [(sample["prompt"], sample["label"])  for sample in  load_dataset(SFT_Data_PATH,"valid",2000)]
+>>>>>>> 8d9fb60e1075f1df94c7bdd1fd1d8bb2c4440bb1
 
     # Split contents into summaries and labels
     train_posts, train_summaries = zip(*train_set)
@@ -168,6 +240,7 @@ if __name__ == "__main__":
     for i in range(len(val_prompts)):
         post_summary_dict[val_prompts[i]] = val_summaries[i]
 
+<<<<<<< HEAD
     # logging.info("\n###### post_summary_dict ########")
     # for ik,query in enumerate(post_summary_dict):
     #     if ik==3:
@@ -176,6 +249,8 @@ if __name__ == "__main__":
     #     logging.info(post_summary_dict[query])
     # logging.info("###### post_summary_dict ########\n")
 
+=======
+>>>>>>> 8d9fb60e1075f1df94c7bdd1fd1d8bb2c4440bb1
     trainer = trlx.train(
         reward_fn=reward_fn,
         prompts=train_prompts,
