@@ -3,7 +3,7 @@ import random
 import evaluate
 import numpy as np
 import torch
-from summarize_dataset import TLDRDataset
+from Daiglogue_dataset import TLDRDataset
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -21,7 +21,7 @@ def set_seed(seed_val=42):
 
 
 if __name__ == "__main__":
-    output_dir = "CPM_dialogue"
+    output_dir = "Pangu_dialogue"
     train_batch_size = 48
     gradient_accumulation_steps = 2
     learning_rate = 1e-5
@@ -32,9 +32,9 @@ if __name__ == "__main__":
     num_train_epochs = 5
     random.seed(42)
 
-    downloadmodel_path = "/userhome/Research_HUB/RLHF/trlx/examples/dialogue_rlhf/CPM_chk"
+    downloadmodel_path = "Pangu_chk"
     tokenizer = AutoTokenizer.from_pretrained(downloadmodel_path)
-    model_path =  "/userhome/Research_HUB/RLHF/trlx/examples/dialogue_rlhf/sft/CPM_dialogue/checkpoint-3000"
+    model_path =  "/sft/Pangu_dialogue/checkpoint"
     model = AutoModelForCausalLM.from_pretrained(model_path, use_cache=False)
 
     print(f"load model from {model_path}")
@@ -55,7 +55,7 @@ if __name__ == "__main__":
 
     # Set up the datasets
     # data_path = "CarperAI/openai_summarize_tldr"
-    data_path = "/userhome/Research_HUB/RLHF/trlx/examples/dialogue_rlhf/dialogue_dir"
+    data_path = "dialogue_dir"
     train_dataset = TLDRDataset(
         data_path,
         tokenizer,
@@ -106,7 +106,7 @@ if __name__ == "__main__":
         save_steps=save_steps,
         load_best_model_at_end=True,
         logging_steps=10,
-        deepspeed="./ds_config_gptj.json",
+        deepspeed="./ds_config_pangu.json",
     )
 
     trainer = Trainer(

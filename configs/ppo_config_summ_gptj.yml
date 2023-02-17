@@ -16,7 +16,7 @@ model:
   num_layers_unfrozen: 4
 
 tokenizer:
-  tokenizer_path: "gpt2"
+  tokenizer_path: "imone/pangu_2_6B"
   truncation_side: "right"
 
 optimizer:
@@ -35,7 +35,7 @@ scheduler:
 
 method:
   name: "ppoconfig"
-  num_rollouts: 4096
+  num_rollouts: 512
   chunk_size: 64
   ppo_epochs: 4
   init_kl_coef: 0.1
