@@ -20,7 +20,7 @@ pip install -e .
     https://huggingface.co/imone/pangu_2_6B
 ```
 
-3).  准备webtext数据集: 
+3).  准备SFT数据集(以webtext为例): 
 
 ```bash
     https://paperswithcode.com/dataset/webtext
