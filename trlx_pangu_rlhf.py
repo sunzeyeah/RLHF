@@ -21,11 +21,11 @@ logging.basicConfig(
 
 ##################################################################################################################
 
-SFT_MODEL_PATH = "checkpoint-2000"
-SFT_Data_PATH = "dialogue_dir"
-RM_Token_PATH = "tokenizer_chk"
-RM_Model_PATH = "checkpoint-3625"
-GPT_Token_PATH = "_chk"
+SFT_MODEL_PATH = "<SFT Pangu path>"
+SFT_Data_PATH = "<SFT dataset path>"
+RM_Token_PATH = "<reward model tokenizer path>"
+RM_Model_PATH = "<reward model checkpoint path>"
+GPT_Token_PATH = "<Pangu tokenizer path>"
 
 ##################################################################################################################
 
