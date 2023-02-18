@@ -1,30 +1,33 @@
+import os
 import json
-
 import pandas as pd
 import torch
+
+from tqdm import tqdm
 # from datasets import load_dataset
 from torch.utils.data import Dataset
-import json
-from tqdm import tqdm
+
 
 def load_dataset(path, split):
     discard = 0
     datasets = []
-    with open(f"{path}/web_text_zh_{split}.json",encoding="utf-8") as f:
+    with open(os.path.join(path, f"web_text_zh_{split}_small.json"), encoding="utf-8") as f:
         for i, line in tqdm(enumerate(f)):
             item = json.loads(line)
-            sample = {"prompt": item['title'] + item['desc'] +"模型回答:",
-                      "label":item["content"] }
+            sample = {"prompt": item['title'] + item['desc'] + "模型回答:",
+                      "label": item["content"]}
 
-            if len( sample['prompt'] + sample['label'])> 500:
-                discard+=1
+            if len(sample['prompt'] + sample['label']) > 500:
+                discard += 1
             else:
                 datasets.append(sample)
-            if split=="valid" and i == 2000:
-                print(f"File: {path}/web_text_zh_{split}.json Num of over-length: {discard}")
+            if split == "valid" and i == 2000:
+                print(f"File: {path}/web_text_zh_{split}_small.json, Num of over-length: {discard}")
                 return datasets
-    print(f"File: {path}/web_text_zh_{split}.json Num of over-length: {discard}")
+    print(f"File: web_text_zh_{split}_small.json, Num of over-length: {discard}")
+
     return datasets
+
 
 def get_dataset_from_jsonl(jsonl_file, return_summary=True):
     # if return_summary is True, return a list of posts with summary concatenated
@@ -50,8 +53,8 @@ class TLDRDataset(Dataset):
         self.post_list = []
         dataset = load_dataset(train_path, split=split)
         for sample in dataset:
-            txt = tokenizer.bos_token + sample["prompt"] + sample["label"] + tokenizer.eos_token
-            self.post_list.append( txt )
+            txt = sample["prompt"] + sample["label"] + tokenizer.eos_token
+            self.post_list.append(txt)
         if "valid" in train_path:
             self.post_list = self.post_list[0:2000]
         self.tokenizer = tokenizer
@@ -67,7 +70,7 @@ class TLDRDataset(Dataset):
 
     def __getitem__(self, idx):
         txt = self.post_list[idx]
-        encodings_dict = self.tokenizer(txt, truncation=True, max_length=self.max_length, padding="max_length")
+        encodings_dict = self.tokenizer(txt, max_length=self.max_length, padding="max_length", truncation=True)
         input_ids = torch.tensor(encodings_dict["input_ids"])
         attn_masks = torch.tensor(encodings_dict["attention_mask"])
 

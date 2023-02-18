@@ -21,32 +21,28 @@ def set_seed(seed_val=42):
 
 
 if __name__ == "__main__":
-    output_dir = "Pangu_dialogue"
-    train_batch_size = 48
-    gradient_accumulation_steps = 2
+    output_dir = "D:\\Data\\output\\pangu-350M"
+    train_batch_size = 2
+    gradient_accumulation_steps = 16
     learning_rate = 1e-5
     eval_batch_size = 1
     eval_steps = 500
     max_input_length = 512
     save_steps = 1000
-    num_train_epochs = 5
+    num_train_epochs = 1
     random.seed(42)
 
-    downloadmodel_path = "Pangu_chk"
-    tokenizer = AutoTokenizer.from_pretrained(downloadmodel_path)
-    model_path =  "/sft/Pangu_dialogue/checkpoint"
-    model = AutoModelForCausalLM.from_pretrained(model_path, use_cache=False)
+    model_name_or_path = "D:\\Data\\models\\pangu-350M"
+    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, use_cache=False, trust_remote_code=True)
+    model = AutoModelForCausalLM.from_pretrained(model_name_or_path, use_cache=False, trust_remote_code=True)
 
-    print(f"load model from {model_path}")
+    print(f"Finished loading model and tokenizer from {model_name_or_path}")
 
     ## for bert tokenizer
-    # tokenizer.add_special_tokens({'eos_token': "<|endoftext|>"})
-    # tokenizer.add_special_tokens({'bos_token': "<|startoftext|>"})
-    ##
+    tokenizer.add_special_tokens({'eos_token': "<eot>", 'pad_token': "<eot>"})
+    # tokenizer.add_special_tokens({'bos_token': "<s>"})
 
-    tokenizer.pad_token = tokenizer.eos_token
-
-    model.resize_token_embeddings(len(tokenizer))
+    model.resize_token_embeddings(len(tokenizer.sp))
     assert tokenizer.pad_token_id == tokenizer.eos_token_id
 
     model.config.end_token_id = tokenizer.eos_token_id
@@ -54,8 +50,7 @@ if __name__ == "__main__":
 
 
     # Set up the datasets
-    # data_path = "CarperAI/openai_summarize_tldr"
-    data_path = "dialogue_dir"
+    data_path = "D:\\Data\\raw"
     train_dataset = TLDRDataset(
         data_path,
         tokenizer,
@@ -94,7 +89,7 @@ if __name__ == "__main__":
         learning_rate=learning_rate,
         per_device_train_batch_size=train_batch_size,
         per_device_eval_batch_size=eval_batch_size,
-        gradient_checkpointing=True,
+        gradient_checkpointing=False,
         half_precision_backend="auto",
         fp16=True,
         adam_beta1=0.9,
@@ -106,7 +101,8 @@ if __name__ == "__main__":
         save_steps=save_steps,
         load_best_model_at_end=True,
         logging_steps=10,
-        deepspeed="./ds_config_pangu.json",
+        report_to=["tensorboard"],
+        # deepspeed="./ds_config_pangu.json",
     )
 
     trainer = Trainer(
