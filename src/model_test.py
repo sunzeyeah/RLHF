@@ -4,16 +4,18 @@ from typing import List
 import json
 import torch
 
-from reward_model.reward_model import GPTRewardModel
 from tqdm import tqdm
 from transformers import AutoTokenizer
 from transformers import TextGenerationPipeline, AutoTokenizer, AutoModelForCausalLM
+
+from src.utils import logger
+from src.models.reward import GPTRewardModel
 
 
 REWARD_CHECKPOINT_PATH = "reward_model/rm_checkpoint/checkpoint-3625/pytorch_model.bin"
 
 if not os.path.exists(REWARD_CHECKPOINT_PATH):
-    os.makedirs("reward_model/rm_checkpoint", exist_ok=True)
+    os.makedirs("resources/config/reward_model/rm_checkpoint", exist_ok=True)
     os.system(
         f"wget -O {REWARD_CHECKPOINT_PATH} \
         https://huggingface.co/CarperAI/openai_summarize_tldr_rm_checkpoint/resolve/main/pytorch_model.bin"
@@ -36,9 +38,9 @@ def load_dataset(path, split, max_samples):
             else:
                 datasets.append(sample)
             if i-discard+1 == max_samples:
-                print(f"File: {path}/web_text_zh_{split}.json Num of over-length: {discard}")
+                logger.info(f"File: {path}/web_text_zh_{split}.json Num of over-length: {discard}")
                 return datasets
-    print(f"File: {path}/web_text_zh_{split}.json Num of over-length: {discard}")
+    logger.info(f"File: {path}/web_text_zh_{split}.json Num of over-length: {discard}")
     return datasets
 
 
@@ -47,7 +49,7 @@ if __name__ == "__main__":
     # model_path = "CPM_chk"
     model_path = "sft/CPM_dialogue/checkpoint-400"
 
-    data_path = "dialogue_dir"
+    data_path = "resources/dialogue_dir"
 
     # # Load the pre-trained reward model
     # rw_tokenizer = AutoTokenizer.from_pretrained("chinese_gpt_chk")
@@ -112,7 +114,7 @@ if __name__ == "__main__":
         formatted_prompts = []
         for i in tqdm(range(len(prompts)),"get_prompt_dataset"):
             if i==0:
-                print("line:108", prompts[0])
+                logger.info("line:108", prompts[0])
 
             tmp = tokenizer.decode(
                 tokenizer(prompts[i], truncation=True, max_length=max_length)["input_ids"],
@@ -124,9 +126,9 @@ if __name__ == "__main__":
         return formatted_prompts
 
     def reward_fn(samples: List[str], **kwargs):# ...<text>... TL;DR: <text>
-        print("Line 122: samples",samples[0])
+        logger.info("Line 122: samples",samples[0])
         original_samples = [text.split("模 型 回 答 ：")[0] + "模 型 回 答 ：" for text in samples]
-        # print("original_samples",original_samples)
+        # logger.info("original_samples",original_samples)
 
         original_samples = [text + post_summary_dict[text.strip()] for text in original_samples]
         original_scores = get_scores(original_samples)
@@ -150,20 +152,20 @@ if __name__ == "__main__":
         post_summary_dict[train_prompts[i]] = train_summaries[i]
 
 
-    # print("###### post_summary_dict ########")
+    # logger.info("###### post_summary_dict ########")
     # for ik,query in enumerate(post_summary_dict):
     #     if ik==10:
     #         break
-    #     print(query)
-    #     print(post_summary_dict[query])
-    #     print("\n")
-    # print("###### post_summary_dict ########")
+    #     logger.info(query)
+    #     logger.info(post_summary_dict[query])
+    #     logger.info("\n")
+    # logger.info("###### post_summary_dict ########")
 
     tokenizer.padding_side = "left"
     device = "cuda:0"
     model = AutoModelForCausalLM.from_pretrained(model_path).to(device)
     text_generator = TextGenerationPipeline(model, tokenizer, device=device)
-    print(f"load from {model_path}")
+    logger.info(f"load from {model_path}")
 
     for j in range(5):
         prompt = train_posts[j]
@@ -185,18 +187,18 @@ if __name__ == "__main__":
 
         out2=text_generator(prompt, max_length=512, do_sample=True, top_p=0.9)
 
-        print("model.generate",out)
-        print("text_generator",out2)
+        logger.info("model.generate",out)
+        logger.info("text_generator",out2)
 
-        print("label",train_summaries[j])
+        logger.info("label",train_summaries[j])
 
-        print("\n")
+        logger.info("\n")
 
 
     #
     #
     #
-    # print(prompt)
-    # print(prompt_dict)
-    # print(out)
+    # logger.info(prompt)
+    # logger.info(prompt_dict)
+    # logger.info(out)
 

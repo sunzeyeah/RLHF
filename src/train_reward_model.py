@@ -1,11 +1,12 @@
 import os
-
 import torch
+
 # from datasets import load_dataset
-from reward_model import GPTRewardModel
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from transformers import AutoTokenizer, Trainer, TrainingArguments
+
+from src.models.reward import GPTRewardModel
 
 
 def load_dataset(path, split):
@@ -13,6 +14,7 @@ def load_dataset(path, split):
     for k in range(5):
         print(f"reward data demo-{k}:\n {d[-k-1]}")
     return d
+
 
 def create_comparison_dataset(path="CarperAI/openai_summarize_comparisons", split="train"):
     dataset = load_dataset(path, split=split)
@@ -116,11 +118,11 @@ if __name__ == "__main__":
     ##
 
 
-    if not os.path.exists("rm_checkpoint"):
-        os.mkdir("rm_checkpoint")
+    if not os.path.exists("resources/config/reward_model/rm_checkpoint"):
+        os.mkdir("resources/config/reward_model/rm_checkpoint")
 
     training_args = TrainingArguments(
-        output_dir="rm_checkpoint/",
+        output_dir="resources/config/reward_model/rm_checkpoint/",
         num_train_epochs=5,
         logging_steps=10,
         gradient_accumulation_steps=2,
@@ -154,7 +156,7 @@ if __name__ == "__main__":
 
     # Create the comparisons datasets
     # data_path = "CarperAI/openai_summarize_comparisons"
-    data_path = "../reward_data_dir/processed"
+    data_path = "resources/reward_data_dir/processed"
 
     train_pairs = create_comparison_dataset(data_path, "train")
     val_pairs = create_comparison_dataset(data_path, "test")

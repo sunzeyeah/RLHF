@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
@@ -34,19 +35,19 @@ class GPTRewardModel(nn.Module):
 
 
     def forward(
-        self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        mc_token_ids=None,
-        labels=None,
-        return_dict=False,
-        output_attentions=False,
-        output_hidden_states=False,
+            self,
+            input_ids=None,
+            past_key_values=None,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            mc_token_ids=None,
+            labels=None,
+            return_dict=False,
+            output_attentions=False,
+            output_hidden_states=False,
     ):
         loss = None
         transformer_outputs = self.transformer(

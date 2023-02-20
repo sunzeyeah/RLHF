@@ -1,37 +1,28 @@
 import os
+import datetime
 import pathlib
 from typing import List
 import json
 import torch
-
-from reward_model.reward_model import GPTRewardModel
-from tqdm import tqdm
-from transformers import AutoTokenizer
-
 import trlx
-from trlx.data.configs import TRLConfig
 
-import datetime
-import logging
+from trlx.data.configs import TRLConfig
+from tqdm import tqdm
+from transformers import AutoTokenizer,AutoConfig
+
+from src.utils import logger
+from src.models.reward import GPTRewardModel
+
+SFT_MODEL_PATH = "<SFT Pangu path>"
+SFT_Data_PATH = "<SFT dataset path>"
+RM_Token_PATH = "<reward model tokenizer path>"
+RM_Model_PATH = "<reward model checkpoint path>"
+GPT_Token_PATH = "<Pangu tokenizer path>"
+
 
 def beijing(sec, what):
     beijing_time = datetime.datetime.now() + datetime.timedelta(hours=8)
     return beijing_time.timetuple()
-
-logging.Formatter.converter = beijing
-
-logging.basicConfig(
-    format="%(asctime)s - %(pathname)s[line:%(lineno)d] %(levelname)s: %(message)s",
-    level=logging.INFO,
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-
-
-REWARD_CHECKPOINT_PATH = "./pytorch_model.bin"
-
-
-SFT_MODEL_PATH = "./checkpoint-3000"
-T_PATH = "TsinghuaAI/CPM-Generate"
 
 
 def load_dataset(path, split, max_samples):
@@ -48,38 +39,35 @@ def load_dataset(path, split, max_samples):
             else:
                 datasets.append(sample)
             if i-discard+1 == max_samples:
-                logging.info(f"File: {path}/web_text_zh_{split}.json Num of over-length: {discard}")
+                logger.info(f"File: {path}/web_text_zh_{split}.json Num of over-length: {discard}")
                 return datasets
-    logging.info(f"File: {path}/web_text_zh_{split}.json Num of over-length: {discard}")
+    logger.info(f"File: {path}/web_text_zh_{split}.json Num of over-length: {discard}")
     return datasets
 
 
 if __name__ == "__main__":
 
-    model_path = "chinese_gpt_chk"
-    token_path = "tokenizer_chk"
-    data_path = "./dialogue_dir"
+    # Prepare RM
+    rw_tokenizer = AutoTokenizer.from_pretrained(RM_Token_PATH)
 
-    # Load the pre-trained reward model
-    rw_tokenizer = AutoTokenizer.from_pretrained(token_path)
-    rw_model = GPTRewardModel("./checkpoint-20000",rw_tokenizer)
-    rw_model.load_state_dict(torch.load(REWARD_CHECKPOINT_PATH))
+    rw_config = AutoConfig.from_pretrained(RM_Model_PATH)
+    rw_model = GPTRewardModel(rw_config,rw_tokenizer)
+    rw_model.load_state_dict(torch.load(f"{RM_Model_PATH}/pytorch_model.bin"))
+    logger.info(f"Now, the RM is reloaded from {RM_Model_PATH}/pytorch_model.bin")
 
-    ###
+
+    # Prepare RM config
     assert rw_tokenizer.pad_token_id == rw_tokenizer.eos_token_id
     rw_model.config.end_token_id = rw_tokenizer.eos_token_id
     rw_model.config.pad_token_id = rw_model.config.eos_token_id
     rw_model.config.bos_token_id = rw_tokenizer.bos_token_id
     rw_model.config.eos_token_id = rw_tokenizer.eos_token_id
-    ###
-
 
     rw_model.half()
     rw_model.eval()
     rw_device = torch.device("cuda:{}".format(7))  # set reward model device
-
-
     rw_model.to(rw_device)
+    ###
 
     def get_scores(samples: List[str]):# ...<text>... TL;DR: <text>
         scores_list = []
@@ -122,9 +110,9 @@ if __name__ == "__main__":
 
     def reward_fn(samples: List[str], **kwargs):# ...<text>... TL;DR: <text>
 
-        for i in range(5):
-            if i < len(samples):
-                logging.info(f"Line 122: demo samples-{i+1} {samples[0]}")
+        rank =  torch.distributed.get_rank()
+        if rank==0:
+            logger.info(f"[rank-{rank}]: {samples[0]}")
 
         original_samples = [text.split("模型回答:")[0] + "模型回答:" for text in samples]
         original_samples = [text + post_summary_dict[text.strip()] for text in original_samples]
@@ -135,24 +123,17 @@ if __name__ == "__main__":
 
     config_path = pathlib.Path(__file__).parent.joinpath("configs/ppo_config_summ_gptj.yml")
     config = TRLConfig.load_yaml(config_path)
-
     config.model.model_path = SFT_MODEL_PATH
-    config.tokenizer.tokenizer_path = T_PATH
-
+    config.tokenizer.tokenizer_path = GPT_Token_PATH
     tokenizer=AutoTokenizer.from_pretrained(config.tokenizer.tokenizer_path)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
-
     print(config)
-
     max_length_input = config.train.seq_length - config.method.gen_kwargs["max_new_tokens"]
 
-    # logging.info(f"max_length_input = {max_length_input}")
-
-
     # Store data into prompt and label pairs
-    train_set = [(sample["prompt"], sample["label"]) for sample in  load_dataset(data_path,"train",200000)]
-    val_set = [(sample["prompt"], sample["label"])  for sample in  load_dataset(data_path,"valid",2000)]
+    train_set = [(sample["prompt"], sample["label"]) for sample in  load_dataset(SFT_Data_PATH,"train",200000)]
+    val_set = [(sample["prompt"], sample["label"])  for sample in  load_dataset(SFT_Data_PATH,"valid",2000)]
 
     # Split contents into summaries and labels
     train_posts, train_summaries = zip(*train_set)
@@ -166,14 +147,6 @@ if __name__ == "__main__":
     val_prompts = get_prompt_dataset(val_posts, max_length_input)
     for i in range(len(val_prompts)):
         post_summary_dict[val_prompts[i]] = val_summaries[i]
-
-    # logging.info("\n###### post_summary_dict ########")
-    # for ik,query in enumerate(post_summary_dict):
-    #     if ik==3:
-    #         break
-    #     logging.info(query)
-    #     logging.info(post_summary_dict[query])
-    # logging.info("###### post_summary_dict ########\n")
 
     trainer = trlx.train(
         reward_fn=reward_fn,

@@ -1,30 +1,32 @@
+
 import os
 import json
 import pandas as pd
 import torch
 
 from tqdm import tqdm
-# from datasets import load_dataset
 from torch.utils.data import Dataset
 
+from src.utils import logger
 
-def load_dataset(path, split):
+
+def load_dataset(filename, split):
     discard = 0
     datasets = []
-    with open(os.path.join(path, f"web_text_zh_{split}_small.json"), encoding="utf-8") as f:
+    with open(filename, "r", encoding="utf-8") as f:
         for i, line in tqdm(enumerate(f)):
             item = json.loads(line)
             sample = {"prompt": item['title'] + item['desc'] + "模型回答:",
-                      "label": item["content"]}
+                      "label": item["answer"]}
 
             if len(sample['prompt'] + sample['label']) > 500:
                 discard += 1
             else:
                 datasets.append(sample)
-            if split == "valid" and i == 2000:
-                print(f"File: {path}/web_text_zh_{split}_small.json, Num of over-length: {discard}")
-                return datasets
-    print(f"File: web_text_zh_{split}_small.json, Num of over-length: {discard}")
+            # if split == "valid" and i == 2000:
+            #     logger.info(f"File: {path}/web_text_zh_{split}_small.json, Num of over-length: {discard}")
+            #     return datasets
+    logger.info(f"Finished loading {os.path.basename(filename)}, size: {discard}")
 
     return datasets
 
@@ -49,21 +51,21 @@ def get_dataset_from_jsonl(jsonl_file, return_summary=True):
 
 
 class TLDRDataset(Dataset):
-    def __init__(self, train_path, tokenizer, split, max_length=550):
+    def __init__(self, filename, tokenizer, split, max_length=550):
         self.post_list = []
-        dataset = load_dataset(train_path, split=split)
+        dataset = load_dataset(filename, split=split)
         for sample in dataset:
             txt = sample["prompt"] + sample["label"] + tokenizer.eos_token
             self.post_list.append(txt)
-        if "valid" in train_path:
-            self.post_list = self.post_list[0:2000]
+        # if "valid" in filename:
+        #     self.post_list = self.post_list[0:2000]
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.input_ids = []
         self.attn_masks = []
 
         for k in range(5):
-            print(f"TLDRDataset sample-{k}\n: {dataset[k]}")
+            logger.info(f"TLDRDataset sample-{k}\n: {dataset[k]}")
 
     def __len__(self):
         return len(self.post_list)
@@ -151,3 +153,4 @@ class AllSummDataset(Dataset):
             "attention_mask": attn_masks,
             "labels": input_ids,
         }
+

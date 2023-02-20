@@ -4,6 +4,8 @@ import json
 from copy import deepcopy
 import jieba
 
+from src.utils import logger
+
 
 def conv_gen(item_list):
     sample_list = []
@@ -27,7 +29,7 @@ def conv_gen(item_list):
                         # sample['prompt'] = " ".join(list(jieba.cut(sample['prompt'])))
                         # sample['chosen'] = " ".join(list(jieba.cut(sample['chosen'])))
                         # sample['rejected'] = " ".join(list(jieba.cut(sample['rejected'])))
-                        print(sample)
+                        logger.info(sample)
                         sample_list.append(deepcopy(sample))
 
                 prompt = prompt + chosen  + " "
@@ -72,4 +74,4 @@ if __name__ == '__main__':
     torch.save(test, f"D:/work/Research_HUB/RLHF/trlx/examples/dialogue_rlhf/reward_data_dir/processed/test_data.pt")
 
     for k in range(10):
-        print(f"reward data demo-{k}:\n {train[-k-1]}")
+        logger.info(f"reward data demo-{k}:\n {train[-k-1]}")
