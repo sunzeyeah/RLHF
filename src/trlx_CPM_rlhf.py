@@ -124,7 +124,7 @@ if __name__ == "__main__":
         norms_scores = scores - original_scores
         return norms_scores
 
-    config_path = pathlib.Path(__file__).parent.joinpath("configs/ppo_config_summ_gptj.yml")
+    config_path = pathlib.Path(__file__).parent.joinpath("configs/ppo_config_pangu.yml")
     config = TRLConfig.load_yaml(config_path)
 
     config.model.model_path = SFT_MODEL_PATH

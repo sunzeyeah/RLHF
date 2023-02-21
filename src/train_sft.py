@@ -104,17 +104,17 @@ def main():
     # Set up the datasets
     if args.do_train:
         train_dataset = SFTDataset(os.path.join(args.data_dir, args.train_filename),
-                                   tokenizer, "train", max_length=args.max_length)
+                                   tokenizer, max_length=args.max_length)
     else:
         train_dataset = None
     if args.do_eval:
         dev_dataset = SFTDataset(os.path.join(args.data_dir, args.eval_filename),
-                                 tokenizer, "valid", max_length=args.max_length)
+                                 tokenizer, max_length=args.max_length)
     else:
         dev_dataset = None
     if args.do_pred:
         test_dataset = SFTDataset(os.path.join(args.data_dir, args.test_filename),
-                                  tokenizer, "test", max_length=args.max_length)
+                                  tokenizer, max_length=args.max_length)
     else:
         test_dataset = None
 

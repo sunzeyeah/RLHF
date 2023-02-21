@@ -11,25 +11,6 @@ from src.utils import logger
 from src.utils.nlp_utils import clean_text
 
 
-def get_dataset_from_jsonl(jsonl_file, return_summary=True):
-    # if return_summary is True, return a list of posts with summary concatenated
-    # if return_summary is False, return a list of posts and a list of summaries
-    with open(jsonl_file, "r") as f:
-        dataset = [json.loads(line) for line in f]
-    post_list = []
-    summary_list = []
-    for d in dataset:
-        if return_summary:
-            post = f"SUBREDDIT: r/{d['subreddit']}\nTITLE: {d['title']}\nPOST: {d['post']}\nTL;DR: {d['summary']}"
-        else:
-            post = f"SUBREDDIT: r/{d['subreddit']}\nTITLE: {d['title']}\nPOST: {d['post']}\nTL;DR: "
-            summary_list.append(d["summary"])
-        post_list.append(post)
-    if not return_summary:
-        return post_list, summary_list
-    return post_list
-
-
 class DataCollatorReward:
     def __call__(self, data):
         batch = {"input_ids": torch.cat([f[0] for f in data] + [f[2] for f in data]),
@@ -100,7 +81,7 @@ class PairwiseDataset(Dataset):
 
 
 class SFTDataset(Dataset):
-    def __init__(self, filename, tokenizer, split, max_length):
+    def __init__(self, filename, tokenizer, max_length):
         self.post_list = []
         dataset = self.load_dataset(filename)
         for sample in dataset:
@@ -109,8 +90,6 @@ class SFTDataset(Dataset):
         #     self.post_list = self.post_list[0:2000]
         self.tokenizer = tokenizer
         self.max_length = max_length
-        self.input_ids = []
-        self.attn_masks = []
 
         for k in range(5):
             logger.info(f"SFTDataset sample-{k}\n: {dataset[k]}")
@@ -122,24 +101,23 @@ class SFTDataset(Dataset):
         prompt, label = self.post_list[idx]
         encodings_dict = self.tokenizer(prompt, label, max_length=self.max_length,
                                         padding="max_length", truncation="longest_first", return_tensors="pt")
-
+        # TODO: sft监督的应该是‘模型回答’之后的文本，所以label不应该是全部的input_ids
         return {
             "input_ids": encodings_dict["input_ids"],
             "attention_mask": encodings_dict["attention_mask"],
             "labels": encodings_dict["input_ids"],
         }
 
-    @staticmethod
-    def load_dataset(filename):
+    def load_dataset(self, filename):
         discard = 0
         datasets = []
         with open(filename, "r", encoding="utf-8") as f:
-            for i, line in tqdm(enumerate(f)):
+            for i, line in tqdm(enumerate(f), desc="Load Dataset"):
                 item = json.loads(line)
                 prompt = clean_text(item['title'] if len(item['title']) > len(item['desc']) else item['desc'])
                 label = clean_text(item['answer'])
 
-                if len(prompt) + len(label) > 500:
+                if len(prompt) + len(label) > self.max_length:
                     discard += 1
                 else:
                     datasets.append({"prompt": prompt, "label": label})
@@ -152,18 +130,12 @@ class SFTDataset(Dataset):
 
 
 class TLDRDataset(Dataset):
-    def __init__(self, filename, tokenizer, split, max_length=550):
-        self.post_list = []
-        dataset = load_dataset(filename, split=split)
-        for sample in dataset:
-            txt = sample["prompt"] + sample["label"] + tokenizer.eos_token
-            self.post_list.append(txt)
-        # if "valid" in filename:
-        #     self.post_list = self.post_list[0:2000]
+    def __init__(self, dataset, tokenizer, max_length):
+
+        # dataset = self.load_dataset(filename)
+        self.post_list = dataset
         self.tokenizer = tokenizer
         self.max_length = max_length
-        self.input_ids = []
-        self.attn_masks = []
 
         for k in range(5):
             logger.info(f"TLDRDataset sample-{k}\n: {dataset[k]}")
@@ -172,16 +144,33 @@ class TLDRDataset(Dataset):
         return len(self.post_list)
 
     def __getitem__(self, idx):
-        txt = self.post_list[idx]
-        encodings_dict = self.tokenizer(txt, max_length=self.max_length, padding="max_length", truncation=True)
-        input_ids = torch.tensor(encodings_dict["input_ids"])
-        attn_masks = torch.tensor(encodings_dict["attention_mask"])
+        sample = self.post_list[idx]
+        encodings_dict = self.tokenizer(sample["prompt"], "模型回答:" + sample["label"], max_length=self.max_length,
+                                        truncation="longest_first", return_tensors="pt")
+        text = self.tokenizer.decode(encodings_dict['input_ids'], skip_special_tokens=True).strip()
 
-        return {
-            "input_ids": input_ids,
-            "attention_mask": attn_masks,
-            "labels": input_ids,
-        }
+        return text
+
+    @staticmethod
+    def load_dataset(filename, max_length):
+        discard = 0
+        datasets = []
+        with open(filename, "r", encoding="utf-8") as f:
+            for i, line in tqdm(enumerate(f), desc="Load Dataset"):
+                item = json.loads(line)
+                prompt = clean_text(item['title'] if len(item['title']) > len(item['desc']) else item['desc'])
+                label = clean_text(item['answer'])
+
+                if len(prompt) + len(label) > max_length:
+                    discard += 1
+                else:
+                    datasets.append({"prompt": prompt, "label": label})
+                # if i-discard+1 == max_samples:
+                #     logger.info(f"File: {path}/web_text_zh_{split}.json Num of over-length: {discard}")
+                #     return datasets
+        logger.info(f"Finish loading {os.path.basename(filename)}, # discarded: {discard}")
+
+        return datasets
 
 
 class ComparisonDataset(Dataset):
