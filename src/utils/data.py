@@ -7,7 +7,8 @@ import torch
 from tqdm import tqdm
 from torch.utils.data import Dataset
 
-from src.utils import logger, clean_text
+from src.utils import logger
+from src.utils.nlp_utils import clean_text
 
 
 def get_dataset_from_jsonl(jsonl_file, return_summary=True):
