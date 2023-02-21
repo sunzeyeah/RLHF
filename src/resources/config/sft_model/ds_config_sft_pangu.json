@@ -1,5 +1,5 @@
 {
-  "train_batch_size": 64,
+  "train_batch_size": 96,
   "fp16": {
     "enabled": true,
     "min_loss_scale": 1,
