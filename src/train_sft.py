@@ -51,8 +51,13 @@ def get_parser():
     parser.add_argument("--train_filename", type=str, default=None)
     parser.add_argument("--num_epochs", type=int, default=1)
     parser.add_argument("--learning_rate", type=float, default=1e-5)
+    parser.add_argument("--lr_scheduler_type", type=str, default="linear",
+                        help="transformers.trainer_utils.SchedulerType, including:"
+                             "linear, cosine, cosine_with_restarts, polynomial, constant,"
+                             "constant_with_warmup")
     parser.add_argument("--train_batch_size", type=int, default=4)
-    parser.add_argument("--warmup_steps", type=int, default=1000)
+    parser.add_argument("--weight_decay", type=float, default=0.01)
+    parser.add_argument("--warmup_ratio", type=int, default=0.1)
     parser.add_argument("--logging_steps", type=int, default=100)
     parser.add_argument("--save_strategy", type=str, default="epoch",
                         help='- `"no"`: No save is done during training.'
@@ -119,36 +124,40 @@ def main():
     else:
         test_dataset = None
 
-    # Prepare the trainer and start training
+    # Set up the metric
+    rouge = evaluate.load("rouge")
     training_args = TrainingArguments(
         output_dir=args.output_dir,
+        no_cuda=not torch.cuda.is_available(),
+        seed=args.seed,
+        data_seed=args.seed,
+        local_rank=args.local_rank,
         do_train=args.do_train,
         num_train_epochs=args.num_epochs,
         learning_rate=args.learning_rate,
+        lr_scheduler_type=args.lr_scheduler_type,
         per_device_train_batch_size=args.train_batch_size,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
-        gradient_checkpointing=args.gradient_checkpointing,
-        warmup_steps=args.warmup_steps,
+        warmup_ratio=args.warmup_ratio,
+        weight_decay=args.weight_decay,
         half_precision_backend="auto",
         fp16=torch.cuda.is_available(),
         adam_beta1=0.9,
         adam_beta2=0.95,
         save_strategy=args.save_strategy,
         save_steps=args.save_steps,
-        load_best_model_at_end=True,
         logging_steps=args.logging_steps,
         report_to=["tensorboard"],
         deepspeed=args.deepspeed_config,
+        gradient_checkpointing=args.gradient_checkpointing,
         do_eval=args.do_eval,
         evaluation_strategy=args.evaluation_strategy,
         eval_steps=args.eval_steps,
         eval_accumulation_steps=args.eval_accumulation_steps,
         per_device_eval_batch_size=args.eval_batch_size,
+        do_predict=args.do_pred,
         use_legacy_prediction_loop=args.do_pred,
     )
-
-    # Set up the metric
-    rouge = evaluate.load("rouge")
 
     def compute_metrics(eval_preds):
         labels_ids = eval_preds.label_ids
@@ -159,6 +168,7 @@ def main():
 
         return result
 
+    # Prepare the trainer and start training
     trainer = Trainer(
         model=model,
         args=training_args,
