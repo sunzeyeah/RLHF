@@ -1,4 +1,7 @@
 
+import sys
+sys.path.insert(0, "/root/autodl-tmp/Code/RLHF")
+
 import os
 import random
 import argparse
