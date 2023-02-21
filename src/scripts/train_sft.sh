@@ -30,4 +30,4 @@ deepspeed --num_gpus 1 $MAIN \
   --do_eval \
   --eval_filename $EVAL_FILENAME \
   --eval_batch_size 16 \
-  > train_sft_${MODEL}.log 2>&1 &
+  > train_sft_${MODEL}_"`date "+Y%-%m-%d-%H:%M:%S"`".log 2>&1 &
