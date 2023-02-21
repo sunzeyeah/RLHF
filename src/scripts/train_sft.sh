@@ -1,17 +1,19 @@
 #!/bin/bash
 
-ROOT="/Users/zeyesun/Documents/"
+#ROOT="/Users/zeyesun/Documents/"
+ROOT="/root/autodl-tmp/"
 DATR_DIR=$ROOT/Data/rlhf/raw
 MAIN=$ROOT/Code/RLHF/src/train_sft.py
 MODEL_PATH=$ROOT/Data/models/pangu-350M
 OUTPUT_DIR=$ROOT/Data/rlhf/output/sft
-TRAIN_FILENAME="baike_qa_train_small.json"
-EVAL_FILENAME="baike_qa_valid_small.json"
+TRAIN_FILENAME="baike_qa_train.json"
+EVAL_FILENAME="baike_qa_valid.json"
 
 cd $ROOT/Code/RLHF || exit
 
-#CUDA_VISIBLE_DEVICES=1,2 deepspeed --master_port 5008 $MAIN \
-python $MAIN \
+#python $MAIN \
+#CUDA_VISIBLE_DEVICES=1 deepspeed --master_port 5008 $MAIN \
+deepspeed --num_gpus 1 $MAIN \
   --data_dir $DATR_DIR \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_PATH \
