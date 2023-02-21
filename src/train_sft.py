@@ -18,7 +18,7 @@ from transformers import (
 )
 
 from src.utils import logger
-from src.utils import TLDRDataset
+from src.utils import SFTDataset
 
 
 def set_seed(seed_val=42):
@@ -73,7 +73,12 @@ def get_parser():
                              '- `"epoch"`: Evaluation is done at the end of each epoch.')
     parser.add_argument("--eval_steps", type=int, default=None)
     parser.add_argument("--eval_accumulation_steps", type=int, default=1)
-    
+    # pred
+    parser.add_argument("--do_pred", action="store_true")
+    parser.add_argument("--checkpoint", type=str, default=None)
+    parser.add_argument("--test_filename", type=str, default=None)
+    parser.add_argument("--output_filename", type=str, default=None)
+
     args = parser.parse_args()
     
     return args
@@ -86,27 +91,33 @@ def main():
 
     # load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-    tokenizer.add_special_tokens({'eos_token': "<eot>", 'pad_token': "<eot>"})
-    # tokenizer.add_special_tokens({'bos_token': "<s>"})
-    assert tokenizer.pad_token_id == tokenizer.eos_token_id
+    tokenizer.add_special_tokens({'eos_token': "<eot>", 'pad_token': "<pad>", "sep_token": "<sep>"})
+    # assert tokenizer.pad_token_id == tokenizer.eos_token_id
     model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
     model.resize_token_embeddings(len(tokenizer.sp))
     model.config.end_token_id = tokenizer.eos_token_id
     model.config.pad_token_id = model.config.eos_token_id
-
+    if args.checkpoint is not None:
+        st = torch.load(args.checkpoint, map_location="cpu")
+        model.load_state_dict(st)
     logger.info(f"Finished loading model and tokenizer")
 
     # Set up the datasets
     if args.do_train:
-        train_dataset = TLDRDataset(os.path.join(args.data_dir, args.train_filename),
-                                    tokenizer, "train", max_length=args.max_length)
+        train_dataset = SFTDataset(os.path.join(args.data_dir, args.train_filename),
+                                   tokenizer, "train", max_length=args.max_length)
     else:
         train_dataset = None
     if args.do_eval:
-        dev_dataset = TLDRDataset(os.path.join(args.data_dir, args.eval_filename),
-                                  tokenizer, "valid", max_length=args.max_length)
+        dev_dataset = SFTDataset(os.path.join(args.data_dir, args.eval_filename),
+                                 tokenizer, "valid", max_length=args.max_length)
     else:
         dev_dataset = None
+    if args.do_pred:
+        test_dataset = SFTDataset(os.path.join(args.data_dir, args.test_filename),
+                                  tokenizer, "test", max_length=args.max_length)
+    else:
+        test_dataset = None
 
     # Prepare the trainer and start training
     training_args = TrainingArguments(
@@ -132,7 +143,8 @@ def main():
         evaluation_strategy=args.evaluation_strategy,
         eval_steps=args.eval_steps,
         eval_accumulation_steps=args.eval_accumulation_steps,
-        per_device_eval_batch_size=args.eval_batch_size
+        per_device_eval_batch_size=args.eval_batch_size,
+        use_legacy_prediction_loop=args.do_pred,
     )
 
     # Set up the metric
@@ -163,7 +175,10 @@ def main():
 
     elif args.do_eval:
         trainer.evaluate(eval_dataset=dev_dataset)
-    
+
+    if args.do_pred:
+        output = trainer.predict(test_dataset)
+
     
 if __name__ == "__main__":
     main()

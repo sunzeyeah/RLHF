@@ -7,28 +7,7 @@ import torch
 from tqdm import tqdm
 from torch.utils.data import Dataset
 
-from src.utils import logger
-
-
-def load_dataset(filename, split):
-    discard = 0
-    datasets = []
-    with open(filename, "r", encoding="utf-8") as f:
-        for i, line in tqdm(enumerate(f)):
-            item = json.loads(line)
-            sample = {"prompt": item['title'] + item['desc'] + "模型回答:",
-                      "label": item["answer"]}
-
-            if len(sample['prompt'] + sample['label']) > 500:
-                discard += 1
-            else:
-                datasets.append(sample)
-            # if split == "valid" and i == 2000:
-            #     logger.info(f"File: {path}/web_text_zh_{split}_small.json, Num of over-length: {discard}")
-            #     return datasets
-    logger.info(f"Finished loading {os.path.basename(filename)}, size: {discard}")
-
-    return datasets
+from src.utils import logger, clean_text
 
 
 def get_dataset_from_jsonl(jsonl_file, return_summary=True):
@@ -48,6 +27,61 @@ def get_dataset_from_jsonl(jsonl_file, return_summary=True):
     if not return_summary:
         return post_list, summary_list
     return post_list
+
+
+class SFTDataset(Dataset):
+    def __init__(self, filename, tokenizer, split, max_length=550):
+        self.post_list = []
+        dataset = self.load_dataset(filename, split=split)
+        for sample in dataset:
+            txt = sample["prompt"] + tokenizer.sep_token + \
+                  "模型回答:" + sample["label"] + tokenizer.eos_token
+            self.post_list.append(txt)
+        # if "valid" in filename:
+        #     self.post_list = self.post_list[0:2000]
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.input_ids = []
+        self.attn_masks = []
+
+        for k in range(5):
+            logger.info(f"SFTDataset sample-{k}\n: {dataset[k]}")
+
+    def __len__(self):
+        return len(self.post_list)
+
+    def __getitem__(self, idx):
+        txt = self.post_list[idx]
+        encodings_dict = self.tokenizer(txt, max_length=self.max_length, padding="max_length", truncation=True)
+        input_ids = torch.tensor(encodings_dict["input_ids"])
+        attn_masks = torch.tensor(encodings_dict["attention_mask"])
+
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attn_masks,
+            "labels": input_ids,
+        }
+
+    @staticmethod
+    def load_dataset(filename, split):
+        discard = 0
+        datasets = []
+        with open(filename, "r", encoding="utf-8") as f:
+            for i, line in tqdm(enumerate(f)):
+                item = json.loads(line)
+                prompt = clean_text(item['title'] if len(item['title']) > len(item['desc']) else item['desc'])
+                label = clean_text(item['answer'])
+
+                if len(prompt) + len(label) > 500:
+                    discard += 1
+                else:
+                    datasets.append({"prompt": prompt, "label": label})
+                # if split == "valid" and i == 2000:
+                #     logger.info(f"File: {path}/web_text_zh_{split}_small.json, Num of over-length: {discard}")
+                #     return datasets
+        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+
+        return datasets
 
 
 class TLDRDataset(Dataset):
