@@ -28,6 +28,8 @@ deepspeed --num_gpus 1 $MAIN \
   --train_filename $TRAIN_FILENAME \
   --train_batch_size 16 \
   --gradient_accumulation_steps 4 \
+  --save_strategy "steps" \
+  --save-steps 5000 \
   --num_epochs 1 \
   --deepspeed_config "ds_config_sft_pangu.json" \
   --do_eval \
