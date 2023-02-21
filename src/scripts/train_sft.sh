@@ -20,13 +20,13 @@ deepspeed --num_gpus 1 $MAIN \
   --data_dir $DATR_DIR \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_PATH \
+  --max_length 512 \
+  --logging_steps 100 \
   --do_train \
   --train_filename $TRAIN_FILENAME \
-  --max_length 512 \
   --train_batch_size 4 \
   --gradient_accumulation_steps 8 \
   --num_epochs 1 \
-  --logging_steps 10 \
   --do_eval \
   --eval_filename $EVAL_FILENAME \
   --eval_batch_size 16 \

@@ -45,12 +45,12 @@ def get_parser():
 
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--local_rank", type=int, default=0)
-    parser.add_argument("--max_length", type=int, default=512)
+    parser.add_argument("--max_length", type=int, default=1024)
     # train
     parser.add_argument("--do_train", action="store_true")
     parser.add_argument("--train_filename", type=str, default=None)
     parser.add_argument("--num_epochs", type=int, default=1)
-    parser.add_argument("--learning_rate", type=float, default=1e-5)
+    parser.add_argument("--learning_rate", type=float, default=1e-6)
     parser.add_argument("--lr_scheduler_type", type=str, default="linear",
                         help="transformers.trainer_utils.SchedulerType, including:"
                              "linear, cosine, cosine_with_restarts, polynomial, constant,"
