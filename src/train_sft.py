@@ -64,6 +64,7 @@ def get_parser():
                              '- `"epoch"`: Save is done at the end of each epoch.'
                              '- `"steps"`: Save is done every `save_steps`.')
     parser.add_argument("--save_steps", type=int, default=None)
+    parser.add_argument("--save_total_limit", type=int, default=20)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
     parser.add_argument("--gradient_checkpointing", type=bool, default=False,
                         help="If True, use gradient checkpointing to save memory at the expense of slower backward pass.")
@@ -146,6 +147,7 @@ def main():
         adam_beta2=0.95,
         save_strategy=args.save_strategy,
         save_steps=args.save_steps,
+        save_total_limit=args.save_total_limit,
         logging_steps=args.logging_steps,
         report_to=["tensorboard"],
         deepspeed=args.deepspeed_config,
