@@ -1,26 +1,17 @@
+
+import sys
+sys.path.insert(0, "/root/autodl-tmp/Code/RLHF")
+
 import os
 import torch
 import argparse
 
-from torch.utils.data import Dataset
-from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments
 
 from src.models.reward import GPTRewardModel
 from src.utils import logger, RESOURCE_PATH
 from src.utils.file_utils import set_seed
-from src.utils.data import PairwiseDataset, DataCollatorReward, create_comparison_dataset
-
-
-def compute_metrics(eval_preds):
-    chosen_end_scores = eval_preds.predictions[0]  # chosen scores
-    rejected_end_scores = eval_preds.predictions[1]  # rejected scores
-
-    result = {}
-    acc = sum(chosen_end_scores > rejected_end_scores) / len(rejected_end_scores)
-    result["accuracy"] = acc
-
-    return result
+from src.utils.data import PairwiseDataset, DataCollatorReward
 
 
 def get_parser():
@@ -156,14 +147,32 @@ def main():
     # Create the collator to gather batches of pairwise comparisons
     data_collator = DataCollatorReward()
 
-    Trainer(
+    def compute_metrics(eval_preds):
+        chosen_end_scores = eval_preds.predictions[0]  # chosen scores
+        rejected_end_scores = eval_preds.predictions[1]  # rejected scores
+
+        result = {}
+        acc = sum(chosen_end_scores > rejected_end_scores) / len(rejected_end_scores)
+        result["accuracy"] = acc
+
+        return result
+
+    # Prepare the trainer and start training
+    trainer = Trainer(
         model=reward_model,
         args=training_args,
         train_dataset=train_dataset,
         compute_metrics=compute_metrics,
         eval_dataset=val_dataset,
         data_collator=data_collator,
-    ).train()
+    )
+
+    if args.do_train:
+        trainer.train()
+        # trainer.save_model(args.output_dir)
+
+    elif args.do_eval:
+        trainer.evaluate(eval_dataset=val_dataset)
 
 
 if __name__ == "__main__":
