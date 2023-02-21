@@ -1,36 +1,31 @@
-
-import sys
-sys.path.insert(0, "/root/autodl-tmp/Code/RLHF")
-
 import os
-import argparse
-import evaluate
 import torch
+import argparse
 
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    Trainer,
-    TrainingArguments,
-    default_data_collator,
-)
+from torch.utils.data import Dataset
+from tqdm import tqdm
+from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments
 
+from src.models.reward import GPTRewardModel
 from src.utils import logger, RESOURCE_PATH
-from src.utils.data import SFTDataset
 from src.utils.file_utils import set_seed
+from src.utils.data import PairwiseDataset, DataCollatorReward, create_comparison_dataset
 
 
-# Create a preprocessing function to extract out the proper logits from the model output
-def preprocess_logits_for_metrics(logits, labels):
-    if isinstance(logits, tuple):
-        logits = logits[0]
+def compute_metrics(eval_preds):
+    chosen_end_scores = eval_preds.predictions[0]  # chosen scores
+    rejected_end_scores = eval_preds.predictions[1]  # rejected scores
 
-    return logits.argmax(dim=-1)
+    result = {}
+    acc = sum(chosen_end_scores > rejected_end_scores) / len(rejected_end_scores)
+    result["accuracy"] = acc
+
+    return result
 
 
 def get_parser():
     parser = argparse.ArgumentParser()
-    
+
     parser.add_argument("--data_dir", type=str, required=True)
     parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument("--model_name_or_path", type=str, required=True)
@@ -78,7 +73,7 @@ def get_parser():
     parser.add_argument("--output_filename", type=str, default=None)
 
     args = parser.parse_args()
-    
+
     return args
 
 
@@ -90,33 +85,15 @@ def main():
 
     # load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-    tokenizer.add_special_tokens({'eos_token': "<eot>", 'pad_token': "<pad>", "sep_token": "<sep>"})
-    # assert tokenizer.pad_token_id == tokenizer.eos_token_id
+    tokenizer.add_special_tokens({'unk_token': "<unk>",
+                                  'bos_token': "<s>",
+                                  'eos_token': "<eot>",
+                                  'pad_token': "<pad>"})
+
     model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
     model.resize_token_embeddings(len(tokenizer.sp))
     model.config.end_token_id = tokenizer.eos_token_id
     model.config.pad_token_id = tokenizer.pad_token_id
-    if args.checkpoint is not None:
-        st = torch.load(args.checkpoint, map_location="cpu")
-        model.load_state_dict(st)
-    logger.info(f"Finished loading model and tokenizer")
-
-    # Set up the datasets
-    if args.do_train:
-        train_dataset = SFTDataset(os.path.join(args.data_dir, args.train_filename),
-                                   tokenizer, "train", max_length=args.max_length)
-    else:
-        train_dataset = None
-    if args.do_eval:
-        dev_dataset = SFTDataset(os.path.join(args.data_dir, args.eval_filename),
-                                 tokenizer, "valid", max_length=args.max_length)
-    else:
-        dev_dataset = None
-    if args.do_pred:
-        test_dataset = SFTDataset(os.path.join(args.data_dir, args.test_filename),
-                                  tokenizer, "test", max_length=args.max_length)
-    else:
-        test_dataset = None
 
     # training arguments
     training_args = TrainingArguments(
@@ -125,6 +102,7 @@ def main():
         seed=args.seed,
         data_seed=args.seed,
         local_rank=args.local_rank,
+        logging_steps=args.logging_steps,
         do_train=args.do_train,
         num_train_epochs=args.num_epochs,
         learning_rate=args.learning_rate,
@@ -135,15 +113,10 @@ def main():
         weight_decay=args.weight_decay,
         half_precision_backend="auto",
         fp16=torch.cuda.is_available(),
-        adam_beta1=0.9,
-        adam_beta2=0.95,
         save_strategy=args.save_strategy,
         save_steps=args.save_steps,
         save_total_limit=args.save_total_limit,
-        logging_steps=args.logging_steps,
-        report_to=["tensorboard"],
-        deepspeed=os.path.join(RESOURCE_PATH, "config", "sft_model", args.deepspeed_config),
-        gradient_checkpointing=args.gradient_checkpointing,
+        deepspeed=os.path.join(RESOURCE_PATH, "config", "reward_model", args.deepspeed_config),
         do_eval=args.do_eval,
         evaluation_strategy=args.evaluation_strategy,
         eval_steps=args.eval_steps,
@@ -154,39 +127,44 @@ def main():
     )
     logger.info(f"Training Arguments: {training_args}")
 
-    # Set up the metric
-    rouge = evaluate.load("rouge")
+    # Initialize the reward model from the (supervised) fine-tuned SFT model
+    reward_model = GPTRewardModel(model, tokenizer)
+    if args.checkpoint is not None:
+        st = torch.load(args.checkpoint, map_location="cpu")
+        reward_model.load_state_dict(st)
+    logger.info(f"Finished loading model and tokenizer")
 
-    def compute_metrics(eval_preds):
-        labels_ids = eval_preds.label_ids
-        pred_ids = eval_preds.predictions
-        pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-        label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
-        result = rouge.compute(predictions=pred_str, references=label_str)
+    # Freeze the first 70% of the hidden layers of the reward model backbone
+    layers = reward_model.transformer.h
+    num_layers = len(layers)
+    num_unfrozen = int(0.3 * num_layers)
+    for layer in layers[:-num_unfrozen]:
+        layer.requires_grad_(False)
 
-        return result
+    # Set up the datasets
+    if args.do_train:
+        train_dataset = PairwiseDataset(os.path.join(args.data_dir, args.train_filename),
+                                        tokenizer, max_length=args.max_length)
+    else:
+        train_dataset = None
+    if args.do_eval:
+        val_dataset = PairwiseDataset(os.path.join(args.data_dir, args.eval_filename),
+                                      tokenizer, max_length=args.max_length)
+    else:
+        val_dataset = None
 
-    # Prepare the trainer and start training
-    trainer = Trainer(
-        model=model,
+    # Create the collator to gather batches of pairwise comparisons
+    data_collator = DataCollatorReward()
+
+    Trainer(
+        model=reward_model,
         args=training_args,
         train_dataset=train_dataset,
-        eval_dataset=dev_dataset,
         compute_metrics=compute_metrics,
-        data_collator=default_data_collator,
-        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
-    )
+        eval_dataset=val_dataset,
+        data_collator=data_collator,
+    ).train()
 
-    if args.do_train:
-        trainer.train()
-        trainer.save_model(args.output_dir)
 
-    elif args.do_eval:
-        trainer.evaluate(eval_dataset=dev_dataset)
-
-    if args.do_pred:
-        output = trainer.predict(test_dataset)
-
-    
 if __name__ == "__main__":
     main()

@@ -30,14 +30,81 @@ def get_dataset_from_jsonl(jsonl_file, return_summary=True):
     return post_list
 
 
+class DataCollatorReward:
+    def __call__(self, data):
+        batch = {"input_ids": torch.cat([f[0] for f in data] + [f[2] for f in data]),
+                 "attention_mask": torch.cat([f[1] for f in data] + [f[3] for f in data]),
+                 "labels": torch.tensor([0] * len(data) + [1] * len(data))}
+        return batch
+
+
+class PairwiseDataset(Dataset):
+    def __init__(self, filename, tokenizer, max_length):
+        pairs = self.create_comparison_dataset(filename)
+
+        self.chosen_input_ids = []
+        self.chosen_attn_masks = []
+        self.rejected_input_ids = []
+        self.rejected_attn_masks = []
+        num_skip = 0
+
+        for pair in tqdm(pairs):
+            chosen_prompt, chosen_summary = pair["chosen"], pair["rejected"]
+            chosen_encodings_dict = tokenizer(chosen_prompt, chosen_summary, max_length=max_length,
+                                              truncation="longest_first", padding="max_length", return_tensors="pt")
+            rejected_prompt, rejected_summary = pair["chosen"], pair["rejected"]
+            rejected_encodings_dict = tokenizer(rejected_prompt, rejected_summary, max_length=max_length,
+                                                truncation="longest_first", padding="max_length", return_tensors="pt")
+
+            if torch.all(torch.eq(chosen_encodings_dict["input_ids"], rejected_encodings_dict["input_ids"])).item():
+                num_skip += 1
+                continue
+
+            self.chosen_input_ids.append(chosen_encodings_dict["input_ids"])
+            self.chosen_attn_masks.append(chosen_encodings_dict["attention_mask"])
+            self.rejected_input_ids.append(rejected_encodings_dict["input_ids"])
+            self.rejected_attn_masks.append(rejected_encodings_dict["attention_mask"])
+
+        logger.info(f"PairwiseDataset # skipped instances: {num_skip}")
+
+    def __len__(self):
+        return len(self.chosen_input_ids)
+
+    def __getitem__(self, idx):
+        return (
+            self.chosen_input_ids[idx],
+            self.chosen_attn_masks[idx],
+            self.rejected_input_ids[idx],
+            self.rejected_attn_masks[idx],
+        )
+
+    @staticmethod
+    def create_comparison_dataset(filename):
+        dataset = torch.load(filename)
+        for k in range(5):
+            logger.info(f"PairwiseDataset sample-{k}\n: {dataset[-k-1]}")
+
+        pairs = []
+        for sample in tqdm(dataset):
+            prompt = sample["prompt"]
+            chosen_summary = sample["chosen"]
+            rejected_summary = sample["rejected"]
+            if chosen_summary == rejected_summary:
+                continue
+            if len(chosen_summary) < 5 or len(rejected_summary) < 5:
+                continue
+            pair = {"chosen": [prompt, chosen_summary],
+                    "rejected": [prompt, rejected_summary]}
+            pairs.append(pair)
+        return pairs
+
+
 class SFTDataset(Dataset):
-    def __init__(self, filename, tokenizer, split, max_length=550):
+    def __init__(self, filename, tokenizer, split, max_length):
         self.post_list = []
-        dataset = self.load_dataset(filename, split=split)
+        dataset = self.load_dataset(filename)
         for sample in dataset:
-            txt = sample["prompt"] + tokenizer.sep_token + \
-                  "模型回答:" + sample["label"] + tokenizer.eos_token
-            self.post_list.append(txt)
+            self.post_list.append((sample["prompt"], "模型回答:" + sample["label"]))
         # if "valid" in filename:
         #     self.post_list = self.post_list[0:2000]
         self.tokenizer = tokenizer
@@ -52,19 +119,18 @@ class SFTDataset(Dataset):
         return len(self.post_list)
 
     def __getitem__(self, idx):
-        txt = self.post_list[idx]
-        encodings_dict = self.tokenizer(txt, max_length=self.max_length, padding="max_length", truncation=True)
-        input_ids = torch.tensor(encodings_dict["input_ids"])
-        attn_masks = torch.tensor(encodings_dict["attention_mask"])
+        prompt, label = self.post_list[idx]
+        encodings_dict = self.tokenizer(prompt, label, max_length=self.max_length,
+                                        padding="max_length", truncation="longest_first", return_tensors="pt")
 
         return {
-            "input_ids": input_ids,
-            "attention_mask": attn_masks,
-            "labels": input_ids,
+            "input_ids": encodings_dict["input_ids"],
+            "attention_mask": encodings_dict["attention_mask"],
+            "labels": encodings_dict["input_ids"],
         }
 
     @staticmethod
-    def load_dataset(filename, split):
+    def load_dataset(filename):
         discard = 0
         datasets = []
         with open(filename, "r", encoding="utf-8") as f:
@@ -119,8 +185,8 @@ class TLDRDataset(Dataset):
 
 
 class ComparisonDataset(Dataset):
-    def __init__(self, comparison_path, tokenizer, max_length=550):
-        with open(comparison_path, "r") as f:
+    def __init__(self, comparison_path, tokenizer, max_length):
+        with open(comparison_path, "r", encoding="utf-8") as f:
             dataset = [json.loads(line) for line in f]
 
         self.tokenizer = tokenizer

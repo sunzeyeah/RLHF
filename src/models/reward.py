@@ -1,38 +1,20 @@
-import torch
-from torch import nn
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
+
+from torch import nn
 
 
 class GPTRewardModel(nn.Module):
-    def __init__(self, model_path,tokenizer):
+    def __init__(self, model, tokenizer):
         super().__init__()
 
-        if tokenizer is None:
-            self.tokenizer = AutoTokenizer.from_pretrained(model_path)
-            ## for bert tokenizer
-            self.tokenizer.add_special_tokens({'eos_token': "<|endoftext|>"})
-            self.tokenizer.add_special_tokens({'bos_token': "<|startoftext|>"})
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-        else:
-            self.tokenizer = tokenizer
-        self.PAD_ID = self.tokenizer.pad_token_id
-
-        model = AutoModelForCausalLM.from_pretrained(model_path)
-
-        ## for bert tokenizer
-        model.resize_token_embeddings(len(tokenizer))
-        # tokenizer.pad_token_id= tokenizer.eos_token_id
-        model.config.end_token_id = tokenizer.eos_token_id
-        model.config.pad_token_id = model.config.eos_token_id
-        ##
+        self.pad_id = tokenizer.pad_token_id
 
         self.config = model.config
         # `gpt-neo(x)` models use `hidden_size` attribute names instead of `n_embd``
         self.config.n_embd = self.config.hidden_size if hasattr(self.config, "hidden_size") else self.config.n_embd
         self.transformer = model.transformer
         self.v_head = nn.Linear(self.config.n_embd, 1, bias=False)
-
 
     def forward(
             self,
@@ -79,16 +61,16 @@ class GPTRewardModel(nn.Module):
         inference = False
         for i in range(bs):
             if torch.all(torch.eq(chosen[i], rejected[i])).item():
-                c_inds = (chosen[i] == self.PAD_ID).nonzero()
+                c_inds = (chosen[i] == self.pad_id).nonzero()
                 c_ind = c_inds[0].item() if len(c_inds) > 0 else chosen.shape[1]
                 chosen_end_scores.append(chosen_rewards[i, c_ind - 1])
                 inference = True
                 continue
 
             # Check if there is any padding otherwise take length of sequence
-            c_inds = (chosen[i] == self.PAD_ID).nonzero()
+            c_inds = (chosen[i] == self.pad_id).nonzero()
             c_ind = c_inds[0].item() if len(c_inds) > 0 else chosen.shape[1]
-            r_inds = (rejected[i] == self.PAD_ID).nonzero()
+            r_inds = (rejected[i] == self.pad_id).nonzero()
             r_ind = r_inds[0].item() if len(r_inds) > 0 else rejected.shape[1]
             end_ind = max(c_ind, r_ind)
 
