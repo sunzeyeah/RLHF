@@ -44,6 +44,7 @@ def get_parser():
     parser.add_argument("--model_name_or_path", type=str, required=True)
 
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--local_rank", type=int, default=0)
     parser.add_argument("--max_length", type=int, default=512)
     # train
     parser.add_argument("--do_train", action="store_true")
