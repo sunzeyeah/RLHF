@@ -26,11 +26,11 @@ deepspeed --num_gpus 1 $MAIN \
   --logging_steps 100 \
   --do_train \
   --train_filename $TRAIN_FILENAME \
-  --train_batch_size 32 \
+  --train_batch_size 16 \
   --gradient_accumulation_steps 4 \
   --num_epochs 1 \
   --deepspeed_config "ds_config_sft_pangu.json" \
   --do_eval \
   --eval_filename $EVAL_FILENAME \
-  --eval_batch_size 96 \
-  > train_sft_${MODEL}_"`date "+Y%-%m-%d-%H:%M:%S"`".log 2>&1 &
+  --eval_batch_size 48 \
+  > train_sft_${MODEL}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1 &

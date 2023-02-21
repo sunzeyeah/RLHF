@@ -1,5 +1,5 @@
 {
-  "train_batch_size": 4,
+  "train_batch_size": 64,
   "fp16": {
     "enabled": true,
     "min_loss_scale": 1,
@@ -32,7 +32,7 @@
     "type": "WarmupLR",
     "params": {
       "warmup_min_lr": 0,
-      "warmup_max_lr": 1e-05,
+      "warmup_max_lr": 1e-06,
       "warmup_num_steps": "auto"
     }
   }
