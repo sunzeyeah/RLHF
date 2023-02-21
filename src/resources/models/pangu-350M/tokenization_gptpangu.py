@@ -27,7 +27,7 @@ class GPTPanguTokenizer(PreTrainedTokenizer):
         # special token ids
         # self.eos_token_id = self.sp.piece_to_id("<eot>")
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1 = None):
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A BERT sequence has the following format:

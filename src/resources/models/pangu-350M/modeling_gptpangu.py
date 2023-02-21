@@ -518,7 +518,7 @@ class GPTPanguForCausalLM(GPTPanguPreTrainedModel):
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n
-            shift_logits = lm_logits[..., :-1, :].contiguous()
+            shift_logits = lm_logits[..., self.config.max_length_prompt:-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = nn.CrossEntropyLoss()

@@ -81,15 +81,15 @@ class PairwiseDataset(Dataset):
 
 
 class SFTDataset(Dataset):
-    def __init__(self, filename, tokenizer, max_length):
-        self.post_list = []
+    def __init__(self, args, filename, tokenizer):
         dataset = self.load_dataset(filename)
-        for sample in dataset:
-            self.post_list.append((sample["prompt"], "模型回答:" + sample["label"]))
-        # if "valid" in filename:
-        #     self.post_list = self.post_list[0:2000]
+        self.post_list = dataset
+        # self.post_list = []
+        # for sample in dataset:
+        #     self.post_list.append((sample["prompt"] + tokenizer.sep_token + "模型回答:", sample["label"]))
+
         self.tokenizer = tokenizer
-        self.max_length = max_length
+        self.args = args
 
         for k in range(5):
             logger.info(f"SFTDataset sample-{k}\n: {dataset[k]}")
@@ -99,16 +99,21 @@ class SFTDataset(Dataset):
 
     def __getitem__(self, idx):
         prompt, label = self.post_list[idx]
-        encodings_dict = self.tokenizer(prompt, label, max_length=self.max_length,
+        prompt = prompt[:(self.args.max_length_prompt-6)]
+        prompt += self.tokenizer.sep_token + "模型回答:"
+        encoded_prompt = self.tokenizer(prompt, add_special_tokens=False, max_length=self.args.max_length_prompt,
                                         padding="max_length", truncation="longest_first", return_tensors="pt")
-        # TODO: sft监督的应该是‘模型回答’之后的文本，所以label不应该是全部的input_ids
+        encoded_label = self.tokenizer(label, max_length=self.args.max_length_label,
+                                       padding="max_length", truncation="longest_first", return_tensors="pt")
+
         return {
-            "input_ids": encodings_dict["input_ids"],
-            "attention_mask": encodings_dict["attention_mask"],
-            "labels": encodings_dict["input_ids"],
+            "input_ids": torch.cat((encoded_prompt["input_ids"], encoded_label['input_ids']), axis=1),
+            "attention_mask": torch.cat((encoded_prompt["attention_mask"], encoded_label['attention_mask']), axis=1),
+            "labels": encoded_label['input_ids'],
         }
 
-    def load_dataset(self, filename):
+    @staticmethod
+    def load_dataset(filename):
         discard = 0
         datasets = []
         with open(filename, "r", encoding="utf-8") as f:
@@ -117,10 +122,10 @@ class SFTDataset(Dataset):
                 prompt = clean_text(item['title'] if len(item['title']) > len(item['desc']) else item['desc'])
                 label = clean_text(item['answer'])
 
-                if len(prompt) + len(label) > self.max_length:
-                    discard += 1
-                else:
-                    datasets.append({"prompt": prompt, "label": label})
+                # if len(prompt) + len(label) > self.args.max_length:
+                #     discard += 1
+                # else:
+                datasets.append({"prompt": prompt, "label": label})
                 # if split == "valid" and i == 2000:
                 #     logger.info(f"File: {path}/web_text_zh_{split}_small.json, Num of over-length: {discard}")
                 #     return datasets

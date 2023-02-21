@@ -38,6 +38,8 @@ def get_parser():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--local_rank", type=int, default=0)
     parser.add_argument("--max_length", type=int, default=1024)
+    parser.add_argument("--max_length_prompt", type=int, default=200)
+    parser.add_argument("--max_length_label", type=int, default=824)
     # train
     parser.add_argument("--do_train", action="store_true")
     parser.add_argument("--train_filename", type=str, default=None)
@@ -96,6 +98,7 @@ def main():
     model.resize_token_embeddings(len(tokenizer.sp))
     model.config.end_token_id = tokenizer.eos_token_id
     model.config.pad_token_id = tokenizer.pad_token_id
+    model.config.max_length_prompt = args.max_length_prompt
     if args.checkpoint is not None:
         st = torch.load(args.checkpoint, map_location="cpu")
         model.load_state_dict(st)
@@ -103,18 +106,18 @@ def main():
 
     # Set up the datasets
     if args.do_train:
-        train_dataset = SFTDataset(os.path.join(args.data_dir, args.train_filename),
-                                   tokenizer, max_length=args.max_length)
+        train_dataset = SFTDataset(args, os.path.join(args.data_dir, args.train_filename),
+                                   tokenizer)
     else:
         train_dataset = None
     if args.do_eval:
-        dev_dataset = SFTDataset(os.path.join(args.data_dir, args.eval_filename),
-                                 tokenizer, max_length=args.max_length)
+        dev_dataset = SFTDataset(args, os.path.join(args.data_dir, args.eval_filename),
+                                 tokenizer)
     else:
         dev_dataset = None
     if args.do_pred:
-        test_dataset = SFTDataset(os.path.join(args.data_dir, args.test_filename),
-                                  tokenizer, max_length=args.max_length)
+        test_dataset = SFTDataset(args, os.path.join(args.data_dir, args.test_filename),
+                                  tokenizer)
     else:
         test_dataset = None
 
