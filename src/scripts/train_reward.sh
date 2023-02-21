@@ -7,7 +7,7 @@ ROOT="/root/autodl-tmp/"
 DATR_DIR=$ROOT/Data/raw
 MAIN=$ROOT/Code/RLHF/src/train_reward.py
 MODEL_PATH=$ROOT/Data/models/$MODEL
-OUTPUT_DIR=$ROOT/Data/reward/output/$MODEL
+OUTPUT_DIR=$ROOT/Data/output/reward/$MODEL
 TRAIN_FILENAME=""
 EVAL_FILENAME=""
 

@@ -7,7 +7,7 @@ ROOT="/root/autodl-tmp/"
 DATR_DIR=$ROOT/Data/raw
 MAIN=$ROOT/Code/RLHF/src/train_sft.py
 MODEL_PATH=$ROOT/Data/models/$MODEL
-OUTPUT_DIR=$ROOT/Data/sft/output/$MODEL
+OUTPUT_DIR=$ROOT/Data/output/sft/$MODEL
 TRAIN_FILENAME="baike_qa_train.json"
 EVAL_FILENAME="baike_qa_valid.json"
 

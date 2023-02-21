@@ -8,7 +8,7 @@ DATR_DIR=$ROOT/Data/raw
 MAIN=$ROOT/Code/RLHF/src/train_rlhf.py
 ACCELERATE_CONFIG=$ROOT/Code/RLHF/src/resources/ppo_model/default_accelerate_config.yaml
 MODEL_PATH=$ROOT/Data/models/$MODEL
-OUTPUT_DIR=$ROOT/Data/sft/output/$MODEL
+OUTPUT_DIR=$ROOT/Data/output/rlhf/$MODEL
 TRAIN_FILENAME=""
 EVAL_FILENAME=""
 
