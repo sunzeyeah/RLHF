@@ -26,7 +26,7 @@ deepspeed --num_gpus 1 $MAIN \
   --logging_steps 100 \
   --do_train \
   --train_filename $TRAIN_FILENAME \
-  --train_batch_size 16 \
+  --train_batch_size 24 \
   --gradient_accumulation_steps 4 \
   --save_strategy "steps" \
   --save-steps 5000 \
