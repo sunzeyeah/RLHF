@@ -92,6 +92,7 @@ def get_parser():
 
 def main():
     args = get_parser()
+    logger.info(f"Parameters: {args}")
 
     set_seed(args.seed)
 
@@ -160,6 +161,7 @@ def main():
         do_predict=args.do_pred,
         use_legacy_prediction_loop=args.do_pred,
     )
+    logger.info(f"Training Arguments: {training_args}")
 
     def compute_metrics(eval_preds):
         labels_ids = eval_preds.label_ids
