@@ -21,8 +21,6 @@ deepspeed --num_gpus 1 $MAIN \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_PATH \
   --max_length 1024 \
-  --max_length_prompt 200 \
-  --max_length_label 824 \
   --logging_steps 100 \
   --do_train \
   --train_filename $TRAIN_FILENAME \

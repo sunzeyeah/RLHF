@@ -13,6 +13,7 @@ from transformers import (
     Trainer,
     TrainingArguments,
     default_data_collator,
+    TextGenerationPipeline
 )
 
 from src.utils import logger, RESOURCE_PATH
@@ -38,8 +39,8 @@ def get_parser():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--local_rank", type=int, default=0)
     parser.add_argument("--max_length", type=int, default=1024)
-    parser.add_argument("--max_length_prompt", type=int, default=200)
-    parser.add_argument("--max_length_label", type=int, default=824)
+    # parser.add_argument("--max_length_prompt", type=int, default=200)
+    # parser.add_argument("--max_length_label", type=int, default=824)
     # train
     parser.add_argument("--do_train", action="store_true")
     parser.add_argument("--train_filename", type=str, default=None)
@@ -78,6 +79,9 @@ def get_parser():
     parser.add_argument("--checkpoint", type=str, default=None)
     parser.add_argument("--test_filename", type=str, default=None)
     parser.add_argument("--output_filename", type=str, default=None)
+    parser.add_argument("--num_return_sequences", type=int, default=3)
+    parser.add_argument("--top_k", type=int, default=50)
+    parser.add_argument("--temperature", type=float, default=10.0)
 
     args = parser.parse_args()
     
@@ -92,13 +96,18 @@ def main():
 
     # load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-    tokenizer.add_special_tokens({'eos_token': "<eot>", 'pad_token': "<pad>", "sep_token": "<sep>"})
+    tokenizer.add_special_tokens({
+        "unk_token": "<unk>",
+        'eos_token': "<eot>",
+        'pad_token': "<pad>",
+        "sep_token": "<sep>"
+    })
     # assert tokenizer.pad_token_id == tokenizer.eos_token_id
     model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
     model.resize_token_embeddings(len(tokenizer.sp))
     model.config.end_token_id = tokenizer.eos_token_id
     model.config.pad_token_id = tokenizer.pad_token_id
-    model.config.max_length_prompt = args.max_length_prompt
+    # model.config.max_length_prompt = args.max_length_prompt
     if args.checkpoint is not None:
         st = torch.load(args.checkpoint, map_location="cpu")
         model.load_state_dict(st)
@@ -116,12 +125,13 @@ def main():
     else:
         dev_dataset = None
     if args.do_pred:
-        test_dataset = SFTDataset(args, os.path.join(args.data_dir, args.test_filename),
-                                  tokenizer)
+        test_dataset = SFTDataset.load_dataset(os.path.join(args.data_dir, args.test_filename),
+                                               args.max_length)
     else:
         test_dataset = None
 
     # training arguments
+    deepspeed_config = os.path.join(RESOURCE_PATH, "config", "sft_model", args.deepspeed_config) if args.deepspeed_config is not None else None
     training_args = TrainingArguments(
         output_dir=args.output_dir,
         no_cuda=not torch.cuda.is_available(),
@@ -145,7 +155,7 @@ def main():
         save_total_limit=args.save_total_limit,
         logging_steps=args.logging_steps,
         report_to=["tensorboard"],
-        deepspeed=os.path.join(RESOURCE_PATH, "config", "sft_model", args.deepspeed_config),
+        deepspeed=deepspeed_config,
         gradient_checkpointing=args.gradient_checkpointing,
         do_eval=args.do_eval,
         evaluation_strategy=args.evaluation_strategy,
@@ -188,7 +198,30 @@ def main():
         trainer.evaluate(eval_dataset=dev_dataset)
 
     if args.do_pred:
-        output = trainer.predict(test_dataset)
+        device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
+        text_generator = TextGenerationPipeline(model, tokenizer, device=device)
+        batch = []
+        with open(os.path.join(args.output_dir, args.output_filename), "w", encoding="utf-8") as w:
+            w.write("\t".join(["prompt"]+[f"model_answer_{i}" for i in range(args.num_return_sequences)])+"\n")
+            for test_data in test_dataset:
+                prompt = test_data['prompt'] + tokenizer.sep_token + "模型回答:"
+                # label = test_data['label']
+                batch.append(prompt)
+                if len(batch) >= args.eval_batch_size:
+                    results = text_generator(batch, max_length=args.max_length_label, do_sample=True,
+                                             num_return_sequences=args.num_return_sequences,
+                                             top_k=args.top_k, temperature=args.temperature)
+                    for prompt, res in zip(batch, results):
+                        w.write("\t".join([prompt]+[each['generated_text'].split("模型回答:")[1].replace(tokenizer.eos_token, "").replace(tokenizer.pad_token, "") for each in res])+"\n")
+                    batch = []
+            if len(batch) > 0:
+                results = text_generator(batch, max_length=args.max_length_label, do_sample=True,
+                                         num_return_sequences=args.num_return_sequences,
+                                         top_k=args.top_k, temperature=args.temperature)
+                for prompt, res in zip(batch, results):
+                    w.write("\t".join([prompt]+[each['generated_text'].split("模型回答:")[1].replace(tokenizer.eos_token, "").replace(tokenizer.pad_token, "") for each in res])+"\n")
+
+        # output = trainer.predict(test_dataset)
 
     
 if __name__ == "__main__":

@@ -82,11 +82,11 @@ class PairwiseDataset(Dataset):
 
 class SFTDataset(Dataset):
     def __init__(self, args, filename, tokenizer):
-        dataset = self.load_dataset(filename)
-        self.post_list = dataset
-        # self.post_list = []
-        # for sample in dataset:
-        #     self.post_list.append((sample["prompt"] + tokenizer.sep_token + "模型回答:", sample["label"]))
+        dataset = self.load_dataset(filename, args.max_length)
+        # self.post_list = dataset
+        self.post_list = []
+        for sample in dataset:
+            self.post_list.append((sample["prompt"], "模型回答:" + sample["label"]))
 
         self.tokenizer = tokenizer
         self.args = args
@@ -99,33 +99,41 @@ class SFTDataset(Dataset):
 
     def __getitem__(self, idx):
         prompt, label = self.post_list[idx]
-        prompt = prompt[:(self.args.max_length_prompt-6)]
-        prompt += self.tokenizer.sep_token + "模型回答:"
-        encoded_prompt = self.tokenizer(prompt, add_special_tokens=False, max_length=self.args.max_length_prompt,
-                                        padding="max_length", truncation="longest_first", return_tensors="pt")
-        encoded_label = self.tokenizer(label, max_length=self.args.max_length_label,
-                                       padding="max_length", truncation="longest_first", return_tensors="pt")
+        encoded_dict = self.tokenizer(prompt, label, max_length=self.args.max_length,
+                                      padding="max_length", truncation="longest_first", return_tensors="pt")
 
         return {
-            "input_ids": torch.cat((encoded_prompt["input_ids"], encoded_label['input_ids']), axis=1),
-            "attention_mask": torch.cat((encoded_prompt["attention_mask"], encoded_label['attention_mask']), axis=1),
-            "labels": encoded_label['input_ids'],
+            "input_ids": encoded_dict["input_ids"],
+            "attention_mask": encoded_dict["attention_mask"],
+            "labels": encoded_dict['input_ids'],
         }
+        # prompt = prompt[:(self.args.max_length_prompt-6)]
+        # prompt += self.tokenizer.sep_token + "模型回答:"
+        # encoded_prompt = self.tokenizer(prompt, add_special_tokens=False, max_length=self.args.max_length_prompt,
+        #                                 padding="max_length", truncation="longest_first", return_tensors="pt")
+        # encoded_label = self.tokenizer(label, max_length=self.args.max_length_label,
+        #                                padding="max_length", truncation="longest_first", return_tensors="pt")
+        #
+        # return {
+        #     "input_ids": torch.cat((encoded_prompt["input_ids"], encoded_label['input_ids']), axis=1),
+        #     "attention_mask": torch.cat((encoded_prompt["attention_mask"], encoded_label['attention_mask']), axis=1),
+        #     "labels": encoded_label['input_ids'],
+        # }
 
     @staticmethod
-    def load_dataset(filename):
+    def load_dataset(filename, max_length):
         discard = 0
         datasets = []
         with open(filename, "r", encoding="utf-8") as f:
-            for i, line in tqdm(enumerate(f), desc="Load Dataset"):
+            for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
                 item = json.loads(line)
                 prompt = clean_text(item['title'] if len(item['title']) > len(item['desc']) else item['desc'])
                 label = clean_text(item['answer'])
 
-                # if len(prompt) + len(label) > self.args.max_length:
-                #     discard += 1
-                # else:
-                datasets.append({"prompt": prompt, "label": label})
+                if len(prompt) + len(label) > max_length:
+                    discard += 1
+                else:
+                    datasets.append({"prompt": prompt, "label": label})
                 # if split == "valid" and i == 2000:
                 #     logger.info(f"File: {path}/web_text_zh_{split}_small.json, Num of over-length: {discard}")
                 #     return datasets

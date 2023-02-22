@@ -87,6 +87,7 @@ def main():
     model.config.pad_token_id = tokenizer.pad_token_id
 
     # training arguments
+    deepspeed_config = os.path.join(RESOURCE_PATH, "config", "reward_model", args.deepspeed_config) if args.deepspeed_config is not None else None
     training_args = TrainingArguments(
         output_dir=args.output_dir,
         no_cuda=not torch.cuda.is_available(),
@@ -107,7 +108,7 @@ def main():
         save_strategy=args.save_strategy,
         save_steps=args.save_steps,
         save_total_limit=args.save_total_limit,
-        deepspeed=os.path.join(RESOURCE_PATH, "config", "reward_model", args.deepspeed_config),
+        deepspeed=deepspeed_config,
         do_eval=args.do_eval,
         evaluation_strategy=args.evaluation_strategy,
         eval_steps=args.eval_steps,

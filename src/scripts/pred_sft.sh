@@ -1,13 +1,13 @@
 #!/bin/bash
 
-MODEL="pangu-2.6B"
+MODEL="pangu-350M"
 
 #ROOT="/Users/zeyesun/Documents/"
 ROOT="/root/autodl-tmp/"
-DATR_DIR=$ROOT/Data/rlhf/raw
+DATR_DIR=$ROOT/Data/raw
 MAIN=$ROOT/Code/RLHF/src/train_sft.py
 MODEL_PATH=$ROOT/Data/models/$MODEL
-OUTPUT_DIR=$ROOT/Data/rlhf/output/sft/$MODEL
+OUTPUT_DIR=$ROOT/Data/output/sft/$MODEL
 TEST_FILENAME=""
 OUTPUT_FILENAME=""
 CHECKPOINT=$OUTPUT_DIR
@@ -22,10 +22,10 @@ deepspeed --num_gpus 1 $MAIN \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_PATH \
   --checkpoint $CHECKPOINT \
-  --max_length 512 \
+  --max_length 1024 \
+  --logging_steps 10 \
   --do_pred \
   --test_filename $TEST_FILENAME \
   --output_filename $OUTPUT_FILENAME \
-  --logging_steps 10 \
   --eval_batch_size 16 \
   > pred_sft_${MODEL}.log 2>&1 &
