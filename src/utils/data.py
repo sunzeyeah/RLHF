@@ -142,7 +142,7 @@ class SFTDataset(Dataset):
         return datasets
 
 
-class TLDRDataset(Dataset):
+class RLHFDataset(Dataset):
     def __init__(self, dataset, tokenizer, max_length):
 
         # dataset = self.load_dataset(filename)

@@ -1,5 +1,5 @@
 train:
-  seq_length: 512
+  seq_length: 1024
   epochs: 5
   total_steps: 500000
   batch_size: 4
@@ -16,7 +16,7 @@ model:
   num_layers_unfrozen: 4
 
 tokenizer:
-  tokenizer_path: "imone/pangu_2_6B"
+  tokenizer_path: "/root/autodl-tmp/Data/models/pangu-2.6B"
   truncation_side: "right"
 
 optimizer:

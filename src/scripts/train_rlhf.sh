@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MODEL="pangu-2.6B"
+MODEL="pangu-350M"
 
 #ROOT="/Users/zeyesun/Documents/"
 ROOT="/root/autodl-tmp/"
@@ -20,14 +20,14 @@ accelerate launch --main_process_port 5007 --config_file $ACCELERATE_CONFIG $MAI
   --data_dir $DATR_DIR \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_PATH \
-  --max_length 512 \
+  --max_length 1024 \
   --logging_steps 100 \
   --do_train \
   --train_filename $TRAIN_FILENAME \
   --train_batch_size 4 \
-  --gradient_accumulation_steps 8 \
+  --gradient_accumulation_steps 24 \
   --num_epochs 1 \
-  --deepspeed_config "ds_config_sft_pangu.json" \
+  --deepspeed_config "ds_config_rlhf_pangu.json" \
   --do_eval \
   --eval_filename $EVAL_FILENAME \
   --eval_batch_size 16 \

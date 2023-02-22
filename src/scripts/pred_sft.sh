@@ -15,9 +15,9 @@ CHECKPOINT=$OUTPUT_DIR
 cd $ROOT/Code/RLHF || exit
 mkdir -p $OUTPUT_DIR
 
-#python $MAIN \
 #CUDA_VISIBLE_DEVICES=1 deepspeed --master_port 5008 $MAIN \
-deepspeed --num_gpus 1 $MAIN \
+#deepspeed --num_gpus 1 $MAIN \
+python $MAIN \
   --data_dir $DATR_DIR \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_PATH \
@@ -27,5 +27,5 @@ deepspeed --num_gpus 1 $MAIN \
   --do_pred \
   --test_filename $TEST_FILENAME \
   --output_filename $OUTPUT_FILENAME \
-  --eval_batch_size 16 \
+  --eval_batch_size 96 \
   > pred_sft_${MODEL}.log 2>&1 &

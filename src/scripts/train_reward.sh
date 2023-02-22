@@ -14,7 +14,8 @@ EVAL_FILENAME=""
 cd $ROOT/Code/RLHF || exit
 mkdir -p $OUTPUT_DIR
 
-deepspeed --num_gpus 1 $MAIN \
+#deepspeed --num_gpus 1 $MAIN \
+python $MAIN \
   --data_dir $DATR_DIR \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_PATH \

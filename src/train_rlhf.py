@@ -13,7 +13,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from src.utils import logger, RESOURCE_PATH
 from src.models.reward import GPTRewardModel
 from src.utils.file_utils import set_seed
-from src.utils.data import TLDRDataset
+from src.utils.data import RLHFDataset
 
 
 def get_parser():
@@ -151,17 +151,17 @@ def main():
     # load dataset
     post_summary_dict = dict()
     if args.do_train:
-        train_data = TLDRDataset.load_dataset(os.path.join(args.data_dir, args.train_filename), max_length)
+        train_data = RLHFDataset.load_dataset(os.path.join(args.data_dir, args.train_filename), max_length)
         for td in train_data:
             post_summary_dict[td['prompt']] = td['label']
-        train_dataset = TLDRDataset(train_data, tokenizer, max_length=max_length)
+        train_dataset = RLHFDataset(train_data, tokenizer, max_length=max_length)
     else:
         train_dataset = None
     if args.do_eval:
-        dev_data = TLDRDataset.load_dataset(os.path.join(args.data_dir, args.eval_filename), max_length)
+        dev_data = RLHFDataset.load_dataset(os.path.join(args.data_dir, args.eval_filename), max_length)
         for td in dev_data:
             post_summary_dict[td['prompt']] = td['label']
-        dev_dataset = TLDRDataset(dev_data, tokenizer, max_length=max_length)
+        dev_dataset = RLHFDataset(dev_data, tokenizer, max_length=max_length)
     else:
         dev_dataset = None
 

@@ -14,9 +14,9 @@ EVAL_FILENAME="baike_qa_valid.json"
 cd $ROOT/Code/RLHF || exit
 mkdir -p $OUTPUT_DIR
 
-#python $MAIN \
 #CUDA_VISIBLE_DEVICES=1 deepspeed --master_port 5008 $MAIN \
-deepspeed --num_gpus 1 $MAIN \
+#deepspeed --num_gpus 1 $MAIN \
+python $MAIN \
   --data_dir $DATR_DIR \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_PATH \
@@ -24,7 +24,7 @@ deepspeed --num_gpus 1 $MAIN \
   --logging_steps 100 \
   --do_train \
   --train_filename $TRAIN_FILENAME \
-  --train_batch_size 24 \
+  --train_batch_size 16 \
   --gradient_accumulation_steps 4 \
   --save_strategy "steps" \
   --save_steps 5000 \
