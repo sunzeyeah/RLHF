@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MODEL="pangu-350M"
+MODEL="pangu-2.6B"
 
 #ROOT="/Users/zeyesun/Documents/"
 ROOT="/root/autodl-tmp/"
@@ -20,7 +20,7 @@ python $MAIN \
   --data_dir $DATR_DIR \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_PATH \
-  --max_length 1024 \
+  --max_length 512 \
   --logging_steps 100 \
   --do_train \
   --train_filename $TRAIN_FILENAME \
