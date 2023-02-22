@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MODEL="pangu-2.6B"
+MODEL="pangu-350M"
 
 #ROOT="/Users/zeyesun/Documents/"
 ROOT="/root/autodl-tmp/"
@@ -24,13 +24,13 @@ deepspeed --num_gpus 1 $MAIN \
   --logging_steps 100 \
   --do_train \
   --train_filename $TRAIN_FILENAME \
-  --train_batch_size 8 \
-  --gradient_accumulation_steps 16 \
+  --train_batch_size 24 \
+  --gradient_accumulation_steps 4 \
   --save_strategy "steps" \
-  --save_steps 10000 \
+  --save_steps 5000 \
   --num_epochs 1 \
   --deepspeed_config "ds_config_sft_pangu.json" \
   --do_eval \
   --eval_filename $EVAL_FILENAME \
-  --eval_batch_size 48 \
+  --eval_batch_size 96 \
   > train_sft_${MODEL}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1 &
