@@ -88,5 +88,7 @@ class GPTPanguTokenizer(PreTrainedTokenizer):
             tokens = tokens.tolist()
 
         text = self.sp.decode(tokens)
+        if isinstance(text, list):
+            text = text[0]
         text = text.replace(' ', '').replace('\u2582', ' ').replace('\u2583', '\n')
         return text
