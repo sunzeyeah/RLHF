@@ -2,7 +2,7 @@
 
 MODEL="pangu-2.6B"
 
-#ROOT="/Users/zeyesun/Documents/"
+#ROOT="/mnt/private-pa002-vol726121-prd/"
 ROOT="/root/autodl-tmp/"
 DATR_DIR=$ROOT/Data/raw
 MAIN=$ROOT/Code/RLHF/src/train_sft.py

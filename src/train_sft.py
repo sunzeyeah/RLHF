@@ -1,6 +1,7 @@
 
 import sys
 sys.path.insert(0, "/root/autodl-tmp/Code/RLHF")
+sys.path.insert(0, "/mnt/private-pa002-vol726121-prd/Code/RLHF")
 
 import os
 import argparse
