@@ -1,4 +1,14 @@
+jieba
+sentencepiece
 nltk>=3.8.1
 rouge-score>=0.1.2
 evaluate>=0.4.0
 transformers>=4.26.1
+numpy==1.23.2
+torch
+tensorflow
+apex
+triton
+ninja
+deepspeed
+trlx
