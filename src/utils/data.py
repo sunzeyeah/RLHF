@@ -20,73 +20,68 @@ class DataCollatorReward:
 
 
 class PairwiseDataset(Dataset):
-    def __init__(self, filename, tokenizer, max_length):
-        pairs = self.create_comparison_dataset(filename)
+    def __init__(self, args, filename, tokenizer):
+        self.pairs = self.load_dataset(filename, args.max_length)
+        self.args = args
+        self.tokenizer = tokenizer
 
-        self.chosen_input_ids = []
-        self.chosen_attn_masks = []
-        self.rejected_input_ids = []
-        self.rejected_attn_masks = []
-        num_skip = 0
-
-        for pair in tqdm(pairs):
-            chosen_prompt, chosen_summary = pair["chosen"], pair["rejected"]
-            chosen_encodings_dict = tokenizer(chosen_prompt, chosen_summary, max_length=max_length,
-                                              truncation="longest_first", padding="max_length", return_tensors="pt")
-            rejected_prompt, rejected_summary = pair["chosen"], pair["rejected"]
-            rejected_encodings_dict = tokenizer(rejected_prompt, rejected_summary, max_length=max_length,
-                                                truncation="longest_first", padding="max_length", return_tensors="pt")
-
-            if torch.all(torch.eq(chosen_encodings_dict["input_ids"], rejected_encodings_dict["input_ids"])).item():
-                num_skip += 1
-                continue
-
-            self.chosen_input_ids.append(chosen_encodings_dict["input_ids"])
-            self.chosen_attn_masks.append(chosen_encodings_dict["attention_mask"])
-            self.rejected_input_ids.append(rejected_encodings_dict["input_ids"])
-            self.rejected_attn_masks.append(rejected_encodings_dict["attention_mask"])
-
-        logger.info(f"PairwiseDataset # skipped instances: {num_skip}")
+        for k in range(5):
+            logger.info(f"PairwiseDataset sample-{k}\n: {self.pairs[k]}")
 
     def __len__(self):
-        return len(self.chosen_input_ids)
+        return len(self.pairs)
 
     def __getitem__(self, idx):
-        return (
-            self.chosen_input_ids[idx],
-            self.chosen_attn_masks[idx],
-            self.rejected_input_ids[idx],
-            self.rejected_attn_masks[idx],
-        )
+        pair = self.pairs[idx]
+
+        prompt = pair["prompt"]
+        chosen_answer = pair["chosen_answer"]
+        rejected_answer = pair["rejected_answer"]
+        chosen_encodings_dict = self.tokenizer(prompt + chosen_answer, max_length=self.args.max_length,
+                                               truncation="longest_first", padding="max_length", return_tensors="pt")
+        rejected_encodings_dict = self.tokenizer(prompt + rejected_answer, max_length=self.args.max_length,
+                                                 truncation="longest_first", padding="max_length", return_tensors="pt")
+
+        return {
+            "chosen_input_ids": chosen_encodings_dict["input_ids"],
+            "chosen_attention_mask": chosen_encodings_dict["attention_mask"],
+            "rejected_input_ids": rejected_encodings_dict["input_ids"],
+            "rejected_attention_mask": rejected_encodings_dict["attention_mask"],
+        }
 
     @staticmethod
-    def create_comparison_dataset(filename):
-        dataset = torch.load(filename)
-        for k in range(5):
-            logger.info(f"PairwiseDataset sample-{k}\n: {dataset[-k-1]}")
-
+    def load_dataset(filename, max_length):
+        discard = 0
         pairs = []
-        for sample in tqdm(dataset):
-            prompt = sample["prompt"]
-            chosen_summary = sample["chosen"]
-            rejected_summary = sample["rejected"]
-            if chosen_summary == rejected_summary:
-                continue
-            if len(chosen_summary) < 5 or len(rejected_summary) < 5:
-                continue
-            pair = {"chosen": [prompt, chosen_summary],
-                    "rejected": [prompt, rejected_summary]}
-            pairs.append(pair)
+        with open(filename, "r", encoding="utf-8") as f:
+            for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
+                item = json.loads(line)
+                prompt = clean_text(item['prompt'])
+                answers = item['answers']
+                chosen_answer = answers[0]["answer"]
+                for answer in answers[1:]:
+                    rejected_answer = answer["answer"]
+                    # if (len(prompt) + len(rejected_answer) > max_length) or (len(prompt) + len(chosen_answer) > max_length):
+                    #     discard += 1
+                    # else:
+                    pair = {
+                        "prompt": prompt,
+                        "chosen_answer": chosen_answer,
+                        "rejected_answer": rejected_answer
+                    }
+                    pairs.append(pair)
+        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+
         return pairs
 
 
 class SFTDataset(Dataset):
     def __init__(self, args, filename, tokenizer):
         dataset = self.load_dataset(filename, args.max_length)
-        # self.post_list = dataset
-        self.post_list = []
-        for sample in dataset:
-            self.post_list.append((sample["prompt"], "模型回答:" + sample["label"]))
+        self.post_list = dataset
+        # self.post_list = []
+        # for sample in dataset:
+        #     self.post_list.append((sample["prompt"], "模型回答:" + sample["label"]))
 
         self.tokenizer = tokenizer
         self.args = args
@@ -98,8 +93,10 @@ class SFTDataset(Dataset):
         return len(self.post_list)
 
     def __getitem__(self, idx):
-        prompt, label = self.post_list[idx]
-        encoded_dict = self.tokenizer(prompt, label, max_length=self.args.max_length,
+        data = self.post_list[idx]
+        prompt = data['prompt']
+        label = data['label']
+        encoded_dict = self.tokenizer(prompt + label, max_length=self.args.max_length,
                                       padding="max_length", truncation="longest_first", return_tensors="pt")
 
         return {
@@ -107,18 +104,6 @@ class SFTDataset(Dataset):
             "attention_mask": encoded_dict["attention_mask"],
             "labels": encoded_dict['input_ids'],
         }
-        # prompt = prompt[:(self.args.max_length_prompt-6)]
-        # prompt += self.tokenizer.sep_token + "模型回答:"
-        # encoded_prompt = self.tokenizer(prompt, add_special_tokens=False, max_length=self.args.max_length_prompt,
-        #                                 padding="max_length", truncation="longest_first", return_tensors="pt")
-        # encoded_label = self.tokenizer(label, max_length=self.args.max_length_label,
-        #                                padding="max_length", truncation="longest_first", return_tensors="pt")
-        #
-        # return {
-        #     "input_ids": torch.cat((encoded_prompt["input_ids"], encoded_label['input_ids']), axis=1),
-        #     "attention_mask": torch.cat((encoded_prompt["attention_mask"], encoded_label['attention_mask']), axis=1),
-        #     "labels": encoded_label['input_ids'],
-        # }
 
     @staticmethod
     def load_dataset(filename, max_length):
@@ -127,16 +112,13 @@ class SFTDataset(Dataset):
         with open(filename, "r", encoding="utf-8") as f:
             for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
                 item = json.loads(line)
-                prompt = clean_text(item['title'] if len(item['title']) > len(item['desc']) else item['desc'])
-                label = clean_text(item['answer'])
+                prompt = clean_text(item['prompt'])
+                label = clean_text(item['answers'][0]['answer'])
 
-                if len(prompt) + len(label) > max_length:
-                    discard += 1
-                else:
-                    datasets.append({"prompt": prompt, "label": label})
-                # if split == "valid" and i == 2000:
-                #     logger.info(f"File: {path}/web_text_zh_{split}_small.json, Num of over-length: {discard}")
-                #     return datasets
+                # if len(prompt) + len(label) > max_length:
+                #     discard += 1
+                # else:
+                datasets.append({"prompt": prompt, "label": label})
         logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets

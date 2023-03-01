@@ -87,39 +87,6 @@ def main():
     model.config.end_token_id = tokenizer.eos_token_id
     model.config.pad_token_id = tokenizer.pad_token_id
 
-    # training arguments
-    deepspeed_config = os.path.join(RESOURCE_PATH, "config", "reward_model", args.deepspeed_config) if args.deepspeed_config is not None else None
-    training_args = TrainingArguments(
-        output_dir=args.output_dir,
-        no_cuda=not torch.cuda.is_available(),
-        seed=args.seed,
-        data_seed=args.seed,
-        # local_rank=args.local_rank,
-        logging_steps=args.logging_steps,
-        do_train=args.do_train,
-        num_train_epochs=args.num_epochs,
-        learning_rate=args.learning_rate,
-        lr_scheduler_type=args.lr_scheduler_type,
-        per_device_train_batch_size=args.train_batch_size,
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
-        warmup_ratio=args.warmup_ratio,
-        weight_decay=args.weight_decay,
-        half_precision_backend="auto",
-        fp16=torch.cuda.is_available(),
-        save_strategy=args.save_strategy,
-        save_steps=args.save_steps,
-        save_total_limit=args.save_total_limit,
-        # deepspeed=deepspeed_config,
-        do_eval=args.do_eval,
-        evaluation_strategy=args.evaluation_strategy,
-        eval_steps=args.eval_steps,
-        eval_accumulation_steps=args.eval_accumulation_steps,
-        per_device_eval_batch_size=args.eval_batch_size,
-        do_predict=args.do_pred,
-        use_legacy_prediction_loop=args.do_pred,
-    )
-    logger.info(f"Training Arguments: {training_args}")
-
     # Initialize the reward model from the (supervised) fine-tuned SFT model
     reward_model = GPTRewardModel(model, tokenizer)
     if args.checkpoint is not None:
@@ -136,15 +103,51 @@ def main():
 
     # Set up the datasets
     if args.do_train:
-        train_dataset = PairwiseDataset(os.path.join(args.data_dir, args.train_filename),
-                                        tokenizer, max_length=args.max_length)
+        train_dataset = PairwiseDataset(args,
+                                        os.path.join(args.data_dir, args.train_filename),
+                                        tokenizer)
     else:
         train_dataset = None
     if args.do_eval:
-        val_dataset = PairwiseDataset(os.path.join(args.data_dir, args.eval_filename),
-                                      tokenizer, max_length=args.max_length)
+        val_dataset = PairwiseDataset(args,
+                                      os.path.join(args.data_dir, args.eval_filename),
+                                      tokenizer)
     else:
         val_dataset = None
+
+    # training arguments
+    deepspeed_config = os.path.join(RESOURCE_PATH, "config", "reward_model", args.deepspeed_config) if args.deepspeed_config is not None else None
+    training_args = TrainingArguments(
+        output_dir=args.output_dir,
+        no_cuda=not torch.cuda.is_available(),
+        seed=args.seed,
+        data_seed=args.seed,
+        # local_rank=args.local_rank,
+        do_train=args.do_train,
+        num_train_epochs=args.num_epochs,
+        learning_rate=args.learning_rate,
+        lr_scheduler_type=args.lr_scheduler_type,
+        per_device_train_batch_size=args.train_batch_size,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        warmup_ratio=args.warmup_ratio,
+        weight_decay=args.weight_decay,
+        half_precision_backend="auto",
+        fp16=torch.cuda.is_available(),
+        save_strategy=args.save_strategy,
+        save_steps=args.save_steps,
+        save_total_limit=args.save_total_limit,
+        logging_steps=args.logging_steps,
+        report_to=["tensorboard"],
+        # deepspeed=deepspeed_config,
+        do_eval=args.do_eval,
+        evaluation_strategy=args.evaluation_strategy,
+        eval_steps=args.eval_steps,
+        eval_accumulation_steps=args.eval_accumulation_steps,
+        per_device_eval_batch_size=args.eval_batch_size,
+        do_predict=args.do_pred,
+        use_legacy_prediction_loop=args.do_pred,
+    )
+    logger.info(f"Training Arguments: {training_args}")
 
     # Create the collator to gather batches of pairwise comparisons
     data_collator = DataCollatorReward()
@@ -152,7 +155,6 @@ def main():
     def compute_metrics(eval_preds):
         chosen_end_scores = eval_preds.predictions[0]  # chosen scores
         rejected_end_scores = eval_preds.predictions[1]  # rejected scores
-
         result = {}
         acc = sum(chosen_end_scores > rejected_end_scores) / len(rejected_end_scores)
         result["accuracy"] = acc
@@ -166,12 +168,12 @@ def main():
         train_dataset=train_dataset,
         compute_metrics=compute_metrics,
         eval_dataset=val_dataset,
-        data_collator=data_collator,
+        # data_collator=data_collator,
     )
 
     if args.do_train:
         trainer.train()
-        # trainer.save_model(args.output_dir)
+        trainer.save_model(args.output_dir)
 
     elif args.do_eval:
         trainer.evaluate(eval_dataset=val_dataset)
