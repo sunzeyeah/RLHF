@@ -4,10 +4,10 @@ MODEL="pangu-2.6B"
 
 #ROOT="/mnt/private-pa002-vol726121-prd/"
 ROOT="/root/autodl-tmp/"
-DATR_DIR=$ROOT/Data/raw
+DATR_DIR=$ROOT/Data/chatgpt/processed
 MAIN=$ROOT/Code/RLHF/src/train_sft.py
 MODEL_PATH=$ROOT/Data/models/$MODEL
-OUTPUT_DIR=$ROOT/Data/output/sft/$MODEL
+OUTPUT_DIR=$ROOT/Data/chatgpt/output/sft/$MODEL
 TRAIN_FILENAME="baike_qa_train.json"
 EVAL_FILENAME="baike_qa_valid.json"
 

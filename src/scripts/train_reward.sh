@@ -4,10 +4,10 @@ MODEL="pangu-2.6B"
 
 #ROOT="/mnt/private-pa002-vol726121-prd/"
 ROOT="/root/autodl-tmp/"
-DATR_DIR=$ROOT/Data/raw
+DATR_DIR=$ROOT/Data/chatgpt/processed
 MAIN=$ROOT/Code/RLHF/src/train_reward.py
 MODEL_PATH=$ROOT/Data/models/$MODEL
-OUTPUT_DIR=$ROOT/Data/output/reward/$MODEL
+OUTPUT_DIR=$ROOT/Data/chatgpt/output/reward/$MODEL
 TRAIN_FILENAME=""
 EVAL_FILENAME=""
 
