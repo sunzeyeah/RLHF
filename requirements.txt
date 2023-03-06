@@ -12,3 +12,4 @@ triton
 ninja
 deepspeed
 trlx
+torchmetrics
