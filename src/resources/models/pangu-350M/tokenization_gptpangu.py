@@ -87,6 +87,8 @@ class GPTPanguTokenizer(PreTrainedTokenizer):
         if isinstance(tokens, torch.Tensor) or isinstance(tokens, np.ndarray):
             tokens = tokens.tolist()
 
+        if kwargs.get('skip_special_tokens', None) is True:
+            tokens = [token for token in tokens if token not in self.all_special_ids]
         text = self.sp.decode(tokens)
         if isinstance(text, list):
             text = text[0]

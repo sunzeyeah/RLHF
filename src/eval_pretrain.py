@@ -1,10 +1,11 @@
-
+import collections
 import sys
 sys.path.insert(0, "/root/autodl-tmp/Code/RLHF")
 sys.path.insert(0, "/mnt/private-pa002-vol726121-prd/Code/RLHF")
 
 import os
 import argparse
+import json
 import numpy as np
 import torch
 
@@ -20,20 +21,33 @@ from transformers import (
 )
 
 from src.utils import logger, RESOURCE_PATH
-from src.utils.data import OCNLIDataset
+from src.utils.data import (
+    OCNLIDataset,
+    CMNLIDataset,
+    CHIDDataset,
+    CMRCDataset,
+)
 from src.utils.file_utils import set_seed
 
 
 DATASET = {
-    "oncli": OCNLIDataset,
-    # "cmnli": CMNLIDataset
+    # NLI
+    "ocnli": OCNLIDataset,
+    "cmnli": CMNLIDataset,
+    # Cloze and completion
+    "chid": CHIDDataset,
+    # MRC
+    "cmrc2018": CMRCDataset,
+    # # Winograd
+    # "cluewsc2020": CLUEWSCDataset,
+    # # common sense reasoning
+    # "c3": C3Dataset,
+    # # Text Classification
+    # "tnews": TNEWSDataset,
+    # "iflytek": IFLYTEKDataset,
+    # "afqmc": AFQMCDataset,
+    # "csl": CSLDataset
 }
-# Create a preprocessing function to extract out the proper logits from the model output
-def preprocess_logits_for_metrics(logits, labels):
-    if isinstance(logits, tuple):
-        logits = logits[0]
-
-    return logits.argmax(dim=-1)
 
 
 def get_parser():
@@ -89,7 +103,8 @@ def get_parser():
     parser.add_argument("--output_filename", type=str, default=None)
     parser.add_argument("--num_return_sequences", type=int, default=3)
     parser.add_argument("--top_k", type=int, default=50)
-    parser.add_argument("--temperature", type=float, default=10.0)
+    parser.add_argument("--top_p", type=float, default=0.5)
+    parser.add_argument("--temperature", type=float, default=1.0)
 
     args = parser.parse_args()
     
@@ -127,28 +142,28 @@ def main():
         raise ValueError(f"Unsupported task: {args.task}")
     if args.do_train:
         train_dataset = dataset(args, os.path.join(args.data_dir, args.train_filename),
-                                     tokenizer)
+                                tokenizer)
     else:
         train_dataset = None
     if args.do_eval:
         dev_dataset = dataset(args, os.path.join(args.data_dir, args.eval_filename),
-                                   tokenizer)
+                              tokenizer)
     else:
         dev_dataset = None
     if args.do_pred:
         test_dataset = dataset.load_dataset(args, os.path.join(args.data_dir, args.test_filename),
-                                                 tokenizer)
+                                            tokenizer)
     else:
         test_dataset = None
 
     # training arguments
-    deepspeed_config = os.path.join(RESOURCE_PATH, "config", "pretrain_model", args.deepspeed_config) if args.deepspeed_config is not None else None
+    # deepspeed_config = os.path.join(RESOURCE_PATH, "config", "pretrain_model", args.deepspeed_config) if args.deepspeed_config is not None else None
     training_args = TrainingArguments(
         output_dir=args.output_dir,
         no_cuda=not torch.cuda.is_available(),
         seed=args.seed,
         data_seed=args.seed,
-        local_rank=args.local_rank,
+        # local_rank=args.local_rank,
         do_train=args.do_train,
         num_train_epochs=args.num_epochs,
         learning_rate=args.learning_rate,
@@ -166,7 +181,7 @@ def main():
         save_total_limit=args.save_total_limit,
         logging_steps=args.logging_steps,
         report_to=["tensorboard"],
-        deepspeed=deepspeed_config,
+        # deepspeed=deepspeed_config,
         gradient_checkpointing=args.gradient_checkpointing,
         do_eval=args.do_eval,
         evaluation_strategy=args.evaluation_strategy,
@@ -180,25 +195,37 @@ def main():
     logger.info(f"Training Arguments: {training_args}")
 
     # Set up the metric
-    if args.task in ["ocnli", "cmnli"]:
+    if args.task in ["ocnli", "cmnli", "chid"]:
         perplexity = Perplexity(ignore_index=tokenizer.pad_token_id)
+
+        # Create a preprocessing function to extract out the proper logits from the model output
+        def preprocess_logits_for_metrics(logits, labels):
+            labels = labels.squeeze(1).detach().cpu()
+            probs = torch.softmax(logits, dim=-1).squeeze(1).detach().cpu().to(torch.float32)
+            ppls = []
+            for i in range(probs.shape[0]):
+                ppl = perplexity(probs[i:i+1], labels[i:i+1])
+                ppls.append(ppl)
+
+            return torch.stack(ppls)
 
         def compute_metrics(eval_preds):
 
-            labels = torch.tensor(eval_preds.label_ids, dtype=torch.long).squeeze(1)
-            logits = torch.tensor(eval_preds.predictions, dtype=torch.float).squeeze(1)
-            probs = torch.softmax(logits, dim=-1)
-            ppls = []
-            for i in range(len(labels)):
-                ppl = perplexity(probs[i:i+1], labels[i:i+1]).detach().tolist()
-                ppls.append(ppl)
+            # labels = torch.tensor(eval_preds.label_ids, dtype=torch.long).squeeze(1)
+            # logits = torch.tensor(eval_preds.predictions, dtype=torch.float).squeeze(1)
+            # probs = torch.softmax(logits, dim=-1)
+            # ppls = []
+            # for i in range(len(labels)):
+            #     ppl = perplexity(probs[i:i+1], labels[i:i+1]).detach().tolist()
+            #     ppls.append(ppl)
+
             # f1, exact match, acc
             # pred_ids = preprocess_logits_for_metrics(logits, None)
             # pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
             # label_str = tokenizer.batch_decode(labels, skip_special_tokens=True)
             # result = rouge(pred_str, label_str)
 
-            return {"ppl": ppls}
+            return {"ppl": eval_preds.predictions}
     elif args.task in []:
         rouge = ROUGEScore(rouge_keys=('rougeL', 'rouge1', 'rouge2'))
 
@@ -210,7 +237,7 @@ def main():
         eval_dataset=dev_dataset,
         compute_metrics=compute_metrics,
         data_collator=default_data_collator,
-        # preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
     )
 
     if args.do_train:
@@ -218,28 +245,75 @@ def main():
         trainer.save_model(args.output_dir)
 
     elif args.do_eval:
-        res = trainer.evaluate(eval_dataset=dev_dataset)
-        if args.task in ["ocnli", "cmnli"]:
+        if args.task in ["ocnli", "cmnli", "chid"]:
+            # evaluate
+            res = trainer.evaluate(eval_dataset=dev_dataset)
+            # statistics on eval result
             ct = 0
             ct_acc = 0
             ppls = []
             # cur_label = None
-            ls = list(dev_dataset.label_dict.values())
-            for i, (data, ppl) in enumerate(zip(dev_dataset, res['eval_ppl'])):
-                ppls.append(ppl)
-                cur_label = data['label_str']
-                if i % len(ls) == len(ls) - 1:
-                    lidx = ls.index(cur_label)
-                    if np.argmin(ppls) == lidx:
+            with open(os.path.join(args.output_dir, f"{args.task}_eval_result.jsonl"), "w", encoding="utf-8") as w:
+                for i, (data, ppl) in enumerate(zip(dev_dataset, res['eval_ppl'])):
+                    ppls.append(ppl)
+                    prompt = tokenizer.batch_decode(data['input_ids'], skip_special_tokens=True)
+                    cur_label = data['label_str']
+                    if args.task in ['chid']:
+                        ls = data['candidates']
+                    else:
+                        ls = list(dev_dataset.label_dict.values())
+                    if i % len(ls) == len(ls) - 1:
+                        lidx = ls.index(cur_label)
+                        if np.argmin(ppls) == lidx:
+                            ct_acc += 1
                         ct += 1
-                    ct += 1
-                    # cur_label = None
-                    ppls = []
-            with open(os.path.join(args.output_dir, f"{args.task}_eval_result.txt"), "w", encoding="utf-8") as w:
-                w.write(f"ppl={ct_acc/ct}\n")
+                        # cur_label = None
+                        ppls = []
+                    w.write(json.dumps({"prompt": prompt, "pred": float(ppl), "label": cur_label}, ensure_ascii=False) + "\n")
             logger.info(f"ppl={ct_acc/ct}")
-        elif args.task in []:
-            pass
+        elif args.task in ["cmrc2018"]:
+            def calculate_f1(pred_text, label_text):
+                pred_tokens = tokenizer(pred_text, add_special_tokens=False, return_attention_mask=False, return_token_type_ids=False, return_tensors="pt")
+                label_tokens = tokenizer(label_text, add_special_tokens=False, return_attention_mask=False, return_token_type_ids=False, return_tensors="pt")
+                common = collections.Counter(pred_tokens) & collections.Counter(label_tokens)
+                num_same = sum(common.values())
+                if len(pred_tokens) == 0 or len(label_tokens) == 0:
+                    return int(pred_tokens==label_tokens)
+                if num_same == 0:
+                    return 0
+                precision = num_same / len(pred_tokens)
+                recall = num_same / len(label_tokens)
+                f1 = (2 * precision * recall) / (precision + recall)
+                return f1
+            device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
+            text_generator = TextGenerationPipeline(model, tokenizer, device=device)
+            ems = []
+            f1s = []
+            with open(os.path.join(args.output_dir, f"{args.task}_eval_result.jsonl"), "w", encoding="utf-8") as w:
+                # w.write("\t".join(["prompt"]+[f"model_answer_{i}" for i in range(args.num_return_sequences)])+"\n")
+                for dev_data in dev_dataset:
+                    prompt = dev_data['prompt']
+                    label = dev_data['label']
+                    results = text_generator(prompt, max_length=args.max_length_label, do_sample=True,
+                                             num_return_sequences=args.num_return_sequences,
+                                             top_p=args.top_p, temperature=args.temperature)
+                    em_max = -1
+                    f1_max = -1
+                    for l in label:
+                        for res in results:
+                            pred_text = res['generated_text'].split("答：")[1].replace(tokenizer.eos_token, "").replace(tokenizer.pad_token, "")
+                            label_text = l['text']
+                            em = 1 if pred_text == label_text else 0
+                            f1 = calculate_f1(pred_text, label_text)
+                            w.write(json.dumps({"prompt": prompt, "label": label_text,
+                                                "pred": pred_text, "em": em, "f1": f1}, ensure_ascii=False)+"\n")
+                            if em > em_max:
+                                em_max = em
+                            if f1 > f1_max:
+                                f1_max = f1
+                    ems.append(em_max)
+                    f1s.append(f1_max)
+            logger.info(f"em={np.mean(ems)}, f1={np.mean(f1s)}")
 
     if args.do_pred:
         device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
