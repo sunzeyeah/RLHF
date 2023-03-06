@@ -115,9 +115,8 @@ class SFTDataset(Dataset):
                 prompt = clean_text(item['prompt'])
                 label = clean_text(item['answers'][0]['answer'])
 
-                # if len(prompt) + len(label) > max_length:
-                #     discard += 1
-                # else:
+                if len(prompt) <= 0 or len(label) <= 0:
+                    continue
                 datasets.append({"prompt": prompt, "label": label})
         logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
@@ -239,3 +238,55 @@ class AllSummDataset(Dataset):
             "labels": input_ids,
         }
 
+
+class OCNLIDataset(Dataset):
+    def __init__(self, args, filename, tokenizer):
+        self.tokenizer = tokenizer
+        self.args = args
+        self.label_dict = {'entailment': 'Yes', 'neutral': 'Maybe', 'contradiction': 'No'}
+
+        dataset = self.load_dataset(filename, args.max_length)
+        self.post_list = dataset
+
+        for k in range(5):
+            logger.info(f"OCNLIDataset sample-{k}\n: {dataset[k]}")
+
+    def __len__(self):
+        return len(self.post_list)
+
+    def __getitem__(self, idx):
+        data = self.post_list[idx]
+        prompt = data['prompt']
+        label = data['label']
+        encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
+                                      padding="max_length", truncation="longest_first", return_tensors="pt")
+        # label_dict = self.tokenizer(label, max_length=self.args.max_length, add_special_tokens=False,
+        #                             return_attention_mask=False, return_token_type_ids=False, return_tensors="pt")
+
+        return {
+            "input_ids": encoded_dict["input_ids"],
+            "attention_mask": encoded_dict["attention_mask"],
+            "labels": encoded_dict["input_ids"],
+            "label_str": label
+        }
+
+    def load_dataset(self, filename, max_length):
+        discard = 0
+        datasets = []
+        with open(filename, "r", encoding="utf-8") as f:
+            for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
+                item = json.loads(line)
+                s1 = item['sentence1']
+                s2 = item['sentence2']
+                label = item['label']
+                # 标注结果有冲突，则忽略
+                if label == "-":
+                    continue
+                for l in self.label_dict.values():
+                    prompt = f'{s1}?{l}，{s2}'
+                    if len(prompt) <= 0 or len(label) <= 0:
+                        continue
+                    datasets.append({"prompt": prompt, "label": self.label_dict[label]})
+        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+
+        return datasets

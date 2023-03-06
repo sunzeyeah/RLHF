@@ -5,9 +5,11 @@ sys.path.insert(0, "/mnt/private-pa002-vol726121-prd/Code/RLHF")
 
 import os
 import argparse
-import evaluate
+import numpy as np
 import torch
 
+from torchmetrics.text.perplexity import Perplexity
+from torchmetrics.text.rouge import ROUGEScore
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -18,10 +20,14 @@ from transformers import (
 )
 
 from src.utils import logger, RESOURCE_PATH
-from src.utils.data import SFTDataset
+from src.utils.data import OCNLIDataset
 from src.utils.file_utils import set_seed
 
 
+DATASET = {
+    "oncli": OCNLIDataset,
+    # "cmnli": CMNLIDataset
+}
 # Create a preprocessing function to extract out the proper logits from the model output
 def preprocess_logits_for_metrics(logits, labels):
     if isinstance(logits, tuple):
@@ -36,6 +42,7 @@ def get_parser():
     parser.add_argument("--data_dir", type=str, required=True)
     parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument("--model_name_or_path", type=str, required=True)
+    parser.add_argument("--task", type=str, required=True)
 
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--local_rank", type=int, default=-1)
@@ -115,24 +122,27 @@ def main():
     logger.info(f"Finished loading model and tokenizer")
 
     # Set up the datasets
+    dataset = DATASET.get(args.task, None)
+    if dataset is None:
+        raise ValueError(f"Unsupported task: {args.task}")
     if args.do_train:
-        train_dataset = SFTDataset(args, os.path.join(args.data_dir, args.train_filename),
-                                   tokenizer)
+        train_dataset = dataset(args, os.path.join(args.data_dir, args.train_filename),
+                                     tokenizer)
     else:
         train_dataset = None
     if args.do_eval:
-        dev_dataset = SFTDataset(args, os.path.join(args.data_dir, args.eval_filename),
-                                 tokenizer)
+        dev_dataset = dataset(args, os.path.join(args.data_dir, args.eval_filename),
+                                   tokenizer)
     else:
         dev_dataset = None
     if args.do_pred:
-        test_dataset = SFTDataset.load_dataset(os.path.join(args.data_dir, args.test_filename),
-                                               args.max_length)
+        test_dataset = dataset.load_dataset(args, os.path.join(args.data_dir, args.test_filename),
+                                                 tokenizer)
     else:
         test_dataset = None
 
     # training arguments
-    deepspeed_config = os.path.join(RESOURCE_PATH, "config", "sft_model", args.deepspeed_config) if args.deepspeed_config is not None else None
+    deepspeed_config = os.path.join(RESOURCE_PATH, "config", "pretrain_model", args.deepspeed_config) if args.deepspeed_config is not None else None
     training_args = TrainingArguments(
         output_dir=args.output_dir,
         no_cuda=not torch.cuda.is_available(),
@@ -162,6 +172,7 @@ def main():
         evaluation_strategy=args.evaluation_strategy,
         eval_steps=args.eval_steps,
         eval_accumulation_steps=args.eval_accumulation_steps,
+        include_inputs_for_metrics=True,
         per_device_eval_batch_size=args.eval_batch_size,
         do_predict=args.do_pred,
         use_legacy_prediction_loop=args.do_pred,
@@ -169,16 +180,27 @@ def main():
     logger.info(f"Training Arguments: {training_args}")
 
     # Set up the metric
-    rouge = evaluate.load("rouge")
+    if args.task in ["ocnli", "cmnli"]:
+        perplexity = Perplexity(ignore_index=tokenizer.pad_token_id)
 
-    def compute_metrics(eval_preds):
-        labels_ids = eval_preds.label_ids
-        pred_ids = eval_preds.predictions
-        pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-        label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
-        result = rouge.compute(predictions=pred_str, references=label_str)
+        def compute_metrics(eval_preds):
 
-        return result
+            labels = torch.tensor(eval_preds.label_ids, dtype=torch.long).squeeze(1)
+            logits = torch.tensor(eval_preds.predictions, dtype=torch.float).squeeze(1)
+            probs = torch.softmax(logits, dim=-1)
+            ppls = []
+            for i in range(len(labels)):
+                ppl = perplexity(probs[i:i+1], labels[i:i+1]).detach().tolist()
+                ppls.append(ppl)
+            # f1, exact match, acc
+            # pred_ids = preprocess_logits_for_metrics(logits, None)
+            # pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+            # label_str = tokenizer.batch_decode(labels, skip_special_tokens=True)
+            # result = rouge(pred_str, label_str)
+
+            return {"ppl": ppls}
+    elif args.task in []:
+        rouge = ROUGEScore(rouge_keys=('rougeL', 'rouge1', 'rouge2'))
 
     # Prepare the trainer and start training
     trainer = Trainer(
@@ -188,7 +210,7 @@ def main():
         eval_dataset=dev_dataset,
         compute_metrics=compute_metrics,
         data_collator=default_data_collator,
-        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+        # preprocess_logits_for_metrics=preprocess_logits_for_metrics,
     )
 
     if args.do_train:
@@ -197,7 +219,27 @@ def main():
 
     elif args.do_eval:
         res = trainer.evaluate(eval_dataset=dev_dataset)
-        logger.info(res)
+        if args.task in ["ocnli", "cmnli"]:
+            ct = 0
+            ct_acc = 0
+            ppls = []
+            # cur_label = None
+            ls = list(dev_dataset.label_dict.values())
+            for i, (data, ppl) in enumerate(zip(dev_dataset, res['eval_ppl'])):
+                ppls.append(ppl)
+                cur_label = data['label_str']
+                if i % len(ls) == len(ls) - 1:
+                    lidx = ls.index(cur_label)
+                    if np.argmin(ppls) == lidx:
+                        ct += 1
+                    ct += 1
+                    # cur_label = None
+                    ppls = []
+            with open(os.path.join(args.output_dir, f"{args.task}_eval_result.txt"), "w", encoding="utf-8") as w:
+                w.write(f"ppl={ct_acc/ct}\n")
+            logger.info(f"ppl={ct_acc/ct}")
+        elif args.task in []:
+            pass
 
     if args.do_pred:
         device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
