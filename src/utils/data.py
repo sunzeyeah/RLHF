@@ -289,6 +289,7 @@ class OCNLIDataset(Dataset):
                     if len(prompt) <= 0 or len(label) <= 0:
                         continue
                     datasets.append({"prompt": prompt, "label": self.label_dict[label]})
+
         logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets

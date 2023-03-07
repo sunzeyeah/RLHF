@@ -238,15 +238,15 @@ def main():
             return {"ppl": eval_preds.predictions}
 
     # Prepare the trainer and start training
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=dev_dataset,
-        compute_metrics=compute_metrics,
-        data_collator=default_data_collator,
-        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
-    )
+    # trainer = Trainer(
+    #     model=model,
+    #     args=training_args,
+    #     train_dataset=train_dataset,
+    #     eval_dataset=dev_dataset,
+    #     compute_metrics=compute_metrics,
+    #     data_collator=default_data_collator,
+    #     preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+    # )
 
     if args.do_train:
         trainer.train()
@@ -299,31 +299,79 @@ def main():
                     f1s.append(f1_max)
 
             logger.info(f"em={np.mean(ems)}, f1={np.mean(f1s)}")
+        # else:
+        #     # evaluate
+        #     res = trainer.evaluate(eval_dataset=dev_dataset)
+        #     # statistics on eval result
+        #     ct = 0
+        #     ct_acc = 0
+        #     ppls = []
+        #     # cur_label = None
+        #     with open(os.path.join(args.output_dir, f"{args.task}_eval_result.jsonl"), "w", encoding="utf-8") as w:
+        #         for i, (data, ppl) in enumerate(zip(dev_dataset, res['eval_ppl'])):
+        #             ppls.append(ppl)
+        #             prompt = tokenizer.batch_decode(data['input_ids'], skip_special_tokens=True)[0]
+        #             cur_label = data['label_str']
+        #             if args.task in ['chid', 'c3', 'iflytek', 'tnews']:
+        #                 ls = data['candidates']
+        #             else:
+        #                 ls = list(dev_dataset.label_dict.values())
+        #             if i % len(ls) == len(ls) - 1:
+        #                 lidx = ls.index(cur_label)
+        #                 if np.argmin(ppls) == lidx:
+        #                     ct_acc += 1
+        #                 ct += 1
+        #                 # cur_label = None
+        #                 ppls = []
+        #             w.write(json.dumps({"prompt": prompt, "pred": float(ppl), "label": cur_label}, ensure_ascii=False) + "\n")
+        #
+        #     logger.info(f"ppl={ct_acc/ct}")
         else:
-            # evaluate
-            res = trainer.evaluate(eval_dataset=dev_dataset)
-            # statistics on eval result
+            from tqdm import tqdm
+            from torch.utils.data import DataLoader, SequentialSampler
+            device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
+
+            sampler = SequentialSampler(dev_dataset)
+            dev_dataloader = DataLoader(dev_dataset, sampler=sampler, batch_size=args.eval_batch_size)
+
+            ppl_list = []
+            input_ids_list = []
+            label_list = []
+            ls_list = []
+            model.eval()
+            model.to(device)
+            with torch.no_grad():
+                for batch in tqdm(dev_dataloader, desc="Evaluation"):
+                    input_ids = batch['input_ids'].to(device)
+                    attention_mask = batch['attention_mask'].to(device)
+                    labels = batch['labels'].to(device)
+                    out = model(input_ids, attention_mask=attention_mask, labels=labels)
+                    ppls = preprocess_logits_for_metrics(out.logits, labels)
+                    input_ids_list.extend(input_ids.detach().cpu().tolist())
+                    ppl_list.extend(ppls.detach().cpu().tolist())
+                    label_list.extend(batch['label_str'])
+                    if args.task in ['chid', 'c3', 'iflytek', 'tnews']:
+                        ls = np.array(batch['candidates']).transpose().tolist()
+                        ls_list.extend(ls)
+                    else:
+                        vals = list(dev_dataset.label_dict.values())
+                        ls_list.extend([vals]*input_ids.shape[0])
+
             ct = 0
             ct_acc = 0
             ppls = []
-            # cur_label = None
             with open(os.path.join(args.output_dir, f"{args.task}_eval_result.jsonl"), "w", encoding="utf-8") as w:
-                for i, (data, ppl) in enumerate(zip(dev_dataset, res['eval_ppl'])):
+                for i, (input_ids, label, ls, ppl) in enumerate(zip(input_ids_list, label_list, ls_list, ppl_list)):
                     ppls.append(ppl)
-                    prompt = tokenizer.batch_decode(data['input_ids'], skip_special_tokens=True)[0]
-                    cur_label = data['label_str']
-                    if args.task in ['chid', 'c3', 'iflytek', 'tnews']:
-                        ls = data['candidates']
-                    else:
-                        ls = list(dev_dataset.label_dict.values())
+                    prompt = tokenizer.batch_decode(input_ids, skip_special_tokens=True)[0]
                     if i % len(ls) == len(ls) - 1:
-                        lidx = ls.index(cur_label)
+                        lidx = ls.index(label)
                         if np.argmin(ppls) == lidx:
                             ct_acc += 1
                         ct += 1
                         # cur_label = None
                         ppls = []
-                    w.write(json.dumps({"prompt": prompt, "pred": float(ppl), "label": cur_label}, ensure_ascii=False) + "\n")
+                    w.write(json.dumps({"prompt": prompt, "pred": float(ppl), "label": label}, ensure_ascii=False) + "\n")
 
             logger.info(f"ppl={ct_acc/ct}")
 
