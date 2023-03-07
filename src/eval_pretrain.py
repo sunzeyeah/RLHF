@@ -13,6 +13,7 @@ from torchmetrics.text.perplexity import Perplexity
 from torchmetrics.text.rouge import ROUGEScore
 from transformers import (
     AutoModelForCausalLM,
+    AutoModelForSeq2SeqLM,
     AutoTokenizer,
     Trainer,
     TrainingArguments,
@@ -125,18 +126,21 @@ def main():
 
     # load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-    tokenizer.add_special_tokens({
-        "unk_token": "<unk>",
-        'eos_token': "<eot>",
-        'pad_token': "<pad>",
-        "sep_token": "<sep>"
-    })
-    # assert tokenizer.pad_token_id == tokenizer.eos_token_id
-    model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-    model.resize_token_embeddings(len(tokenizer.sp))
-    model.config.end_token_id = tokenizer.eos_token_id
-    model.config.pad_token_id = tokenizer.pad_token_id
-    # model.config.max_length_prompt = args.max_length_prompt
+    if "pangu" in args.model_name_or_path:
+        tokenizer.add_special_tokens({
+            "unk_token": "<unk>",
+            'eos_token': "<eot>",
+            'pad_token': "<pad>",
+            "sep_token": "<sep>"
+        })
+    if "pangu" in args.model_name_or_path:
+        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+        model.resize_token_embeddings(len(tokenizer.sp))
+        model.config.end_token_id = tokenizer.eos_token_id
+        model.config.pad_token_id = tokenizer.pad_token_id
+        # model.config.max_length_prompt = args.max_length_prompt
+    else:
+        model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
     if args.checkpoint is not None:
         st = torch.load(args.checkpoint, map_location="cpu")
         model.load_state_dict(st)
@@ -162,44 +166,6 @@ def main():
     else:
         test_dataset = None
 
-    # training arguments
-    deepspeed_config = os.path.join(RESOURCE_PATH, "config", "pretrain_model", args.deepspeed_config) if args.deepspeed_config is not None else None
-    training_args = TrainingArguments(
-        output_dir=args.output_dir,
-        no_cuda=not torch.cuda.is_available(),
-        seed=args.seed,
-        data_seed=args.seed,
-        local_rank=args.local_rank,
-        do_train=args.do_train,
-        num_train_epochs=args.num_epochs,
-        learning_rate=args.learning_rate,
-        lr_scheduler_type=args.lr_scheduler_type,
-        per_device_train_batch_size=args.train_batch_size,
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
-        warmup_ratio=args.warmup_ratio,
-        weight_decay=args.weight_decay,
-        half_precision_backend="auto",
-        fp16=torch.cuda.is_available(),
-        adam_beta1=0.9,
-        adam_beta2=0.95,
-        save_strategy=args.save_strategy,
-        save_steps=args.save_steps,
-        save_total_limit=args.save_total_limit,
-        logging_steps=args.logging_steps,
-        report_to=["tensorboard"],
-        deepspeed=deepspeed_config,
-        gradient_checkpointing=args.gradient_checkpointing,
-        do_eval=args.do_eval,
-        evaluation_strategy=args.evaluation_strategy,
-        eval_steps=args.eval_steps,
-        eval_accumulation_steps=args.eval_accumulation_steps,
-        include_inputs_for_metrics=True,
-        per_device_eval_batch_size=args.eval_batch_size,
-        do_predict=args.do_pred,
-        use_legacy_prediction_loop=args.do_pred,
-    )
-    logger.info(f"Training Arguments: {training_args}")
-
     # Set up the metric
     if args.task in ["cmrc1028"]:
         # rouge = ROUGEScore(rouge_keys=('rougeL', 'rouge1', 'rouge2'))
@@ -210,8 +176,8 @@ def main():
 
         # Create a preprocessing function to extract out the proper logits from the model output
         def preprocess_logits_for_metrics(logits, labels):
-            labels = labels.squeeze(1).detach().cpu()
-            probs = torch.softmax(logits, dim=-1).squeeze(1).detach().cpu().to(torch.float32)
+            labels = labels.detach().cpu()
+            probs = torch.softmax(logits, dim=-1).detach().cpu().to(torch.float32)
             ppls = []
             for i in range(probs.shape[0]):
                 ppl = perplexity(probs[i:i+1], labels[i:i+1])
@@ -221,8 +187,8 @@ def main():
 
         def compute_metrics(eval_preds):
 
-            # labels = torch.tensor(eval_preds.label_ids, dtype=torch.long).squeeze(1)
-            # logits = torch.tensor(eval_preds.predictions, dtype=torch.float).squeeze(1)
+            # labels = torch.tensor(eval_preds.label_ids, dtype=torch.long)
+            # logits = torch.tensor(eval_preds.predictions, dtype=torch.float)
             # probs = torch.softmax(logits, dim=-1)
             # ppls = []
             # for i in range(len(labels)):
@@ -237,18 +203,56 @@ def main():
 
             return {"ppl": eval_preds.predictions}
 
-    # Prepare the trainer and start training
-    # trainer = Trainer(
-    #     model=model,
-    #     args=training_args,
-    #     train_dataset=train_dataset,
-    #     eval_dataset=dev_dataset,
-    #     compute_metrics=compute_metrics,
-    #     data_collator=default_data_collator,
-    #     preprocess_logits_for_metrics=preprocess_logits_for_metrics,
-    # )
-
     if args.do_train:
+        # training arguments
+        deepspeed_config = os.path.join(RESOURCE_PATH, "config", "pretrain_model", args.deepspeed_config) if args.deepspeed_config is not None else None
+        training_args = TrainingArguments(
+            output_dir=args.output_dir,
+            no_cuda=not torch.cuda.is_available(),
+            seed=args.seed,
+            data_seed=args.seed,
+            local_rank=args.local_rank,
+            do_train=args.do_train,
+            num_train_epochs=args.num_epochs,
+            learning_rate=args.learning_rate,
+            lr_scheduler_type=args.lr_scheduler_type,
+            per_device_train_batch_size=args.train_batch_size,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+            warmup_ratio=args.warmup_ratio,
+            weight_decay=args.weight_decay,
+            half_precision_backend="auto",
+            fp16=torch.cuda.is_available(),
+            adam_beta1=0.9,
+            adam_beta2=0.95,
+            save_strategy=args.save_strategy,
+            save_steps=args.save_steps,
+            save_total_limit=args.save_total_limit,
+            logging_steps=args.logging_steps,
+            report_to=["tensorboard"],
+            deepspeed=deepspeed_config,
+            gradient_checkpointing=args.gradient_checkpointing,
+            do_eval=args.do_eval,
+            evaluation_strategy=args.evaluation_strategy,
+            eval_steps=args.eval_steps,
+            eval_accumulation_steps=args.eval_accumulation_steps,
+            include_inputs_for_metrics=True,
+            per_device_eval_batch_size=args.eval_batch_size,
+            do_predict=args.do_pred,
+            use_legacy_prediction_loop=args.do_pred,
+        )
+        logger.info(f"Training Arguments: {training_args}")
+
+        # Prepare the trainer and start training
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            train_dataset=train_dataset,
+            eval_dataset=dev_dataset,
+            compute_metrics=compute_metrics,
+            data_collator=default_data_collator,
+            preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+        )
+
         trainer.train()
         trainer.save_model(args.output_dir)
 
@@ -342,10 +346,10 @@ def main():
             model.to(device)
             with torch.no_grad():
                 for batch in tqdm(dev_dataloader, desc="Evaluation"):
-                    input_ids = batch['input_ids'].to(device)
-                    attention_mask = batch['attention_mask'].to(device)
-                    labels = batch['labels'].to(device)
-                    out = model(input_ids, attention_mask=attention_mask, labels=labels)
+                    input_ids = batch['input_ids'].squeeze(1).to(device)
+                    attention_mask = batch['attention_mask'].squeeze(1).to(device)
+                    labels = batch['labels'].squeeze(1).to(device)
+                    out = model(input_ids, attention_mask=attention_mask)
                     ppls = preprocess_logits_for_metrics(out.logits, labels)
                     input_ids_list.extend(input_ids.detach().cpu().tolist())
                     ppl_list.extend(ppls.detach().cpu().tolist())

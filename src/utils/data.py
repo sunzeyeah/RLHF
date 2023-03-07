@@ -262,8 +262,6 @@ class OCNLIDataset(Dataset):
         label = data['label']
         encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
                                       padding="max_length", truncation="longest_first", return_tensors="pt")
-        # label_dict = self.tokenizer(label, max_length=self.args.max_length, add_special_tokens=False,
-        #                             return_attention_mask=False, return_token_type_ids=False, return_tensors="pt")
 
         return {
             "input_ids": encoded_dict["input_ids"],
@@ -286,7 +284,7 @@ class OCNLIDataset(Dataset):
                     continue
                 for l in self.label_dict.values():
                     prompt = f'{s1}?{l}，{s2}'
-                    if len(prompt) <= 0 or len(label) <= 0:
+                    if len(prompt) <= 0:
                         continue
                     datasets.append({"prompt": prompt, "label": self.label_dict[label]})
 
@@ -322,7 +320,8 @@ class CMNLIDataset(Dataset):
         return {
             "input_ids": encoded_dict["input_ids"],
             "attention_mask": encoded_dict["attention_mask"],
-            "labels": encoded_dict["input_ids"]
+            "labels": encoded_dict["input_ids"],
+            "label_str": label
         }
 
     def load_dataset(self, filename, max_length):
@@ -339,9 +338,10 @@ class CMNLIDataset(Dataset):
                     continue
                 for l in self.label_dict.values():
                     prompt = f'{s1}?{l}，{s2}'
-                    if len(prompt) <= 0 or len(label) <= 0:
+                    if len(prompt) <= 0:
                         continue
                     datasets.append({"prompt": prompt, "label": self.label_dict[label]})
+
         logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets
@@ -396,6 +396,7 @@ class CHIDDataset(Dataset):
                             if len(prompt) <= 0 or len(label) <= 0:
                                 continue
                             datasets.append({"prompt": prompt, "label": label, "candidates": candidates})
+
         logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets
