@@ -1,13 +1,12 @@
 {
-  "train_batch_size": 96,
-  "eval_batch_size": 8,
+  "train_batch_size": 32,
   "fp16": {
     "enabled": true,
     "min_loss_scale": 1,
     "opt_level": "O2"
   },
   "zero_optimization": {
-    "stage": 2,
+    "stage": 3,
     "offload_param": {
       "device": "cpu"
     },

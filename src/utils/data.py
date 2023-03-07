@@ -2,6 +2,7 @@
 import os
 import json
 import re
+import random
 import pandas as pd
 import torch
 
@@ -452,6 +453,340 @@ class CMRCDataset(Dataset):
                     if len(prompt) <= 0:
                         continue
                     datasets.append({"prompt": prompt, "label": answers})
+
+        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+
+        return datasets
+
+
+class CLUEWSCDataset(Dataset):
+    def __init__(self, args, filename, tokenizer):
+        self.tokenizer = tokenizer
+        self.args = args
+        self.label_dict = {'true': 1, 'false': 0}
+        dataset = self.load_dataset(filename, args.max_length)
+        self.post_list = dataset
+
+        for k in range(5):
+            logger.info(f"CLUEWSCDataset sample-{k}\n: {dataset[k]}")
+
+    def __len__(self):
+        return len(self.post_list)
+
+    def __getitem__(self, idx):
+        data = self.post_list[idx]
+        prompt = data['prompt']
+        label = data['label']
+        encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
+                                      padding="max_length", truncation="longest_first", return_tensors="pt")
+        # label_dict = self.tokenizer(label, max_length=self.args.max_length, add_special_tokens=False,
+        #                             return_attention_mask=False, return_token_type_ids=False, return_tensors="pt")
+
+        return {
+            "input_ids": encoded_dict["input_ids"],
+            "attention_mask": encoded_dict["attention_mask"],
+            "labels": encoded_dict["input_ids"],
+            "label_str": label,
+        }
+
+    def load_dataset(self, filename, max_length):
+        discard = 0
+        datasets = []
+        with open(filename, "r", encoding="utf-8") as f:
+            for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
+                item = json.loads(line)
+                text = item['text']
+                span2_index = item['target']['span2_index']
+                span2_text = item['target']['span2_text']
+                span1_text = item['target']['span1_text']
+                label = self.label_dict[item['label']]
+                prompt = text[:span2_index] + span1_text + text[span2_index+len(span2_text):]
+                if len(prompt) <= 0:
+                    continue
+                datasets.append({"prompt": prompt, "label": label})
+
+        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+
+        return datasets
+
+
+class C3Dataset(Dataset):
+    def __init__(self, args, filename, tokenizer):
+        self.tokenizer = tokenizer
+        self.args = args
+
+        dataset = self.load_dataset(filename, args.max_length)
+        self.post_list = dataset
+
+        for k in range(5):
+            logger.info(f"C3Dataset sample-{k}\n: {dataset[k]}")
+
+    def __len__(self):
+        return len(self.post_list)
+
+    def __getitem__(self, idx):
+        data = self.post_list[idx]
+        prompt = data['prompt']
+        label = data['label']
+        candidates = data['candidates']
+        encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
+                                      padding="max_length", truncation="longest_first", return_tensors="pt")
+        # label_dict = self.tokenizer(label, max_length=self.args.max_length, add_special_tokens=False,
+        #                             return_attention_mask=False, return_token_type_ids=False, return_tensors="pt")
+
+        return {
+            "input_ids": encoded_dict["input_ids"],
+            "attention_mask": encoded_dict["attention_mask"],
+            "labels": encoded_dict["input_ids"],
+            "label_str": label,
+            "candidates": candidates
+        }
+
+    def load_dataset(self, filename, max_length):
+        discard = 0
+        datasets = []
+
+        data = json.load(open(filename, "r", encoding="utf-8"))
+        for i, d in enumerate(data):
+            context = "".join(d[0])
+            for qs in d[1]:
+                question = qs['question']
+                choices = qs['choice']
+                answer = qs['answer']
+                for choice in choices:
+                    prompt = f"问: {question}\n答:{choice}\n该答案来自对话: {context}"
+                    if len(prompt) <= 0:
+                        continue
+                    datasets.append({"prompt": prompt, "label": answer, "candidates": choices})
+
+        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+
+        return datasets
+
+
+class AFQMCDataset(Dataset):
+    def __init__(self, args, filename, tokenizer):
+        self.tokenizer = tokenizer
+        self.args = args
+        self.label_dict = {'0': '不同', '1': '相同'}
+
+        dataset = self.load_dataset(filename, args.max_length)
+        self.post_list = dataset
+
+        for k in range(5):
+            logger.info(f"AFQMCDataset sample-{k}\n: {dataset[k]}")
+
+    def __len__(self):
+        return len(self.post_list)
+
+    def __getitem__(self, idx):
+        data = self.post_list[idx]
+        prompt = data['prompt']
+        label = data['label']
+        encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
+                                      padding="max_length", truncation="longest_first", return_tensors="pt")
+        # label_dict = self.tokenizer(label, max_length=self.args.max_length, add_special_tokens=False,
+        #                             return_attention_mask=False, return_token_type_ids=False, return_tensors="pt")
+
+        return {
+            "input_ids": encoded_dict["input_ids"],
+            "attention_mask": encoded_dict["attention_mask"],
+            "labels": encoded_dict["input_ids"],
+            "label_str": label
+        }
+
+    def load_dataset(self, filename, max_length):
+        discard = 0
+        datasets = []
+        with open(filename, "r", encoding="utf-8") as f:
+            for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
+                item = json.loads(line)
+                s1 = item['sentence1']
+                s2 = item['sentence2']
+                label = self.label_dict[item['label']]
+                for l in self.label_dict.values():
+                    prompt = f'下面两个句子语义{l}:{s1}。{s2}'
+                    if len(prompt) <= 0:
+                        continue
+                    datasets.append({"prompt": prompt, "label": label})
+
+        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+
+        return datasets
+
+
+class CSLDataset(Dataset):
+    def __init__(self, args, filename, tokenizer):
+        self.tokenizer = tokenizer
+        self.args = args
+        self.label_dict = {'0': '不是', '1': '是'}
+
+        dataset = self.load_dataset(filename, args.max_length)
+        self.post_list = dataset
+
+        for k in range(5):
+            logger.info(f"CSLDataset sample-{k}\n: {dataset[k]}")
+
+    def __len__(self):
+        return len(self.post_list)
+
+    def __getitem__(self, idx):
+        data = self.post_list[idx]
+        prompt = data['prompt']
+        label = data['label']
+        encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
+                                      padding="max_length", truncation="longest_first", return_tensors="pt")
+        # label_dict = self.tokenizer(label, max_length=self.args.max_length, add_special_tokens=False,
+        #                             return_attention_mask=False, return_token_type_ids=False, return_tensors="pt")
+
+        return {
+            "input_ids": encoded_dict["input_ids"],
+            "attention_mask": encoded_dict["attention_mask"],
+            "labels": encoded_dict["input_ids"],
+            "label_str": label
+        }
+
+    def load_dataset(self, filename, max_length):
+        discard = 0
+        datasets = []
+        with open(filename, "r", encoding="utf-8") as f:
+            for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
+                item = json.loads(line)
+                abstract = item['abst']
+                keyword = "+".join(item['keyword'])
+                label = self.label_dict[item['label']]
+                for l in self.label_dict.values():
+                    prompt = f'摘要:{abstract}，关键词:{keyword}{l}真实关键词'
+                    if len(prompt) <= 0:
+                        continue
+                    datasets.append({"prompt": prompt, "label": label})
+
+        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+
+        return datasets
+
+
+class IFLYTEKDataset(Dataset):
+    def __init__(self, args, filename, tokenizer):
+        self.tokenizer = tokenizer
+        self.args = args
+        self.label_dict = {'0': '打车', '1': '地图导航', '2': '免费WIFI', '3': '租车', '4': '同城服务', '5': '快递物流', '6': '婚庆', '7': '家政', '8': '公共交通', '9': '政务', '10': '社区服务', '11': '薅羊毛', '12': '魔幻', '13': '仙侠', '14': '卡牌', '15': '飞行空战', '16': '射击游戏', '17': '休闲益智', '18': '动作类', '19': '体育竞技', '20': '棋牌中心', '21': '经营养成', '22': '策略', '23': 'MOBA', '24': '辅助工具', '25': '约会社交', '26': '即时通讯', '27': '工作社交', '28': '论坛圈子', '29': '婚恋社交', '30': '情侣社交', '31': '社交工具', '32': '生活社交', '33': '微博博客', '34': '新闻', '35': '漫画', '36': '小说', '37': '技术', '38': '教辅', '39': '问答交流', '40': '搞笑', '41': '杂志', '42': '百科', '43': '影视娱乐', '44': '求职', '45': '兼职', '46': '视频', '47': '短视频', '48': '音乐', '49': '直播', '50': '电台', '51': 'K歌', '52': '成人', '53': '中小学', '54': '职考', '55': '公务员', '56': '英语', '57': '视频教育', '58': '高等教育', '59': '成人教育', '60': '艺术', '61': '语言(非英语)', '62': '旅游资讯', '63': '综合预定', '64': '民航', '65': '铁路', '66': '酒店', '67': '行程管理', '68': '民宿短租', '69': '出国', '70': '工具', '71': '亲子儿童', '72': '母婴', '73': '驾校', '74': '违章', '75': '汽车咨询', '76': '汽车交易', '77': '日常养车', '78': '行车辅助', '79': '租房', '80': '买房', '81': '装修家居', '82': '电子产品', '83': '问诊挂号', '84': '养生保健', '85': '医疗服务', '86': '减肥瘦身', '87': '美妆美业', '88': '菜谱', '89': '餐饮店', '90': '体育咨讯', '91': '运动健身', '92': '支付', '93': '保险', '94': '股票', '95': '借贷', '96': '理财', '97': '彩票', '98': '记账', '99': '银行', '100': '美颜', '101': '影像剪辑', '102': '摄影修图', '103': '相机', '104': '绘画', '105': '二手', '106': '电商', '107': '团购', '108': '外卖', '109': '电影票务', '110': '社区超市', '111': '购物咨询', '112': '笔记', '113': '办公', '114': '日程管理', '115': '女性', '116': '经营', '117': '收款', '118': '其他'}
+
+        dataset = self.load_dataset(filename, args.max_length)
+        self.post_list = dataset
+
+        for k in range(5):
+            logger.info(f"IFLYTEKDataset sample-{k}\n: {dataset[k]}")
+
+    def __len__(self):
+        return len(self.post_list)
+
+    def __getitem__(self, idx):
+        data = self.post_list[idx]
+        prompt = data['prompt']
+        label = data['label']
+        candidates = data['candidates']
+        encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
+                                      padding="max_length", truncation="longest_first", return_tensors="pt")
+        # label_dict = self.tokenizer(label, max_length=self.args.max_length, add_special_tokens=False,
+        #                             return_attention_mask=False, return_token_type_ids=False, return_tensors="pt")
+
+        return {
+            "input_ids": encoded_dict["input_ids"],
+            "attention_mask": encoded_dict["attention_mask"],
+            "labels": encoded_dict["input_ids"],
+            "label_str": label,
+            "candidates": candidates
+        }
+
+    def load_dataset(self, filename, max_length):
+        discard = 0
+        datasets = []
+        with open(filename, "r", encoding="utf-8") as f:
+            for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
+                item = json.loads(line)
+                content = item['sentence']
+                label = item['label_des']
+                # randomly sample 3 categories as negative sample
+                labels = set(self.label_dict.values())
+                labels.remove(label)
+                candidates = [label] + random.sample(labels, 3)
+                for l in candidates:
+                    prompt = f'这是关于{l}的应用程序:{content}'
+                    if len(prompt) <= 0:
+                        continue
+                    datasets.append({"prompt": prompt, "label": label, "candidates": candidates})
+
+        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+
+        return datasets
+
+
+class TNEWSDataset(Dataset):
+    def __init__(self, args, filename, tokenizer):
+        self.tokenizer = tokenizer
+        self.args = args
+        self.label_dict = {'100': '故事',
+                           '101': '文化',
+                           '102': '娱乐',
+                           '103': '体育',
+                           '104': '财经',
+                           '106': '房产',
+                           '107': '汽车',
+                           '108': '教育',
+                           '109': '科技',
+                           '110': '军事',
+                           '112': '旅游',
+                           '113': '世界',
+                           '114': '股票',
+                           '115': '农业',
+                           '116': '游戏'}
+
+        dataset = self.load_dataset(filename, args.max_length)
+        self.post_list = dataset
+
+        for k in range(5):
+            logger.info(f"TNEWSDataset sample-{k}\n: {dataset[k]}")
+
+    def __len__(self):
+        return len(self.post_list)
+
+    def __getitem__(self, idx):
+        data = self.post_list[idx]
+        prompt = data['prompt']
+        label = data['label']
+        candidates = data['candidates']
+        encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
+                                      padding="max_length", truncation="longest_first", return_tensors="pt")
+        # label_dict = self.tokenizer(label, max_length=self.args.max_length, add_special_tokens=False,
+        #                             return_attention_mask=False, return_token_type_ids=False, return_tensors="pt")
+
+        return {
+            "input_ids": encoded_dict["input_ids"],
+            "attention_mask": encoded_dict["attention_mask"],
+            "labels": encoded_dict["input_ids"],
+            "label_str": label,
+            "candidates": candidates
+        }
+
+    def load_dataset(self, filename, max_length):
+        discard = 0
+        datasets = []
+        with open(filename, "r", encoding="utf-8") as f:
+            for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
+                item = json.loads(line)
+                content = item['sentence']
+                label = self.label_dict[item['label']]
+                # randomly sample 3 categories as negative sample
+                labels = set(self.label_dict.values())
+                labels.remove(label)
+                candidates = [label] + random.sample(labels, 3)
+                for l in candidates:
+                    prompt = f'这是关于{l}的文章:{content}'
+                    if len(prompt) <= 0:
+                        continue
+                    datasets.append({"prompt": prompt, "label": label, "candidates": candidates})
+
         logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets

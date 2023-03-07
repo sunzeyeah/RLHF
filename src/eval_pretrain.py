@@ -26,6 +26,12 @@ from src.utils.data import (
     CMNLIDataset,
     CHIDDataset,
     CMRCDataset,
+    CLUEWSCDataset,
+    C3Dataset,
+    AFQMCDataset,
+    CSLDataset,
+    IFLYTEKDataset,
+    TNEWSDataset
 )
 from src.utils.file_utils import set_seed
 
@@ -38,15 +44,15 @@ DATASET = {
     "chid": CHIDDataset,
     # MRC
     "cmrc2018": CMRCDataset,
-    # # Winograd
-    # "cluewsc2020": CLUEWSCDataset,
-    # # common sense reasoning
-    # "c3": C3Dataset,
-    # # Text Classification
-    # "tnews": TNEWSDataset,
-    # "iflytek": IFLYTEKDataset,
-    # "afqmc": AFQMCDataset,
-    # "csl": CSLDataset
+    # Winograd
+    "cluewsc2020": CLUEWSCDataset,
+    # common sense reasoning
+    "c3": C3Dataset,
+    # Text Classification
+    "tnews": TNEWSDataset,
+    "iflytek": IFLYTEKDataset,
+    "afqmc": AFQMCDataset,
+    "csl": CSLDataset
 }
 
 
@@ -62,7 +68,7 @@ def get_parser():
     parser.add_argument("--local_rank", type=int, default=-1)
     parser.add_argument("--max_length", type=int, default=1024)
     # parser.add_argument("--max_length_prompt", type=int, default=200)
-    # parser.add_argument("--max_length_label", type=int, default=824)
+    parser.add_argument("--max_length_generation", type=int, default=200)
     # train
     parser.add_argument("--do_train", action="store_true")
     parser.add_argument("--train_filename", type=str, default=None)
@@ -157,13 +163,13 @@ def main():
         test_dataset = None
 
     # training arguments
-    # deepspeed_config = os.path.join(RESOURCE_PATH, "config", "pretrain_model", args.deepspeed_config) if args.deepspeed_config is not None else None
+    deepspeed_config = os.path.join(RESOURCE_PATH, "config", "pretrain_model", args.deepspeed_config) if args.deepspeed_config is not None else None
     training_args = TrainingArguments(
         output_dir=args.output_dir,
         no_cuda=not torch.cuda.is_available(),
         seed=args.seed,
         data_seed=args.seed,
-        # local_rank=args.local_rank,
+        local_rank=args.local_rank,
         do_train=args.do_train,
         num_train_epochs=args.num_epochs,
         learning_rate=args.learning_rate,
@@ -181,7 +187,7 @@ def main():
         save_total_limit=args.save_total_limit,
         logging_steps=args.logging_steps,
         report_to=["tensorboard"],
-        # deepspeed=deepspeed_config,
+        deepspeed=deepspeed_config,
         gradient_checkpointing=args.gradient_checkpointing,
         do_eval=args.do_eval,
         evaluation_strategy=args.evaluation_strategy,
@@ -195,7 +201,11 @@ def main():
     logger.info(f"Training Arguments: {training_args}")
 
     # Set up the metric
-    if args.task in ["ocnli", "cmnli", "chid"]:
+    if args.task in ["cmrc1028"]:
+        # rouge = ROUGEScore(rouge_keys=('rougeL', 'rouge1', 'rouge2'))
+        compute_metrics = None
+        preprocess_logits_for_metrics = None
+    else:
         perplexity = Perplexity(ignore_index=tokenizer.pad_token_id)
 
         # Create a preprocessing function to extract out the proper logits from the model output
@@ -226,8 +236,6 @@ def main():
             # result = rouge(pred_str, label_str)
 
             return {"ppl": eval_preds.predictions}
-    elif args.task in []:
-        rouge = ROUGEScore(rouge_keys=('rougeL', 'rouge1', 'rouge2'))
 
     # Prepare the trainer and start training
     trainer = Trainer(
@@ -245,56 +253,32 @@ def main():
         trainer.save_model(args.output_dir)
 
     elif args.do_eval:
-        if args.task in ["ocnli", "cmnli", "chid"]:
-            # evaluate
-            res = trainer.evaluate(eval_dataset=dev_dataset)
-            # statistics on eval result
-            ct = 0
-            ct_acc = 0
-            ppls = []
-            # cur_label = None
-            with open(os.path.join(args.output_dir, f"{args.task}_eval_result.jsonl"), "w", encoding="utf-8") as w:
-                for i, (data, ppl) in enumerate(zip(dev_dataset, res['eval_ppl'])):
-                    ppls.append(ppl)
-                    prompt = tokenizer.batch_decode(data['input_ids'], skip_special_tokens=True)
-                    cur_label = data['label_str']
-                    if args.task in ['chid']:
-                        ls = data['candidates']
-                    else:
-                        ls = list(dev_dataset.label_dict.values())
-                    if i % len(ls) == len(ls) - 1:
-                        lidx = ls.index(cur_label)
-                        if np.argmin(ppls) == lidx:
-                            ct_acc += 1
-                        ct += 1
-                        # cur_label = None
-                        ppls = []
-                    w.write(json.dumps({"prompt": prompt, "pred": float(ppl), "label": cur_label}, ensure_ascii=False) + "\n")
-            logger.info(f"ppl={ct_acc/ct}")
-        elif args.task in ["cmrc2018"]:
+
+        if args.task in ["cmrc2018"]:
             def calculate_f1(pred_text, label_text):
-                pred_tokens = tokenizer(pred_text, add_special_tokens=False, return_attention_mask=False, return_token_type_ids=False, return_tensors="pt")
-                label_tokens = tokenizer(label_text, add_special_tokens=False, return_attention_mask=False, return_token_type_ids=False, return_tensors="pt")
+                pred_tokens = tokenizer(pred_text, add_special_tokens=False, return_attention_mask=False, return_token_type_ids=False, return_tensors="pt")['input_ids'][0].tolist()
+                label_tokens = tokenizer(label_text, add_special_tokens=False, return_attention_mask=False, return_token_type_ids=False, return_tensors="pt")['input_ids'][0].tolist()
                 common = collections.Counter(pred_tokens) & collections.Counter(label_tokens)
                 num_same = sum(common.values())
                 if len(pred_tokens) == 0 or len(label_tokens) == 0:
-                    return int(pred_tokens==label_tokens)
+                    return int(pred_tokens == label_tokens)
                 if num_same == 0:
                     return 0
                 precision = num_same / len(pred_tokens)
                 recall = num_same / len(label_tokens)
                 f1 = (2 * precision * recall) / (precision + recall)
                 return f1
+
             device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
             text_generator = TextGenerationPipeline(model, tokenizer, device=device)
             ems = []
             f1s = []
             with open(os.path.join(args.output_dir, f"{args.task}_eval_result.jsonl"), "w", encoding="utf-8") as w:
                 # w.write("\t".join(["prompt"]+[f"model_answer_{i}" for i in range(args.num_return_sequences)])+"\n")
-                for dev_data in dev_dataset:
+                for dev_data in dev_dataset.post_list:
                     prompt = dev_data['prompt']
                     label = dev_data['label']
-                    results = text_generator(prompt, max_length=args.max_length_label, do_sample=True,
+                    results = text_generator(prompt, max_length=args.max_length_generation, do_sample=True,
                                              num_return_sequences=args.num_return_sequences,
                                              top_p=args.top_p, temperature=args.temperature)
                     em_max = -1
@@ -313,7 +297,35 @@ def main():
                                 f1_max = f1
                     ems.append(em_max)
                     f1s.append(f1_max)
+
             logger.info(f"em={np.mean(ems)}, f1={np.mean(f1s)}")
+        else:
+            # evaluate
+            res = trainer.evaluate(eval_dataset=dev_dataset)
+            # statistics on eval result
+            ct = 0
+            ct_acc = 0
+            ppls = []
+            # cur_label = None
+            with open(os.path.join(args.output_dir, f"{args.task}_eval_result.jsonl"), "w", encoding="utf-8") as w:
+                for i, (data, ppl) in enumerate(zip(dev_dataset, res['eval_ppl'])):
+                    ppls.append(ppl)
+                    prompt = tokenizer.batch_decode(data['input_ids'], skip_special_tokens=True)[0]
+                    cur_label = data['label_str']
+                    if args.task in ['chid', 'c3', 'iflytek', 'tnews']:
+                        ls = data['candidates']
+                    else:
+                        ls = list(dev_dataset.label_dict.values())
+                    if i % len(ls) == len(ls) - 1:
+                        lidx = ls.index(cur_label)
+                        if np.argmin(ppls) == lidx:
+                            ct_acc += 1
+                        ct += 1
+                        # cur_label = None
+                        ppls = []
+                    w.write(json.dumps({"prompt": prompt, "pred": float(ppl), "label": cur_label}, ensure_ascii=False) + "\n")
+
+            logger.info(f"ppl={ct_acc/ct}")
 
     if args.do_pred:
         device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
