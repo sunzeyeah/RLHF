@@ -2,7 +2,7 @@
 
 for TASK in "ocnli" "cmnli" "chid" "cmrc2018" "cluewsc2020" "c3" "afqmc" "csl" "iflytek" "tnews"
 do
-  for MODEL in "pangu-350M" "pangu-2.6B"
+  for MODEL in "pangu-350M" "pangu-2.6B" "glm-335M-chinese" "glm-10B-chinese"
   do
     ROOT="/mnt/private-pa002-vol726121-prd/"
     #ROOT="/root/autodl-tmp/"
@@ -11,7 +11,7 @@ do
     MODEL_PATH=$ROOT/Data/models/$MODEL
     OUTPUT_DIR=$ROOT/Data/chatgpt/output/pretrain/$MODEL
     EVAL_FILENAME="dev.json"
-    if [ $MODEL == "pangu-350M" ]
+    if [ $MODEL == "pangu-350M" ] || [ $MODEL == "glm-335M-chinese" ]
     then
       BATCH_SIZE=32
     else
