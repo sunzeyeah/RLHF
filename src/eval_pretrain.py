@@ -127,13 +127,6 @@ def main():
     # load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
     if "pangu" in args.model_name_or_path:
-        tokenizer.add_special_tokens({
-            "unk_token": "<unk>",
-            'eos_token': "<eot>",
-            'pad_token': "<pad>",
-            "sep_token": "<sep>"
-        })
-    if "pangu" in args.model_name_or_path:
         model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         model.resize_token_embeddings(len(tokenizer.sp))
         model.config.end_token_id = tokenizer.eos_token_id

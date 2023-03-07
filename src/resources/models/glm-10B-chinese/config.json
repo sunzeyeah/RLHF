@@ -1,0 +1,35 @@
+{
+  "_name_or_path": "THUDM/glm-10b-chinese",
+  "architectures": [
+    "GLMModel"
+  ],
+  "attention_dropout_prob": 0.1,
+  "attention_scale": 1.0,
+  "auto_map": {
+    "AutoConfig": "configuration_glm.GLMConfig",
+    "AutoModel": "modeling_glm.GLMModel",
+    "AutoModelForSequenceClassification": "modeling_glm.GLMForSequenceClassification",
+    "AutoModelForSeq2SeqLM": "modeling_glm.GLMForConditionalGeneration"
+    },
+  "block_position_encoding": true,
+  "checkpoint_activations": false,
+  "checkpoint_num_layers": 1,
+  "embedding_dropout_prob": 0.1,
+  "hidden_size": 4096,
+  "initializer_range": 0.02,
+  "max_sequence_length": 1024,
+  "model_type": "glm",
+  "num_attention_heads": 64,
+  "num_layers": 48,
+  "output_dropout_prob": 0.1,
+  "output_predict": true,
+  "parallel_output": true,
+  "pool_token": "cls",
+  "relative_encoding": false,
+  "spell_func": "lstm",
+  "spell_length": null,
+  "torch_dtype": "float32",
+  "transformers_version": "4.23.1",
+  "vocab_size": 50048,
+  "bad_words_id": [50009]
+}

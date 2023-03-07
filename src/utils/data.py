@@ -393,7 +393,7 @@ class CHIDDataset(Dataset):
                         label = self.idiom_dict[idiom]
                         for candidate in candidates:
                             prompt = content.replace(idiom, candidate)
-                            if len(prompt) <= 0 or len(label) <= 0:
+                            if len(prompt) <= 0:
                                 continue
                             datasets.append({"prompt": prompt, "label": label, "candidates": candidates})
 
@@ -465,7 +465,7 @@ class CLUEWSCDataset(Dataset):
     def __init__(self, args, filename, tokenizer):
         self.tokenizer = tokenizer
         self.args = args
-        self.label_dict = {'true': 1, 'false': 0}
+        self.label_dict = {'true': '1', 'false': '0'}
         dataset = self.load_dataset(filename, args.max_length)
         self.post_list = dataset
 

@@ -77,10 +77,6 @@ def main():
 
     # load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-    tokenizer.add_special_tokens({'unk_token': "<unk>",
-                                  'bos_token': "<s>",
-                                  'eos_token': "<eot>",
-                                  'pad_token': "<pad>"})
 
     model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
     model.resize_token_embeddings(len(tokenizer.sp))

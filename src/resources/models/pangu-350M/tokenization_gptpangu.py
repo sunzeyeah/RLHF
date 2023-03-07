@@ -18,7 +18,7 @@ class GPTPanguTokenizer(PreTrainedTokenizer):
             model_file,
             **kwargs
     ):
-        super().__init__()
+        super().__init__(**kwargs)
 
         self.sp = sentencepiece.SentencePieceProcessor()
         self.sp.Load(model_file=model_file)

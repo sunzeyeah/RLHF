@@ -1,0 +1,18 @@
+{
+  "name_or_path": "THUDM/glm-10b-chinese",
+  "eos_token": "<|endoftext|>",
+  "pad_token": "<|endoftext|>",
+  "cls_token": "[CLS]",
+  "mask_token": "[MASK]",
+  "unk_token": "[UNK]",
+  "additional_special_tokens": ["<|startofpiece|>", "<|endofpiece|>", "[gMASK]", "[sMASK]"],
+  "add_prefix_space": false,
+  "tokenizer_class": "GLMChineseTokenizer",
+  "use_fast": false,
+  "auto_map": {
+    "AutoTokenizer": [
+      "tokenization_glm.GLMChineseTokenizer",
+      null
+      ]
+  }
+}
