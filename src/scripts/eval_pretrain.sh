@@ -1,6 +1,6 @@
 #!/bin/bash
 
-for TASK in "ocnli" "cmnli" "chid" "cmrc2018" "cluewsc2020" "c3" "afqmc" "csl" "iflytek" "tnews"
+for TASK in  "chid" "c3" "tnews" #"cmrc2018" "cluewsc2020" "afqmc" "csl" "iflytek" "ocnli" "cmnli"
 do
   for MODEL in "pangu-350M" "pangu-2.6B" "glm-335M-chinese" "glm-10B-chinese"
   do

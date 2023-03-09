@@ -23,7 +23,7 @@ class DataCollatorReward:
 
 class PairwiseDataset(Dataset):
     def __init__(self, args, filename, tokenizer):
-        self.pairs = self.load_dataset(filename, args.max_length)
+        self.pairs = self.load_dataset(filename)
         self.args = args
         self.tokenizer = tokenizer
 
@@ -52,7 +52,7 @@ class PairwiseDataset(Dataset):
         }
 
     @staticmethod
-    def load_dataset(filename, max_length):
+    def load_dataset(filename):
         discard = 0
         pairs = []
         with open(filename, "r", encoding="utf-8") as f:
@@ -79,7 +79,7 @@ class PairwiseDataset(Dataset):
 
 class SFTDataset(Dataset):
     def __init__(self, args, filename, tokenizer):
-        dataset = self.load_dataset(filename, args.max_length)
+        dataset = self.load_dataset(filename)
         self.post_list = dataset
         # self.post_list = []
         # for sample in dataset:
@@ -108,7 +108,7 @@ class SFTDataset(Dataset):
         }
 
     @staticmethod
-    def load_dataset(filename, max_length):
+    def load_dataset(filename):
         discard = 0
         datasets = []
         with open(filename, "r", encoding="utf-8") as f:
@@ -247,7 +247,7 @@ class OCNLIDataset(Dataset):
         self.args = args
         self.label_dict = {'entailment': 'Yes', 'neutral': 'Maybe', 'contradiction': 'No'}
 
-        dataset = self.load_dataset(filename, args.max_length)
+        dataset = self.load_dataset(filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -270,7 +270,7 @@ class OCNLIDataset(Dataset):
             "label_str": label
         }
 
-    def load_dataset(self, filename, max_length):
+    def load_dataset(self, filename):
         discard = 0
         datasets = []
         with open(filename, "r", encoding="utf-8") as f:
@@ -299,7 +299,7 @@ class CMNLIDataset(Dataset):
         self.args = args
         self.label_dict = {'entailment': 'Yes', 'neutral': 'Maybe', 'contradiction': 'No'}
 
-        dataset = self.load_dataset(filename, args.max_length)
+        dataset = self.load_dataset(filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -324,7 +324,7 @@ class CMNLIDataset(Dataset):
             "label_str": label
         }
 
-    def load_dataset(self, filename, max_length):
+    def load_dataset(self, filename):
         discard = 0
         datasets = []
         with open(filename, "r", encoding="utf-8") as f:
@@ -353,7 +353,7 @@ class CHIDDataset(Dataset):
         self.args = args
 
         self.idiom_dict = self.load_idiom_dict()
-        dataset = self.load_dataset(filename, args.max_length)
+        dataset = self.load_dataset(filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -380,7 +380,7 @@ class CHIDDataset(Dataset):
             "candidates": candidates
         }
 
-    def load_dataset(self, filename, max_length):
+    def load_dataset(self, filename):
         discard = 0
         datasets = []
         with open(filename, "r", encoding="utf-8") as f:
@@ -390,7 +390,7 @@ class CHIDDataset(Dataset):
                 contents = item['content']
                 for content in contents:
                     for idiom in re.findall(r"#idiom\d+#", content):
-                        label = self.idiom_dict[idiom]
+                        label = candidates[self.idiom_dict[idiom]]
                         for candidate in candidates:
                             prompt = content.replace(idiom, candidate)
                             if len(prompt) <= 0:
@@ -414,7 +414,7 @@ class CMRCDataset(Dataset):
         self.tokenizer = tokenizer
         self.args = args
 
-        dataset = self.load_dataset(filename, args.max_length)
+        dataset = self.load_dataset(filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -439,8 +439,7 @@ class CMRCDataset(Dataset):
             "label_str": label
         }
 
-    @staticmethod
-    def load_dataset(filename, max_length):
+    def load_dataset(self, filename):
         discard = 0
         datasets = []
         data = json.load(open(filename, "r", encoding="utf-8"))
@@ -451,11 +450,18 @@ class CMRCDataset(Dataset):
                     question = qs['question']
                     answers = []
                     [answers.append(answer) for answer in qs['answers'] if answer not in answers]
-                    prompt = f"阅读文章：{context}\n问：{question}\n答："
+                    if "glm" in self.args.model_name_or_path:
+                        prompt_template = "阅读文章：{context}\n问：{question}\n答：[MASK]"
+                    else:
+                        prompt_template = "阅读文章：{context}\n问：{question}\n答："
+                    prompt = prompt_template.format(context=context, question=question)
                     if len(prompt) <= 0:
                         continue
+                    if len(prompt) > self.args.max_length:
+                        idx = len(prompt) - self.args.max_length
+                        prompt = prompt_template.format(context=context[:-idx], question=question)
                     datasets.append({"prompt": prompt, "label": answers})
-
+        datasets = datasets[:10]
         logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets
@@ -466,7 +472,7 @@ class CLUEWSCDataset(Dataset):
         self.tokenizer = tokenizer
         self.args = args
         self.label_dict = {'true': '1', 'false': '0'}
-        dataset = self.load_dataset(filename, args.max_length)
+        dataset = self.load_dataset(filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -491,7 +497,7 @@ class CLUEWSCDataset(Dataset):
             "label_str": label,
         }
 
-    def load_dataset(self, filename, max_length):
+    def load_dataset(self, filename):
         discard = 0
         datasets = []
         with open(filename, "r", encoding="utf-8") as f:
@@ -517,7 +523,7 @@ class C3Dataset(Dataset):
         self.tokenizer = tokenizer
         self.args = args
 
-        dataset = self.load_dataset(filename, args.max_length)
+        dataset = self.load_dataset(filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -544,7 +550,7 @@ class C3Dataset(Dataset):
             "candidates": candidates
         }
 
-    def load_dataset(self, filename, max_length):
+    def load_dataset(self, filename):
         discard = 0
         datasets = []
 
@@ -554,12 +560,13 @@ class C3Dataset(Dataset):
             for qs in d[1]:
                 question = qs['question']
                 choices = qs['choice']
+                choices_padded = [choices[i] if i < len(choices) else f"test{i}" for i in range(4)]
                 answer = qs['answer']
                 for choice in choices:
                     prompt = f"问: {question}\n答:{choice}\n该答案来自对话: {context}"
                     if len(prompt) <= 0:
                         continue
-                    datasets.append({"prompt": prompt, "label": answer, "candidates": choices})
+                    datasets.append({"prompt": prompt, "label": answer, "candidates": choices_padded})
 
         logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
@@ -572,7 +579,7 @@ class AFQMCDataset(Dataset):
         self.args = args
         self.label_dict = {'0': '不同', '1': '相同'}
 
-        dataset = self.load_dataset(filename, args.max_length)
+        dataset = self.load_dataset(filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -597,7 +604,7 @@ class AFQMCDataset(Dataset):
             "label_str": label
         }
 
-    def load_dataset(self, filename, max_length):
+    def load_dataset(self, filename):
         discard = 0
         datasets = []
         with open(filename, "r", encoding="utf-8") as f:
@@ -623,7 +630,7 @@ class CSLDataset(Dataset):
         self.args = args
         self.label_dict = {'0': '不是', '1': '是'}
 
-        dataset = self.load_dataset(filename, args.max_length)
+        dataset = self.load_dataset(filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -648,7 +655,7 @@ class CSLDataset(Dataset):
             "label_str": label
         }
 
-    def load_dataset(self, filename, max_length):
+    def load_dataset(self, filename):
         discard = 0
         datasets = []
         with open(filename, "r", encoding="utf-8") as f:
@@ -674,7 +681,7 @@ class IFLYTEKDataset(Dataset):
         self.args = args
         self.label_dict = {'0': '打车', '1': '地图导航', '2': '免费WIFI', '3': '租车', '4': '同城服务', '5': '快递物流', '6': '婚庆', '7': '家政', '8': '公共交通', '9': '政务', '10': '社区服务', '11': '薅羊毛', '12': '魔幻', '13': '仙侠', '14': '卡牌', '15': '飞行空战', '16': '射击游戏', '17': '休闲益智', '18': '动作类', '19': '体育竞技', '20': '棋牌中心', '21': '经营养成', '22': '策略', '23': 'MOBA', '24': '辅助工具', '25': '约会社交', '26': '即时通讯', '27': '工作社交', '28': '论坛圈子', '29': '婚恋社交', '30': '情侣社交', '31': '社交工具', '32': '生活社交', '33': '微博博客', '34': '新闻', '35': '漫画', '36': '小说', '37': '技术', '38': '教辅', '39': '问答交流', '40': '搞笑', '41': '杂志', '42': '百科', '43': '影视娱乐', '44': '求职', '45': '兼职', '46': '视频', '47': '短视频', '48': '音乐', '49': '直播', '50': '电台', '51': 'K歌', '52': '成人', '53': '中小学', '54': '职考', '55': '公务员', '56': '英语', '57': '视频教育', '58': '高等教育', '59': '成人教育', '60': '艺术', '61': '语言(非英语)', '62': '旅游资讯', '63': '综合预定', '64': '民航', '65': '铁路', '66': '酒店', '67': '行程管理', '68': '民宿短租', '69': '出国', '70': '工具', '71': '亲子儿童', '72': '母婴', '73': '驾校', '74': '违章', '75': '汽车咨询', '76': '汽车交易', '77': '日常养车', '78': '行车辅助', '79': '租房', '80': '买房', '81': '装修家居', '82': '电子产品', '83': '问诊挂号', '84': '养生保健', '85': '医疗服务', '86': '减肥瘦身', '87': '美妆美业', '88': '菜谱', '89': '餐饮店', '90': '体育咨讯', '91': '运动健身', '92': '支付', '93': '保险', '94': '股票', '95': '借贷', '96': '理财', '97': '彩票', '98': '记账', '99': '银行', '100': '美颜', '101': '影像剪辑', '102': '摄影修图', '103': '相机', '104': '绘画', '105': '二手', '106': '电商', '107': '团购', '108': '外卖', '109': '电影票务', '110': '社区超市', '111': '购物咨询', '112': '笔记', '113': '办公', '114': '日程管理', '115': '女性', '116': '经营', '117': '收款', '118': '其他'}
 
-        dataset = self.load_dataset(filename, args.max_length)
+        dataset = self.load_dataset(filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -701,7 +708,7 @@ class IFLYTEKDataset(Dataset):
             "candidates": candidates
         }
 
-    def load_dataset(self, filename, max_length):
+    def load_dataset(self, filename):
         discard = 0
         datasets = []
         with open(filename, "r", encoding="utf-8") as f:
@@ -744,7 +751,7 @@ class TNEWSDataset(Dataset):
                            '115': '农业',
                            '116': '游戏'}
 
-        dataset = self.load_dataset(filename, args.max_length)
+        dataset = self.load_dataset(filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -771,7 +778,7 @@ class TNEWSDataset(Dataset):
             "candidates": candidates
         }
 
-    def load_dataset(self, filename, max_length):
+    def load_dataset(self, filename):
         discard = 0
         datasets = []
         with open(filename, "r", encoding="utf-8") as f:

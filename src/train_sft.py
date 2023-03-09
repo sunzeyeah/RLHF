@@ -120,8 +120,8 @@ def main():
     else:
         dev_dataset = None
     if args.do_pred:
-        test_dataset = SFTDataset.load_dataset(os.path.join(args.data_dir, args.test_filename),
-                                               args.max_length)
+        test_dataset = SFTDataset(args, os.path.join(args.data_dir, args.test_filename),
+                                  tokenizer)
     else:
         test_dataset = None
 

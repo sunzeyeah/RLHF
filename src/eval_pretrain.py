@@ -9,6 +9,8 @@ import json
 import numpy as np
 import torch
 
+from tqdm import tqdm
+from torch.utils.data import DataLoader, SequentialSampler
 from torchmetrics.text.perplexity import Perplexity
 from torchmetrics.text.rouge import ROUGEScore
 from transformers import (
@@ -154,8 +156,8 @@ def main():
     else:
         dev_dataset = None
     if args.do_pred:
-        test_dataset = dataset.load_dataset(args, os.path.join(args.data_dir, args.test_filename),
-                                            tokenizer)
+        test_dataset = dataset(args, os.path.join(args.data_dir, args.test_filename),
+                               tokenizer)
     else:
         test_dataset = None
 
@@ -272,12 +274,20 @@ def main():
             f1s = []
             with open(os.path.join(args.output_dir, f"{args.task}_eval_result.jsonl"), "w", encoding="utf-8") as w:
                 # w.write("\t".join(["prompt"]+[f"model_answer_{i}" for i in range(args.num_return_sequences)])+"\n")
-                for dev_data in dev_dataset.post_list:
+                for dev_data in tqdm(dev_dataset.post_list, desc="Generation"):
                     prompt = dev_data['prompt']
                     label = dev_data['label']
-                    results = text_generator(prompt, max_length=args.max_length_generation, do_sample=True,
-                                             num_return_sequences=args.num_return_sequences,
-                                             top_p=args.top_p, temperature=args.temperature)
+                    if "glm" in args.model_name_or_path:
+                        # Inference
+                        inputs = tokenizer(prompt, return_tensors="pt")
+                        inputs = tokenizer.build_inputs_for_generation(inputs, max_gen_length=args.max_length_generation)
+                        inputs = inputs.to(device)
+                        outputs = model.generate(**inputs, max_length=args.max_length, eos_token_id=tokenizer.eop_token_id)
+                        print(tokenizer.decode(outputs[0].tolist()))
+                    else:
+                        results = text_generator(prompt, max_length=args.max_length_generation, do_sample=True,
+                                                 num_return_sequences=args.num_return_sequences,
+                                                 top_p=args.top_p, temperature=args.temperature)
                     em_max = -1
                     f1_max = -1
                     for l in label:
@@ -324,8 +334,6 @@ def main():
         #
         #     logger.info(f"ppl={ct_acc/ct}")
         else:
-            from tqdm import tqdm
-            from torch.utils.data import DataLoader, SequentialSampler
             device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
 
             sampler = SequentialSampler(dev_dataset)
@@ -344,7 +352,7 @@ def main():
                     labels = batch['labels'].squeeze(1).to(device)
                     out = model(input_ids, attention_mask=attention_mask)
                     ppls = preprocess_logits_for_metrics(out.logits, labels)
-                    input_ids_list.extend(input_ids.detach().cpu().tolist())
+                    input_ids_list.extend(batch['input_ids'].detach().cpu().tolist())
                     ppl_list.extend(ppls.detach().cpu().tolist())
                     label_list.extend(batch['label_str'])
                     if args.task in ['chid', 'c3', 'iflytek', 'tnews']:
