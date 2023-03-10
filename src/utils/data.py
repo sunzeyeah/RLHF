@@ -450,18 +450,15 @@ class CMRCDataset(Dataset):
                     question = qs['question']
                     answers = []
                     [answers.append(answer) for answer in qs['answers'] if answer not in answers]
-                    if "glm" in self.args.model_name_or_path:
-                        prompt_template = "阅读文章：{context}\n问：{question}\n答：[MASK]"
-                    else:
-                        prompt_template = "阅读文章：{context}\n问：{question}\n答："
+                    prompt_template = "阅读文章：{context}\n问：{question}\n答："
                     prompt = prompt_template.format(context=context, question=question)
                     if len(prompt) <= 0:
                         continue
-                    if len(prompt) > self.args.max_length:
-                        idx = len(prompt) - self.args.max_length
-                        prompt = prompt_template.format(context=context[:-idx], question=question)
+                    # if len(prompt) > self.args.max_length:
+                    #     idx = len(prompt) - self.args.max_length
+                    #     prompt = prompt_template.format(context=context[:-idx], question=question)
                     datasets.append({"prompt": prompt, "label": answers})
-        datasets = datasets[:10]
+
         logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets

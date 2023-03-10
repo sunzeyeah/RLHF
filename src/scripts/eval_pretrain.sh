@@ -1,8 +1,8 @@
 #!/bin/bash
 
-for TASK in  "chid" "c3" "tnews" #"cmrc2018" "cluewsc2020" "afqmc" "csl" "iflytek" "ocnli" "cmnli"
+for TASK in  "chid" "c3" "tnews" "cmrc2018" #"cluewsc2020" "afqmc" "csl" "iflytek" "ocnli" "cmnli"
 do
-  for MODEL in "pangu-350M" "pangu-2.6B" "glm-335M-chinese" "glm-10B-chinese"
+  for MODEL in "pangu-350M" "pangu-2.6B" "glm-335M-chinese" #"glm-10B-chinese"
   do
     ROOT="/mnt/private-pa002-vol726121-prd/"
     #ROOT="/root/autodl-tmp/"
@@ -33,6 +33,10 @@ do
       --do_eval \
       --eval_filename $EVAL_FILENAME \
       --eval_batch_size $BATCH_SIZE \
+      --top_p 0.8 \
+      --temperature 0.8 \
+      --num_return_sequences 1 \
+      --max_length_generation 100 \
       > eval_pretrain_${MODEL}_${TASK}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1
   done
 done

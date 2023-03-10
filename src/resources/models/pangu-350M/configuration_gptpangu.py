@@ -26,8 +26,8 @@ class GPTPanguConfig(PretrainedConfig):
         summary_proj_to_labels=True,
         summary_first_dropout=0.1,
         use_cache=True,
-        bos_token_id=9,
-        eos_token_id=9,
+        # bos_token_id=9,
+        # eos_token_id=9,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -50,7 +50,7 @@ class GPTPanguConfig(PretrainedConfig):
         self.summary_proj_to_labels = summary_proj_to_labels
         self.use_cache = use_cache
 
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
+        # self.bos_token_id = bos_token_id
+        # self.eos_token_id = eos_token_id
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)

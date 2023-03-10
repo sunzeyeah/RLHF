@@ -4,9 +4,7 @@
     "GPTPanguForCausalLM"
   ],
   "attn_pdrop": 0.1,
-  "bos_token_id": 9,
   "embd_pdrop": 0.1,
-  "eos_token_id": 9,
   "hidden_size": 2560,
   "initializer_range": 0.02,
   "intermediate_size": null,

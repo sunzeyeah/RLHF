@@ -4,9 +4,7 @@
     "GPTPanguForCausalLM"
   ],
   "attn_pdrop": 0.1,
-  "bos_token_id": 9,
   "embd_pdrop": 0.1,
-  "eos_token_id": 9,
   "hidden_size": 1024,
   "initializer_range": 0.02,
   "intermediate_size": null,
@@ -23,9 +21,7 @@
   "summary_type": "cls_index",
   "summary_use_proj": true,
   "torch_dtype": "float32",
-  "vocab_size": 40000,  
-
-
+  "vocab_size": 40000,
   "tokenizer_class": "GPTPanguTokenizer",
   "auto_map": {
     "AutoConfig": "configuration_gptpangu.GPTPanguConfig",
