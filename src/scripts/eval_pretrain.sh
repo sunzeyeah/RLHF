@@ -37,6 +37,6 @@ do
       --temperature 0.8 \
       --num_return_sequences 1 \
       --max_length_generation 100 \
-      > eval_pretrain_${MODEL}_${TASK}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1
+      > out/eval_pretrain_${MODEL}_${TASK}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1
   done
 done

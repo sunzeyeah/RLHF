@@ -31,4 +31,4 @@ accelerate launch --main_process_port 5007 --config_file $ACCELERATE_CONFIG $MAI
   --do_eval \
   --eval_filename $EVAL_FILENAME \
   --eval_batch_size 16 \
-  > train_rlhf_${MODEL}_"`date "+Y%-%m-%d-%H:%M:%S"`".log 2>&1 &
+  > out/train_rlhf_${MODEL}_"`date "+Y%-%m-%d-%H:%M:%S"`".log 2>&1 &

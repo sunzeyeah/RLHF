@@ -255,6 +255,7 @@ def main():
         device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
         model.eval()
         model.to(device)
+
         if args.task in ["cmrc2018"]:
             def calculate_f1(pred_text, label_text):
                 pred_tokens = tokenizer(pred_text, add_special_tokens=False, return_attention_mask=False, return_token_type_ids=False, return_tensors="pt")['input_ids'][0].tolist()
@@ -286,6 +287,7 @@ def main():
                             outputs = model.generate(**inputs,
                                                      max_new_tokens=args.max_length_generation,
                                                      eos_token_id=tokenizer.eop_token_id,
+                                                     pad_token_id=tokenizer.pad_token_id,
                                                      do_sample=False,
                                                      num_return_sequences=args.num_return_sequences,
                                                      top_p=args.top_p,
@@ -295,6 +297,7 @@ def main():
                             inputs = inputs.to(device)
                             outputs = model.generate(**inputs,
                                                      max_new_tokens=args.max_length_generation,
+                                                     pad_token_id=tokenizer.pad_token_id,
                                                      do_sample=False,
                                                      num_return_sequences=args.num_return_sequences,
                                                      top_p=args.top_p,

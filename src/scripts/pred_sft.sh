@@ -28,4 +28,4 @@ python $MAIN \
   --test_filename $TEST_FILENAME \
   --output_filename $OUTPUT_FILENAME \
   --eval_batch_size 96 \
-  > pred_sft_${MODEL}.log 2>&1 &
+  > out/pred_sft_${MODEL}.log 2>&1 &
