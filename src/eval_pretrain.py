@@ -252,7 +252,9 @@ def main():
         trainer.save_model(args.output_dir)
 
     elif args.do_eval:
-
+        device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
+        model.eval()
+        model.to(device)
         if args.task in ["cmrc2018"]:
             def calculate_f1(pred_text, label_text):
                 pred_tokens = tokenizer(pred_text, add_special_tokens=False, return_attention_mask=False, return_token_type_ids=False, return_tensors="pt")['input_ids'][0].tolist()
@@ -268,63 +270,61 @@ def main():
                 f1 = (2 * precision * recall) / (precision + recall)
                 return f1
 
-            device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
             # text_generator = TextGenerationPipeline(model, tokenizer, device=device)
             ems = []
             f1s = []
             with open(os.path.join(args.output_dir, f"{args.task}_eval_result.jsonl"), "w", encoding="utf-8") as w:
-                for dev_data in tqdm(dev_dataset.post_list, desc="Generation"):
-                    prompt = dev_data['prompt']
-                    label = dev_data['label']
-                    if "glm" in args.model_name_or_path:
-                        prompt += tokenizer.mask_token
-                        inputs = tokenizer(prompt, return_tensors="pt")
-                        inputs = tokenizer.build_inputs_for_generation(inputs, max_gen_length=args.max_length + args.max_length_generation)
-                        inputs = inputs.to(device)
-                        outputs = model.generate(**inputs,
-                                                 max_new_tokens=args.max_length_generation,
-                                                 eos_token_id=tokenizer.eop_token_id,
-                                                 do_sample=False,
-                                                 num_return_sequences=args.num_return_sequences,
-                                                 top_p=args.top_p,
-                                                 temperature=args.temperature)
-                    else:
-                        inputs = tokenizer(prompt, add_special_tokens=False, return_token_type_ids=False, return_tensors="pt")
-                        inputs = inputs.to(device)
-                        outputs = model.generate(**inputs,
-                                                 max_new_tokens=args.max_length_generation,
-                                                 do_sample=False,
-                                                 num_return_sequences=args.num_return_sequences,
-                                                 top_p=args.top_p,
-                                                 temperature=args.temperature)
-                        # outputs = text_generator(prompt, max_length=args.max_length_generation,
-                        #                          do_sample=True, num_return_sequences=args.num_return_sequences,
-                        #                          top_p=args.top_p, temperature=args.temperature)
-                        # results = [output['generated_text'].split("答:", maxsplit=1)[1].replace(tokenizer.eos_token, "").replace(tokenizer.pad_token, "") for output in outputs]
-                    results = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-                    results = [result.split("答:", maxsplit=1)[1] for result in results]
+                with torch.no_grad():
+                    for dev_data in tqdm(dev_dataset.post_list, desc="Generation"):
+                        prompt = dev_data['prompt']
+                        label = dev_data['label']
+                        if "glm" in args.model_name_or_path:
+                            prompt += tokenizer.mask_token
+                            inputs = tokenizer(prompt, return_tensors="pt")
+                            inputs = tokenizer.build_inputs_for_generation(inputs, max_gen_length=args.max_length + args.max_length_generation)
+                            inputs = inputs.to(device)
+                            outputs = model.generate(**inputs,
+                                                     max_new_tokens=args.max_length_generation,
+                                                     eos_token_id=tokenizer.eop_token_id,
+                                                     do_sample=False,
+                                                     num_return_sequences=args.num_return_sequences,
+                                                     top_p=args.top_p,
+                                                     temperature=args.temperature)
+                        else:
+                            inputs = tokenizer(prompt, add_special_tokens=False, return_token_type_ids=False, return_tensors="pt")
+                            inputs = inputs.to(device)
+                            outputs = model.generate(**inputs,
+                                                     max_new_tokens=args.max_length_generation,
+                                                     do_sample=False,
+                                                     num_return_sequences=args.num_return_sequences,
+                                                     top_p=args.top_p,
+                                                     temperature=args.temperature)
+                            # outputs = text_generator(prompt, max_length=args.max_length_generation,
+                            #                          do_sample=True, num_return_sequences=args.num_return_sequences,
+                            #                          top_p=args.top_p, temperature=args.temperature)
+                            # results = [output['generated_text'].split("答:", maxsplit=1)[1].replace(tokenizer.eos_token, "").replace(tokenizer.pad_token, "") for output in outputs]
+                        results = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+                        results = [result.split("答:", maxsplit=1)[1] for result in results]
 
-                    # metrics calculation
-                    em_max = -1
-                    f1_max = -1
-                    for l in label:
-                        for pred_text in results:
-                            label_text = l['text']
-                            em = 1 if pred_text == label_text else 0
-                            f1 = calculate_f1(pred_text, label_text)
-                            w.write(json.dumps({"prompt": prompt, "label": label_text,
-                                                "pred": pred_text, "em": em, "f1": f1}, ensure_ascii=False)+"\n")
-                            if em > em_max:
-                                em_max = em
-                            if f1 > f1_max:
-                                f1_max = f1
-                    ems.append(em_max)
-                    f1s.append(f1_max)
+                        # metrics calculation
+                        em_max = -1
+                        f1_max = -1
+                        for l in label:
+                            for pred_text in results:
+                                label_text = l['text']
+                                em = 1 if pred_text == label_text else 0
+                                f1 = calculate_f1(pred_text, label_text)
+                                w.write(json.dumps({"prompt": prompt, "label": label_text,
+                                                    "pred": pred_text, "em": em, "f1": f1}, ensure_ascii=False)+"\n")
+                                if em > em_max:
+                                    em_max = em
+                                if f1 > f1_max:
+                                    f1_max = f1
+                        ems.append(em_max)
+                        f1s.append(f1_max)
 
             logger.info(f"em={np.mean(ems)}, f1={np.mean(f1s)}")
         else:
-            device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
-
             sampler = SequentialSampler(dev_dataset)
             dev_dataloader = DataLoader(dev_dataset, sampler=sampler, batch_size=args.eval_batch_size)
 
@@ -332,8 +332,7 @@ def main():
             input_ids_list = []
             label_list = []
             ls_list = []
-            model.eval()
-            model.to(device)
+
             with torch.no_grad():
                 for batch in tqdm(dev_dataloader, desc="Evaluation"):
                     input_ids = batch['input_ids'].squeeze(1).to(device)
