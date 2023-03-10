@@ -429,8 +429,6 @@ class CMRCDataset(Dataset):
         label = data['label']
         encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
                                       padding="max_length", truncation="longest_first", return_tensors="pt")
-        # label_dict = self.tokenizer(label, max_length=self.args.max_length, add_special_tokens=False,
-        #                             return_attention_mask=False, return_token_type_ids=False, return_tensors="pt")
 
         return {
             "input_ids": encoded_dict["input_ids"],
