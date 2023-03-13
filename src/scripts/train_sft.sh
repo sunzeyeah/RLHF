@@ -8,8 +8,8 @@ DATR_DIR=$ROOT/Data/chatgpt/processed
 MAIN=$ROOT/Code/RLHF/src/train_sft.py
 MODEL_PATH=$ROOT/Data/models/$MODEL
 OUTPUT_DIR=$ROOT/Data/chatgpt/output/sft/$MODEL
-TRAIN_FILENAME="baike_qa_train.json"
-EVAL_FILENAME="baike_qa_valid.json"
+TRAIN_FILENAME="train_data_external_v1.jsonl"
+EVAL_FILENAME="dev_data_external_v1.jsonl"
 
 cd $ROOT/Code/RLHF || exit
 mkdir -p $OUTPUT_DIR

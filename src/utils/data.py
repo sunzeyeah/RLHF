@@ -60,12 +60,19 @@ class PairwiseDataset(Dataset):
                 item = json.loads(line)
                 prompt = clean_text(item['prompt'])
                 answers = item['answers']
-                chosen_answer = answers[0]["answer"]
-                for answer in answers[1:]:
-                    rejected_answer = answer["answer"]
+                chosen_answer, rejected_answer = None, None
+                for i in range(len(answers)-1):
+                    answer_1 = clean_text(answers[i]["answer"])
+                    answer_1_score = answers[i]["score"]
+                    answer_2 = clean_text(answers[i+1]["answer"])
+                    answer_2_score = answers[i+1]["score"]
+                    if answer_1_score > answer_2_score:
+                        chosen_answer = answer_1
+                    rejected_answer = answer_2
                     # if (len(prompt) + len(rejected_answer) > max_length) or (len(prompt) + len(chosen_answer) > max_length):
                     #     discard += 1
                     # else:
+                    assert chosen_answer is not None
                     pair = {
                         "prompt": prompt,
                         "chosen_answer": chosen_answer,
