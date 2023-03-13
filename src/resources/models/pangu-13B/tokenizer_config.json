@@ -1,0 +1,16 @@
+{
+  "eos_token": "<eot>",
+  "pad_token": "<pad>",
+  "unk_token": "<unk>",
+  "sep_token": "<sep>",
+  "bos_token": "<s>",
+  "add_prefix_space": false,
+  "tokenizer_class": "GPTPanguTokenizer",
+  "use_fast": false,
+  "auto_map": {
+    "AutoTokenizer": [
+      "tokenization_gptpangu.GPTPanguTokenizer",
+      null
+      ]
+  }
+}
