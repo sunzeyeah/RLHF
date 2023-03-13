@@ -26,6 +26,8 @@ python $MAIN \
   --train_filename $TRAIN_FILENAME \
   --train_batch_size 16 \
   --gradient_accumulation_steps 8 \
+  --save_strategy "steps" \
+  --save_steps 1000 \
   --num_epochs 1 \
   --deepspeed_config "ds_config_reward_pangu.json" \
   --checkpoint $CHECKPOINT \
