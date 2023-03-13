@@ -2,7 +2,7 @@
 import sys
 sys.path.insert(0, "/root/autodl-tmp/Code/RLHF")
 sys.path.insert(0, "/mnt/private-pa002-vol726121-prd/Code/RLHF")
-
+import glob
 import os
 import torch
 import argparse
@@ -86,8 +86,13 @@ def main():
     # Initialize the reward model from the (supervised) fine-tuned SFT model
     reward_model = GPTRewardModel(model, tokenizer)
     if args.checkpoint is not None:
-        st = torch.load(args.checkpoint, map_location="cpu")
+        checkpoints = glob.glob(args.checkpoint)
+        st = dict()
+        for checkpoint in checkpoints:
+            st.update(torch.load(checkpoint, map_location="cpu"))
         reward_model.load_state_dict(st)
+        # st = torch.load(args.checkpoint, map_location="cpu")
+        # reward_model.load_state_dict(st)
     logger.info(f"Finished loading model and tokenizer")
 
     # Freeze the first 70% of the hidden layers of the reward model backbone
