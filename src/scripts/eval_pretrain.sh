@@ -1,8 +1,8 @@
 #!/bin/bash
 
-for TASK in  "chid" "c3" "tnews" "cmrc2018" #"cluewsc2020" "afqmc" "csl" "iflytek" "ocnli" "cmnli"
+for TASK in  "chid" "c3" "tnews" "cmrc2018" "cluewsc2020" "afqmc" "csl" "iflytek" "ocnli" "cmnli"
 do
-  for MODEL in "pangu-350M" "pangu-2.6B" "glm-335M-chinese" #"glm-10B-chinese"
+  for MODEL in "pangu-350M" "pangu-2.6B" "glm-335M-chinese" #"glm-10B-chinese" "pangu-13B"
   do
     ROOT="/mnt/private-pa002-vol726121-prd/"
     #ROOT="/root/autodl-tmp/"
@@ -11,12 +11,15 @@ do
     MODEL_PATH=$ROOT/Data/models/$MODEL
     OUTPUT_DIR=$ROOT/Data/chatgpt/output/pretrain/$MODEL
     EVAL_FILENAME="dev.json"
-    if [ $MODEL == "pangu-350M" ] || [ $MODEL == "glm-335M-chinese" ]
-    then
-      BATCH_SIZE=32
-    else
-      BATCH_SIZE=8
-    fi
+    TRAIN_FILENAME="train.json"
+    case $MODEL in
+       "pangu-2.6B")
+          BATCH_SIZE=8
+          ;;
+       *)
+         BATCH_SIZE=32
+         ;;
+    esac
 
     cd $ROOT/Code/RLHF || exit
     mkdir -p $OUTPUT_DIR
@@ -31,6 +34,7 @@ do
       --task $TASK \
       --max_length 512 \
       --do_eval \
+      --train_filename $TRAIN_FILENAME \
       --eval_filename $EVAL_FILENAME \
       --eval_batch_size $BATCH_SIZE \
       --top_p 0.8 \

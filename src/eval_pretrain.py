@@ -358,7 +358,11 @@ def main():
             ct = 0
             ct_acc = 0
             ppls = []
-            with open(os.path.join(args.output_dir, f"{args.task}_eval_result.jsonl"), "w", encoding="utf-8") as w:
+            if args.train_filename is None:
+                f = os.path.join(args.output_dir, f"{args.task}_zeroshot_eval_result.jsonl")
+            else:
+                f = os.path.join(args.output_dir, f"{args.task}_fewshot_eval_result.jsonl")
+            with open(f, "w", encoding="utf-8") as w:
                 for i, (input_ids, label, ls, ppl) in enumerate(zip(input_ids_list, label_list, ls_list, ppl_list)):
                     ppls.append(ppl)
                     prompt = tokenizer.batch_decode(input_ids, skip_special_tokens=True)[0]
