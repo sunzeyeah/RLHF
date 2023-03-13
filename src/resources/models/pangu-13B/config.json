@@ -22,7 +22,7 @@
   "summary_use_proj": true,
   "torch_dtype": "float32",
   "use_cache": true,
-  "vocab_size": 40000,  
+  "vocab_size": 40064,
 
 
   "tokenizer_class": "GPTPanguTokenizer",
