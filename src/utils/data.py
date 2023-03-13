@@ -72,13 +72,13 @@ class PairwiseDataset(Dataset):
                     # if (len(prompt) + len(rejected_answer) > max_length) or (len(prompt) + len(chosen_answer) > max_length):
                     #     discard += 1
                     # else:
-                    assert chosen_answer is not None
-                    pair = {
-                        "prompt": prompt,
-                        "chosen_answer": chosen_answer,
-                        "rejected_answer": rejected_answer
-                    }
-                    pairs.append(pair)
+                    if chosen_answer is not None:
+                        pair = {
+                            "prompt": prompt,
+                            "chosen_answer": chosen_answer,
+                            "rejected_answer": rejected_answer
+                        }
+                        pairs.append(pair)
         logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return pairs
