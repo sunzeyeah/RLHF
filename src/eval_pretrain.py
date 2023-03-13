@@ -105,6 +105,7 @@ def get_parser():
                              '- `"epoch"`: Evaluation is done at the end of each epoch.')
     parser.add_argument("--eval_steps", type=int, default=None)
     parser.add_argument("--eval_accumulation_steps", type=int, default=1)
+    parser.add_argument("--max_few_shot", type=int, default=15, help="Maximum number of examples in few-shot evaulation")
     # pred
     parser.add_argument("--do_pred", action="store_true")
     parser.add_argument("--checkpoint", type=str, default=None)
@@ -151,8 +152,9 @@ def main():
     else:
         train_dataset = None
     if args.do_eval:
+        train_filename = os.path.join(args.data_dir, args.train_filename) if args.train_filename is not None else None
         dev_dataset = dataset(args, os.path.join(args.data_dir, args.eval_filename),
-                              tokenizer)
+                              tokenizer, train_filename)
     else:
         dev_dataset = None
     if args.do_pred:
@@ -408,11 +410,6 @@ def test():
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
     if "pangu" in args.model_name_or_path:
         model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-        # model.resize_token_embeddings(len(tokenizer.sp))
-        # model.config.bos_token_id = tokenizer.bos_token_id
-        # model.config.end_token_id = tokenizer.eos_token_id
-        # model.config.pad_token_id = tokenizer.pad_token_id
-        # model.config.max_length_prompt = args.max_length_prompt
     else:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
 

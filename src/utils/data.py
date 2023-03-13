@@ -249,12 +249,14 @@ class AllSummDataset(Dataset):
 
 
 class OCNLIDataset(Dataset):
-    def __init__(self, args, filename, tokenizer):
+    def __init__(self, args, eval_filename, tokenizer, train_filename=None):
         self.tokenizer = tokenizer
         self.args = args
         self.label_dict = {'entailment': 'Yes', 'neutral': 'Maybe', 'contradiction': 'No'}
 
-        dataset = self.load_dataset(filename)
+        dataset = self.load_dataset(eval_filename)
+        if train_filename is not None:
+            self.labelled_list = self.load_dataset(eval_filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -267,6 +269,23 @@ class OCNLIDataset(Dataset):
         data = self.post_list[idx]
         prompt = data['prompt']
         label = data['label']
+
+        # Few-Shot example construction
+        if hasattr(self, "labelled_list"):
+            examples = random.sample(self.labelled_list, min(len(self.labelled_list), self.args.max_few_shot))
+            prompts = []
+            prompt_tokens = self.tokenizer.tokenize(prompt)
+            for example in examples:
+                example_prompt = example['prompt']
+                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
+                    break
+                else:
+                    prompts.append(example_prompt)
+                    prompt_tokens.extend(exmample_tokens)
+            prompts.append(prompt)
+            prompt = "\n".join(prompts)
+
         encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
                                       padding="max_length", truncation="longest_first", return_tensors="pt")
 
@@ -301,12 +320,14 @@ class OCNLIDataset(Dataset):
 
 
 class CMNLIDataset(Dataset):
-    def __init__(self, args, filename, tokenizer):
+    def __init__(self, args, eval_filename, tokenizer, train_filename=None):
         self.tokenizer = tokenizer
         self.args = args
         self.label_dict = {'entailment': 'Yes', 'neutral': 'Maybe', 'contradiction': 'No'}
 
-        dataset = self.load_dataset(filename)
+        dataset = self.load_dataset(eval_filename)
+        if train_filename is not None:
+            self.labelled_list = self.load_dataset(eval_filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -319,6 +340,23 @@ class CMNLIDataset(Dataset):
         data = self.post_list[idx]
         prompt = data['prompt']
         label = data['label']
+
+        # Few-Shot example construction
+        if hasattr(self, "labelled_list"):
+            examples = random.sample(self.labelled_list, min(len(self.labelled_list), self.args.max_few_shot))
+            prompts = []
+            prompt_tokens = self.tokenizer.tokenize(prompt)
+            for example in examples:
+                example_prompt = example['prompt']
+                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
+                    break
+                else:
+                    prompts.append(example_prompt)
+                    prompt_tokens.extend(exmample_tokens)
+            prompts.append(prompt)
+            prompt = "\n".join(prompts)
+
         encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
                                       padding="max_length", truncation="longest_first", return_tensors="pt")
         # label_dict = self.tokenizer(label, max_length=self.args.max_length, add_special_tokens=False,
@@ -355,12 +393,14 @@ class CMNLIDataset(Dataset):
 
 
 class CHIDDataset(Dataset):
-    def __init__(self, args, filename, tokenizer):
+    def __init__(self, args, eval_filename, tokenizer, train_filename=None):
         self.tokenizer = tokenizer
         self.args = args
 
         self.idiom_dict = self.load_idiom_dict()
-        dataset = self.load_dataset(filename)
+        dataset = self.load_dataset(eval_filename)
+        if train_filename is not None:
+            self.labelled_list = self.load_dataset(eval_filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -374,6 +414,23 @@ class CHIDDataset(Dataset):
         prompt = data['prompt']
         label = data['label']
         candidates = data['candidates']
+
+        # Few-Shot example construction
+        if hasattr(self, "labelled_list"):
+            examples = random.sample(self.labelled_list, min(len(self.labelled_list), self.args.max_few_shot))
+            prompts = []
+            prompt_tokens = self.tokenizer.tokenize(prompt)
+            for example in examples:
+                example_prompt = example['prompt']
+                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
+                    break
+                else:
+                    prompts.append(example_prompt)
+                    prompt_tokens.extend(exmample_tokens)
+            prompts.append(prompt)
+            prompt = "\n".join(prompts)
+
         encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
                                       padding="max_length", truncation="longest_first", return_tensors="pt")
         # label_dict = self.tokenizer(label, max_length=self.args.max_length, add_special_tokens=False,
@@ -410,6 +467,7 @@ class CHIDDataset(Dataset):
 
     def load_idiom_dict(self):
         idiom_dict = json.load(open(os.path.join(self.args.data_dir, "dev_answer.json"), "r", encoding="utf-8"))
+        idiom_dict.update(json.load(open(os.path.join(self.args.data_dir, "train_answer.json"), "r", encoding="utf-8")))
 
         logger.info(f"Finished loading idiom dict")
 
@@ -417,11 +475,13 @@ class CHIDDataset(Dataset):
 
 
 class CMRCDataset(Dataset):
-    def __init__(self, args, filename, tokenizer):
+    def __init__(self, args, eval_filename, tokenizer, train_filename=None):
         self.tokenizer = tokenizer
         self.args = args
 
-        dataset = self.load_dataset(filename)
+        dataset = self.load_dataset(eval_filename)
+        if train_filename is not None:
+            self.labelled_list = self.load_dataset(eval_filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -434,6 +494,23 @@ class CMRCDataset(Dataset):
         data = self.post_list[idx]
         prompt = data['prompt']
         label = data['label']
+
+        # Few-Shot example construction
+        if hasattr(self, "labelled_list"):
+            examples = random.sample(self.labelled_list, min(len(self.labelled_list), self.args.max_few_shot))
+            prompts = []
+            prompt_tokens = self.tokenizer.tokenize(prompt)
+            for example in examples:
+                example_prompt = example['prompt']
+                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
+                    break
+                else:
+                    prompts.append(example_prompt)
+                    prompt_tokens.extend(exmample_tokens)
+            prompts.append(prompt)
+            prompt = "\n".join(prompts)
+
         encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
                                       padding="max_length", truncation="longest_first", return_tensors="pt")
 
@@ -470,11 +547,14 @@ class CMRCDataset(Dataset):
 
 
 class CLUEWSCDataset(Dataset):
-    def __init__(self, args, filename, tokenizer):
+    def __init__(self, args, eval_filename, tokenizer, train_filename=None):
         self.tokenizer = tokenizer
         self.args = args
         self.label_dict = {'true': '1', 'false': '0'}
-        dataset = self.load_dataset(filename)
+
+        dataset = self.load_dataset(eval_filename)
+        if train_filename is not None:
+            self.labelled_list = self.load_dataset(eval_filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -487,6 +567,23 @@ class CLUEWSCDataset(Dataset):
         data = self.post_list[idx]
         prompt = data['prompt']
         label = data['label']
+
+        # Few-Shot example construction
+        if hasattr(self, "labelled_list"):
+            examples = random.sample(self.labelled_list, min(len(self.labelled_list), self.args.max_few_shot))
+            prompts = []
+            prompt_tokens = self.tokenizer.tokenize(prompt)
+            for example in examples:
+                example_prompt = example['prompt']
+                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
+                    break
+                else:
+                    prompts.append(example_prompt)
+                    prompt_tokens.extend(exmample_tokens)
+            prompts.append(prompt)
+            prompt = "\n".join(prompts)
+
         encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
                                       padding="max_length", truncation="longest_first", return_tensors="pt")
         # label_dict = self.tokenizer(label, max_length=self.args.max_length, add_special_tokens=False,
@@ -521,11 +618,13 @@ class CLUEWSCDataset(Dataset):
 
 
 class C3Dataset(Dataset):
-    def __init__(self, args, filename, tokenizer):
+    def __init__(self, args, eval_filename, tokenizer, train_filename=None):
         self.tokenizer = tokenizer
         self.args = args
 
-        dataset = self.load_dataset(filename)
+        dataset = self.load_dataset(eval_filename)
+        if train_filename is not None:
+            self.labelled_list = self.load_dataset(eval_filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -539,6 +638,24 @@ class C3Dataset(Dataset):
         prompt = data['prompt']
         label = data['label']
         candidates = data['candidates']
+
+        # Few-Shot example construction
+        if hasattr(self, "labelled_list"):
+            examples = random.sample(self.labelled_list, min(len(self.labelled_list), self.args.max_few_shot))
+            prompts = []
+            prompt_tokens = self.tokenizer.tokenize(prompt)
+            for example in examples:
+                example_prompt = example['prompt']
+                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
+                    break
+                else:
+                    prompts.append(example_prompt)
+                    prompt_tokens.extend(exmample_tokens)
+            prompts.append(prompt)
+            prompt = "\n".join(prompts)
+
+
         encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
                                       padding="max_length", truncation="longest_first", return_tensors="pt")
         # label_dict = self.tokenizer(label, max_length=self.args.max_length, add_special_tokens=False,
@@ -576,12 +693,14 @@ class C3Dataset(Dataset):
 
 
 class AFQMCDataset(Dataset):
-    def __init__(self, args, filename, tokenizer):
+    def __init__(self, args, eval_filename, tokenizer, train_filename=None):
         self.tokenizer = tokenizer
         self.args = args
         self.label_dict = {'0': '不同', '1': '相同'}
 
-        dataset = self.load_dataset(filename)
+        dataset = self.load_dataset(eval_filename)
+        if train_filename is not None:
+            self.labelled_list = self.load_dataset(eval_filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -594,6 +713,23 @@ class AFQMCDataset(Dataset):
         data = self.post_list[idx]
         prompt = data['prompt']
         label = data['label']
+
+        # Few-Shot example construction
+        if hasattr(self, "labelled_list"):
+            examples = random.sample(self.labelled_list, min(len(self.labelled_list), self.args.max_few_shot))
+            prompts = []
+            prompt_tokens = self.tokenizer.tokenize(prompt)
+            for example in examples:
+                example_prompt = example['prompt']
+                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
+                    break
+                else:
+                    prompts.append(example_prompt)
+                    prompt_tokens.extend(exmample_tokens)
+            prompts.append(prompt)
+            prompt = "\n".join(prompts)
+
         encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
                                       padding="max_length", truncation="longest_first", return_tensors="pt")
         # label_dict = self.tokenizer(label, max_length=self.args.max_length, add_special_tokens=False,
@@ -627,12 +763,14 @@ class AFQMCDataset(Dataset):
 
 
 class CSLDataset(Dataset):
-    def __init__(self, args, filename, tokenizer):
+    def __init__(self, args, eval_filename, tokenizer, train_filename=None):
         self.tokenizer = tokenizer
         self.args = args
         self.label_dict = {'0': '不是', '1': '是'}
 
-        dataset = self.load_dataset(filename)
+        dataset = self.load_dataset(eval_filename)
+        if train_filename is not None:
+            self.labelled_list = self.load_dataset(eval_filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -645,6 +783,23 @@ class CSLDataset(Dataset):
         data = self.post_list[idx]
         prompt = data['prompt']
         label = data['label']
+
+        # Few-Shot example construction
+        if hasattr(self, "labelled_list"):
+            examples = random.sample(self.labelled_list, min(len(self.labelled_list), self.args.max_few_shot))
+            prompts = []
+            prompt_tokens = self.tokenizer.tokenize(prompt)
+            for example in examples:
+                example_prompt = example['prompt']
+                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
+                    break
+                else:
+                    prompts.append(example_prompt)
+                    prompt_tokens.extend(exmample_tokens)
+            prompts.append(prompt)
+            prompt = "\n".join(prompts)
+
         encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
                                       padding="max_length", truncation="longest_first", return_tensors="pt")
         # label_dict = self.tokenizer(label, max_length=self.args.max_length, add_special_tokens=False,
@@ -678,12 +833,14 @@ class CSLDataset(Dataset):
 
 
 class IFLYTEKDataset(Dataset):
-    def __init__(self, args, filename, tokenizer):
+    def __init__(self, args, eval_filename, tokenizer, train_filename=None):
         self.tokenizer = tokenizer
         self.args = args
         self.label_dict = {'0': '打车', '1': '地图导航', '2': '免费WIFI', '3': '租车', '4': '同城服务', '5': '快递物流', '6': '婚庆', '7': '家政', '8': '公共交通', '9': '政务', '10': '社区服务', '11': '薅羊毛', '12': '魔幻', '13': '仙侠', '14': '卡牌', '15': '飞行空战', '16': '射击游戏', '17': '休闲益智', '18': '动作类', '19': '体育竞技', '20': '棋牌中心', '21': '经营养成', '22': '策略', '23': 'MOBA', '24': '辅助工具', '25': '约会社交', '26': '即时通讯', '27': '工作社交', '28': '论坛圈子', '29': '婚恋社交', '30': '情侣社交', '31': '社交工具', '32': '生活社交', '33': '微博博客', '34': '新闻', '35': '漫画', '36': '小说', '37': '技术', '38': '教辅', '39': '问答交流', '40': '搞笑', '41': '杂志', '42': '百科', '43': '影视娱乐', '44': '求职', '45': '兼职', '46': '视频', '47': '短视频', '48': '音乐', '49': '直播', '50': '电台', '51': 'K歌', '52': '成人', '53': '中小学', '54': '职考', '55': '公务员', '56': '英语', '57': '视频教育', '58': '高等教育', '59': '成人教育', '60': '艺术', '61': '语言(非英语)', '62': '旅游资讯', '63': '综合预定', '64': '民航', '65': '铁路', '66': '酒店', '67': '行程管理', '68': '民宿短租', '69': '出国', '70': '工具', '71': '亲子儿童', '72': '母婴', '73': '驾校', '74': '违章', '75': '汽车咨询', '76': '汽车交易', '77': '日常养车', '78': '行车辅助', '79': '租房', '80': '买房', '81': '装修家居', '82': '电子产品', '83': '问诊挂号', '84': '养生保健', '85': '医疗服务', '86': '减肥瘦身', '87': '美妆美业', '88': '菜谱', '89': '餐饮店', '90': '体育咨讯', '91': '运动健身', '92': '支付', '93': '保险', '94': '股票', '95': '借贷', '96': '理财', '97': '彩票', '98': '记账', '99': '银行', '100': '美颜', '101': '影像剪辑', '102': '摄影修图', '103': '相机', '104': '绘画', '105': '二手', '106': '电商', '107': '团购', '108': '外卖', '109': '电影票务', '110': '社区超市', '111': '购物咨询', '112': '笔记', '113': '办公', '114': '日程管理', '115': '女性', '116': '经营', '117': '收款', '118': '其他'}
 
-        dataset = self.load_dataset(filename)
+        dataset = self.load_dataset(eval_filename)
+        if train_filename is not None:
+            self.labelled_list = self.load_dataset(eval_filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -697,6 +854,23 @@ class IFLYTEKDataset(Dataset):
         prompt = data['prompt']
         label = data['label']
         candidates = data['candidates']
+
+        # Few-Shot example construction
+        if hasattr(self, "labelled_list"):
+            examples = random.sample(self.labelled_list, min(len(self.labelled_list), self.args.max_few_shot))
+            prompts = []
+            prompt_tokens = self.tokenizer.tokenize(prompt)
+            for example in examples:
+                example_prompt = example['prompt']
+                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
+                    break
+                else:
+                    prompts.append(example_prompt)
+                    prompt_tokens.extend(exmample_tokens)
+            prompts.append(prompt)
+            prompt = "\n".join(prompts)
+
         encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
                                       padding="max_length", truncation="longest_first", return_tensors="pt")
         # label_dict = self.tokenizer(label, max_length=self.args.max_length, add_special_tokens=False,
@@ -734,7 +908,7 @@ class IFLYTEKDataset(Dataset):
 
 
 class TNEWSDataset(Dataset):
-    def __init__(self, args, filename, tokenizer):
+    def __init__(self, args, eval_filename, tokenizer, train_filename=None):
         self.tokenizer = tokenizer
         self.args = args
         self.label_dict = {'100': '故事',
@@ -753,7 +927,9 @@ class TNEWSDataset(Dataset):
                            '115': '农业',
                            '116': '游戏'}
 
-        dataset = self.load_dataset(filename)
+        dataset = self.load_dataset(eval_filename)
+        if train_filename is not None:
+            self.labelled_list = self.load_dataset(eval_filename)
         self.post_list = dataset
 
         for k in range(5):
@@ -767,6 +943,23 @@ class TNEWSDataset(Dataset):
         prompt = data['prompt']
         label = data['label']
         candidates = data['candidates']
+
+        # Few-Shot example construction
+        if hasattr(self, "labelled_list"):
+            examples = random.sample(self.labelled_list, min(len(self.labelled_list), self.args.max_few_shot))
+            prompts = []
+            prompt_tokens = self.tokenizer.tokenize(prompt)
+            for example in examples:
+                example_prompt = example['prompt']
+                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
+                    break
+                else:
+                    prompts.append(example_prompt)
+                    prompt_tokens.extend(exmample_tokens)
+            prompts.append(prompt)
+            prompt = "\n".join(prompts)
+
         encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
                                       padding="max_length", truncation="longest_first", return_tensors="pt")
         # label_dict = self.tokenizer(label, max_length=self.args.max_length, add_special_tokens=False,
