@@ -90,9 +90,9 @@ def main():
         st = dict()
         for checkpoint in checkpoints:
             st.update(torch.load(checkpoint, map_location="cpu"))
-        reward_model.load_state_dict(st)
+        reward_model.load_state_dict(st, strict=False)
         # st = torch.load(args.checkpoint, map_location="cpu")
-        # reward_model.load_state_dict(st)
+        # reward_model.load_state_dict(st, strict=False)
     logger.info(f"Finished loading model and tokenizer")
 
     # Freeze the first 70% of the hidden layers of the reward model backbone
