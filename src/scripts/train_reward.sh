@@ -2,15 +2,15 @@
 
 MODEL="pangu-2.6B"
 
-#ROOT="/mnt/private-pa002-vol726121-prd/"
-ROOT="/root/autodl-tmp/"
+#ROOT="/mnt/private-pa002-vol726121-prd"
+ROOT="/root/autodl-tmp"
 DATR_DIR=$ROOT/Data/chatgpt/processed
 MAIN=$ROOT/Code/RLHF/src/train_reward.py
 MODEL_PATH=$ROOT/Data/models/$MODEL
 OUTPUT_DIR=$ROOT/Data/chatgpt/output/reward/$MODEL
 TRAIN_FILENAME="train_data_external_v1.jsonl"
 EVAL_FILENAME="dev_data_external_v1.jsonl"
-CHECKPOINT="${ROOT}/Data/chatgpt/output/sft/${MODEL}/pytorch_model*.bin"
+CHECKPOINT="${ROOT}/Data/chatgpt/output/sft/${MODEL}/pytorch_modelstar.bin"
 
 cd $ROOT/Code/RLHF || exit
 mkdir -p $OUTPUT_DIR

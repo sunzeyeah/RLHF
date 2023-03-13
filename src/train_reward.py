@@ -86,7 +86,7 @@ def main():
     # Initialize the reward model from the (supervised) fine-tuned SFT model
     reward_model = GPTRewardModel(model, tokenizer)
     if args.checkpoint is not None:
-        checkpoints = glob.glob(args.checkpoint)
+        checkpoints = glob.glob(args.checkpoint.replace("star", "*"))
         st = dict()
         for checkpoint in checkpoints:
             st.update(torch.load(checkpoint, map_location="cpu"))
