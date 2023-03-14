@@ -56,13 +56,13 @@ pip install -e .
 | [古诗词](https://github.com/chinese-poetry/chinese-poetry)  | 87MB | [chinese poetry](https://pan.baidu.com/s/13uvkA96PdKpKB7ZQ2GkXZQ) | 5zzj |
 | 微博新闻评论  | 522MB | [weibo summary comments](https://pan.baidu.com/s/1h45O0q6gQl3LbH-NjzuRlw) | w0g1 |
 
-**PS**: SFT & Reward Data基于百科、知道问答、对联、古文、古诗词、微博新闻评论数据构造，可直接用于SFT和Reward阶段训练，详见[data_prepare.py](./src/data_prepare.py)
+**PS**: SFT & Reward Data基于百科、知道问答、对联、古文、古诗词、微博新闻评论数据构造，可直接用于SFT和Reward阶段训练。详见[data_prepare.py](./src/data_prepare.py)
 
 
 ## Usage
 
 ### 1. LLM模型评测
-对开源中文LLM进行ZeroShot、OneShot或FewShot的评测，评测任务和数据集使用[CLUEBenchmark](https://github.com/CLUEbenchmark/CLUE) 。评测方法和prompt模板参考[Pangu-alpha论文](https://arxiv.org/abs/2104.12369) ，详见[eval_pretrain.py](./src/eval_pretrain.py) 和 [data.py](./src/utils/data.py)
+对开源中文LLM进行ZeroShot、OneShot或FewShot的评测，评测任务和数据集使用[CLUEBenchmark](https://github.com/CLUEbenchmark/CLUE) ，评测方法和prompt模板参考[Pangu-alpha论文](https://arxiv.org/abs/2104.12369) 。详见[eval_pretrain.py](./src/eval_pretrain.py) 和 [data.py](./src/utils/data.py)
 
 目前支持5个开源模型: 
 - Pangu-350M
@@ -90,7 +90,7 @@ bash train_reward.sh
 ```
 
 ### 4. RLHF
-基于PPO算法进一步训练SFT模型
+利用PPO算法和Reward Model，进一步更新SFT模型。基于开源RLHF框架[trlx](https://github.com/CarperAI/trlx) 实现
 ```bash
 cd examples
 bash train_rlhf.sh
@@ -104,17 +104,17 @@ bash train_rlhf.sh
 
 <table>
     <tr>  <td rowspan="2">Dataset</td>  <td rowspan="2">Method</td>  <td rowspan="2">Metrics</td>  <td rowspan="2">Task Type</td>  <td colspan="5" style="text-align:center">Zero-shot</td>  <td colspan="5" style="text-align:center">Few-shot</td> </tr>
-    <tr>  <td>Pangu-350M</td>  <td>Pangu-2.6B</td>  <td>Pangu-13B</td>  <td>GLM-335M-chinese</td>  <td>GLM-10B-chinese</td>  <td>Pangu-350M</td>  <td>Pangu-2.6B</td>  <td>Pangu-13B</td>  <td>GLM-335M-chinese</td>  <td>GLM-10B-chinese</td> </tr>
-    <tr>  <td>OCNLI</td>  <td>PPL</td>  <td>acc</td>  <td>NLI</td>  <td>0.3369</td>  <td>0.3061</td>  <td>0.3074</td>  <td></td>  <td></td>  <td>0.3352</td>  <td>0.3216</td>  <td>0.3298</td>  <td></td>  <td></td> </tr>
-    <tr>  <td>CMNLI</td>  <td>PPL</td>  <td>acc</td>  <td>NLI</td>  <td>0.3302</td>  <td>0.3310</td>  <td>0.3279</td>  <td></td>  <td></td>  <td>0.3328</td>  <td>0.3300</td>  <td></td>  <td></td>  <td></td> </tr>
-    <tr>  <td>CHID</td>  <td>PPL</td>  <td>acc</td>  <td>Cloze(multi-choices)</td>  <td>0.0916</td>  <td>0.0670</td>  <td>0.0734</td>  <td></td>  <td>0.1016</td>  <td></td>  <td></td>  <td></td>  <td></td>  <td></td> </tr>
-    <tr>  <td>CMRC2018</td>  <td>generation</td>  <td>f1</td>  <td>MRC</td>  <td>0.0979</td>  <td>0.1007</td>  <td>0.093</td>  <td></td>  <td>0.1392</td>  <td></td>  <td></td>  <td></td>  <td></td>  <td></td> </tr>
-    <tr>  <td>CLUEWSC2020</td>  <td>PPL</td>  <td>acc</td>  <td>WSC</td>  <td>0.5328</td>  <td>0.5592</td>  <td>0.4934</td>  <td></td>  <td>0.5131</td>  <td>0.4473</td>  <td>0.4671</td>  <td>0.5526</td>  <td></td>  <td></td> </tr>
-    <tr>  <td>C3</td>  <td>PPL</td>  <td>acc</td>  <td>Common sense reasoning</td>  <td>0.2426</td>  <td>0.2418</td>  <td>0.2360</td>  <td></td>  <td>0.2573</td>  <td></td>  <td></td>  <td></td>  <td></td>  <td></td> </tr>
-    <tr>  <td>AFQMC</td>  <td>PPL</td>  <td>acc</td>  <td>Text classification</td>  <td>0.4582</td>  <td>0.4914</td>  <td>0.6306</td>  <td></td>  <td>0.4960</td>  <td>0.4993</td>  <td>0.5018</td>  <td>0.4872</td>  <td></td>  <td></td> </tr>
-    <tr>  <td>CSL</td>  <td>PPL</td>  <td>acc</td>  <td>Text classification</td>  <td>0.4913</td>  <td>0.4666</td>  <td>0.4943</td>  <td></td>  <td>0.5126</td>  <td>0.5036</td>  <td>0.4973</td>  <td>0.514</td>  <td></td>  <td></td> </tr>
-    <tr>  <td>IFLYTEK</td>  <td>PPL</td>  <td>acc</td>  <td>Text classification</td>  <td>0.3058</td>  <td>0.265</td>  <td>0.1292</td>  <td></td>  <td>0.2620</td>  <td>0.2535</td>  <td>0.2524</td>  <td>0.2539</td>  <td></td>  <td></td> </tr>
-    <tr>  <td>TNEWS</td>  <td>PPL</td>  <td>acc</td>  <td>Text classification</td>  <td>0.2022</td>  <td>0.2449</td>  <td>0.1582</td>  <td></td>  <td>0.2489</td>  <td></td>  <td></td>  <td></td>  <td></td>  <td></td> </tr>
+    <tr>  <td>GLM-335M-chinese</td>  <td>Pangu-350M</td>  <td>Pangu-2.6B</td>  <td>GLM-10B-chinese</td>  <td>Pangu-13B</td>  <td>GLM-335M-chinese</td>  <td>Pangu-350M</td>  <td>Pangu-2.6B</td>  <td>GLM-10B-chinese</td>  <td>Pangu-13B</td> </tr>
+    <tr>  <td>OCNLI</td>  <td>PPL</td>  <td>acc</td>  <td>NLI</td>  <td>0.3074</td>  <td>0.3369</td>  <td>0.3061</td>  <td>0.3288</td>  <td></td>  <td>0.3298</td>  <td>0.3352</td>  <td>0.3216</td>  <td></td>  <td></td> </tr>
+    <tr>  <td>CMNLI</td>  <td>PPL</td>  <td>acc</td>  <td>NLI</td>  <td>0.3279</td>  <td>0.3302</td>  <td>0.3310</td>  <td>0.3338</td>  <td></td>  <td></td>  <td>0.3328</td>  <td>0.3300</td>  <td></td>  <td></td> </tr>
+    <tr>  <td>CHID</td>  <td>PPL</td>  <td>acc</td>  <td>Cloze(multi-choices)</td>  <td>0.0734</td>  <td>0.0916</td>  <td>0.0670</td>  <td>0.1016</td>  <td></td>  <td></td>  <td></td>  <td></td>  <td></td>  <td></td> </tr>
+    <tr>  <td>CMRC2018</td>  <td>generation</td>  <td>f1</td>  <td>MRC</td>  <td>0.093</td>  <td>0.0979</td>  <td>0.1007</td>  <td>0.1392</td>  <td></td>  <td></td>  <td></td>  <td></td>  <td></td>  <td></td> </tr>
+    <tr>  <td>CLUEWSC2020</td>  <td>PPL</td>  <td>acc</td>  <td>WSC</td>  <td>0.4934</td>  <td>0.5328</td>  <td>0.5592</td>  <td>0.5131</td>  <td></td>  <td>0.5526</td>  <td>0.4473</td>  <td>0.4671</td>  <td></td>  <td></td> </tr>
+    <tr>  <td>C3</td>  <td>PPL</td>  <td>acc</td>  <td>Common sense reasoning</td>  <td>0.2360</td>  <td>0.2426</td>  <td>0.2418</td>  <td>0.2573</td>  <td></td>  <td></td>  <td></td>  <td></td>  <td></td>  <td></td> </tr>
+    <tr>  <td>AFQMC</td>  <td>PPL</td>  <td>acc</td>  <td>Text classification</td>  <td>0.6306</td>  <td>0.4582</td>  <td>0.4914</td>  <td>0.4960</td>  <td></td>  <td>0.4872</td>  <td>0.4993</td>  <td>0.5018</td>  <td></td>  <td></td> </tr>
+    <tr>  <td>CSL</td>  <td>PPL</td>  <td>acc</td>  <td>Text classification</td>  <td>0.4943</td>  <td>0.4913</td>  <td>0.4666</td>  <td>0.5126</td>  <td></td>  <td>0.5140</td>  <td>0.5036</td>  <td>0.4973</td>  <td></td>  <td></td> </tr>
+    <tr>  <td>IFLYTEK</td>  <td>PPL</td>  <td>acc</td>  <td>Text classification</td>  <td>0.1292</td>  <td>0.3058</td>  <td>0.265</td>  <td>0.2620</td>  <td></td>  <td>0.2539</td>  <td>0.2535</td>  <td>0.2524</td>  <td></td>  <td></td> </tr>
+    <tr>  <td>TNEWS</td>  <td>PPL</td>  <td>acc</td>  <td>Text classification</td>  <td>0.1582</td>  <td>0.2022</td>  <td>0.2449</td>  <td>0.2489</td>  <td></td>  <td></td>  <td></td>  <td></td>  <td></td>  <td></td> </tr>
 </table>
 
 

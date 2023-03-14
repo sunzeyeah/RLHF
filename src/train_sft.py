@@ -11,6 +11,7 @@ import torch
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    AutoModelForSeq2SeqLM,
     Trainer,
     TrainingArguments,
     default_data_collator,
@@ -97,12 +98,10 @@ def main():
 
     # load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-    # assert tokenizer.pad_token_id == tokenizer.eos_token_id
-    model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-    model.resize_token_embeddings(len(tokenizer.sp))
-    model.config.end_token_id = tokenizer.eos_token_id
-    model.config.pad_token_id = tokenizer.pad_token_id
-    # model.config.max_length_prompt = args.max_length_prompt
+    if "pangu" in args.model_name_or_path:
+        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+    else:
+        model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
     if args.checkpoint is not None:
         st = torch.load(args.checkpoint, map_location="cpu")
         model.load_state_dict(st)
