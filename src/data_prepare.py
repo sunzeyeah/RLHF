@@ -17,6 +17,13 @@ from src.utils.nlp_utils import clean_text
 
 
 def weibo_summary_comment(args, tokenizer):
+    ''' 微博新闻+摘要+评论，每条评论有点赞数，可以根据点赞数构造reward训练集
+
+    :param args:
+    :param tokenizer:
+
+    :return: processed json list
+    '''
     t = time.time()
     fi = os.path.join(args.data_dir, "weibo_summary_comments_json.json")
     fo = os.path.join(args.output_dir, "weibo_summary_comments.jsonl")
@@ -46,6 +53,13 @@ def weibo_summary_comment(args, tokenizer):
 
 
 def couplets(args, tokenizer):
+    ''' 对联数据（上联和下联），可以根据正确下联和负例下联，构造reward训练集
+
+    :param args:
+    :param tokenizer:
+
+    :return: processed json list
+    '''
     t1 = time.time()
     fi = os.path.join(args.data_dir, "couplets.txt")
     fo = os.path.join(args.output_dir, "couplets.jsonl")
@@ -94,6 +108,13 @@ def couplets(args, tokenizer):
 
 
 def zhidao(args, tokenizer):
+    ''' 百度知道的问答数据，每条问题有多个答案以及最佳答案，可以直接构造reward训练集
+
+    :param args:
+    :param tokenizer:
+
+    :return: processed json list
+    '''
     t = time.time()
     fp = os.path.join(args.data_dir, "zhidao", "*.csv")
     fo = os.path.join(args.output_dir, "zhidao.jsonl")
@@ -128,6 +149,13 @@ def zhidao(args, tokenizer):
 
 
 def chinese_classical(args, tokenizer):
+    ''' 文言文和现代文的对照翻译，每条文言文有对应的现代文翻译，可以根据正确翻译或原文+负例翻译或原文，构造reward训练集
+
+    :param args:
+    :param tokenizer:
+
+    :return: processed json list
+    '''
     t1 = time.time()
     fp = os.path.join(args.data_dir, "Classical-Modern", "bitext", "*")
     fo = os.path.join(args.output_dir, "chinese_classical.jsonl")
@@ -181,6 +209,13 @@ def chinese_classical(args, tokenizer):
 
 
 def chinese_poetry(args, tokenizer):
+    ''' 四书五经、诗、词、曲等古文数据，每篇文章或每首诗有作者、题目和正文，可以根据正确体裁/作者+负例体裁/作者，构造reward训练集
+
+    :param args:
+    :param tokenizer:
+
+    :return: processed json list
+    '''
     converter = opencc.OpenCC('t2s.json')
     t1 = time.time()
     fp = [
@@ -325,6 +360,13 @@ def chinese_poetry(args, tokenizer):
     
 
 def baike_qa_2019(args, tokenizer):
+    ''' 百科问答数据集，每个问题只有一个答案，可构造sft训练集
+
+    :param args:
+    :param tokenizer:
+
+    :return: processed json list
+    '''
     fs = glob.glob(os.path.join(args.data_dir, "baike_qa2019", "baike_qa_*.json"))
     fo = os.path.join(args.output_dir, "baike_qa.jsonl")
     data = []
