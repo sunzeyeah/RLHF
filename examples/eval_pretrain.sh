@@ -33,7 +33,6 @@ do
       --model_name_or_path $MODEL_PATH \
       --task $TASK \
       --max_length 512 \
-      --do_eval \
       --train_filename $TRAIN_FILENAME \
       --eval_filename $EVAL_FILENAME \
       --eval_batch_size $BATCH_SIZE \
