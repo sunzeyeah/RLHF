@@ -107,7 +107,7 @@ bash train_rlhf.sh
     <tr>  <td>GLM-335M-chinese</td>  <td>Pangu-350M</td>  <td>Pangu-2.6B</td>  <td>GLM-10B-chinese</td>  <td>Pangu-13B</td>  <td>GLM-335M-chinese</td>  <td>Pangu-350M</td>  <td>Pangu-2.6B</td>  <td>GLM-10B-chinese</td>  <td>Pangu-13B</td> </tr>
     <tr>  <td>OCNLI</td>  <td>PPL</td>  <td>acc</td>  <td>NLI</td>  <td>0.3074</td>  <td style="color:red"><b>0.3369</b></td>  <td>0.3061</td>  <td>0.3288</td>  <td>0.3301</td>  <td>0.3298</td>  <td>0.3352</td>  <td>0.3216</td>  <td></td>  <td></td> </tr>
     <tr>  <td>CMNLI</td>  <td>PPL</td>  <td>acc</td>  <td>NLI</td>  <td>0.3279</td>  <td>0.3302</td>  <td>0.3310</td>  <td>0.3338</td>  <td style="color:red"><b>0.3358</b></td>  <td>0.3356</td>  <td>0.3328</td>  <td>0.3300</td>  <td></td>  <td></td> </tr>
-    <tr>  <td>CHID</td>  <td>PPL</td>  <td>acc</td>  <td>Cloze(multi-choices)</td>  <td>0.0734</td>  <td>0.0916</td>  <td>0.0670</td>  <td>0.1016</td>  <td></td>  <td></td>  <td>0.1007</td>  <td></td>  <td></td>  <td></td> </tr>
+    <tr>  <td>CHID</td>  <td>PPL</td>  <td>acc</td>  <td>Cloze(multi-choices)</td>  <td>0.0734</td>  <td>0.0916</td>  <td>0.0670</td>  <td>0.1016</td>  <td style="color:red"><b>0.1018</b></td>  <td></td>  <td>0.1007</td>  <td></td>  <td></td>  <td></td> </tr>
     <tr>  <td>CMRC2018</td>  <td>generation</td>  <td>f1</td>  <td>MRC</td>  <td>0.093</td>  <td>0.0979</td>  <td>0.1007</td>  <td>0.1392</td>  <td></td>  <td></td>  <td></td>  <td></td>  <td></td>  <td></td> </tr>
     <tr>  <td>CLUEWSC2020</td>  <td>PPL</td>  <td>acc</td>  <td>WSC</td>  <td>0.4934</td>  <td>0.5328</td>  <td style="color:red"><b>0.5592</b></td>  <td>0.5131</td>  <td>0.4671</td>  <td>0.5526</td>  <td>0.4473</td>  <td>0.4671</td>  <td></td>  <td></td> </tr>
     <tr>  <td>C3</td>  <td>PPL</td>  <td>acc</td>  <td>Common sense reasoning</td>  <td>0.2360</td>  <td>0.2426</td>  <td>0.2418</td>  <td style="color:red"><b>0.2573</b></td>  <td>0.2567</td>  <td>0.2476</td>  <td>0.2559</td>  <td>0.2515</td>  <td></td>  <td></td> </tr>
@@ -130,7 +130,7 @@ SFT模型下载：
 
 | 预训练模型  |  SFT数据集  | size | 百度网盘地址  |  提取码      | 
 | ----------- | --- | ----------- | ----------- |  ----------- |
-| Pangu-2.6B |  SFT & Reward Data | 
+| Pangu-2.6B |  SFT & Reward Data | 9.8GB | [Pangu-2.6B SFT](https://pan.baidu.com/s/1Q2PKf0MnFsiFlNhU-6WIrg) | r13w |
 
 部分生成示例：
 ```
