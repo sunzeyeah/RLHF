@@ -85,7 +85,7 @@ def main():
 
     # load reward model
     model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-    model.resize_token_embeddings(len(tokenizer.sp))
+    model.resize_token_embeddings(tokenizer.vocab_size)
     model.config.end_token_id = tokenizer.eos_token_id
     model.config.pad_token_id = tokenizer.pad_token_id
     model.config.bos_token_id = tokenizer.bos_token_id

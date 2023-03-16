@@ -94,3 +94,10 @@ class GPTPanguTokenizer(PreTrainedTokenizer):
             text = text[0]
         text = text.replace(' ', '').replace('\u2582', ' ').replace('\u2583', '\n')
         return text
+
+    @property
+    def vocab_size(self) -> int:
+        """
+        `int`: Size of the base vocabulary (without the added tokens).
+        """
+        return len(self.sp)

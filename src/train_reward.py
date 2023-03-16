@@ -79,9 +79,11 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
 
     model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-    model.resize_token_embeddings(len(tokenizer.sp))
-    model.config.end_token_id = tokenizer.eos_token_id
-    model.config.pad_token_id = tokenizer.pad_token_id
+    model.resize_token_embeddings(tokenizer.vocab_size)
+    # model.config.end_token_id = tokenizer.eos_token_id
+    # model.config.pad_token_id = tokenizer.pad_token_id
+    # model.config.bos_token_id = tokenizer.bos_token_id
+    # model.config.eos_token_id = tokenizer.eos_token_id
 
     # Initialize the reward model from the (supervised) fine-tuned SFT model
     reward_model = GPTRewardModel(model, tokenizer)
