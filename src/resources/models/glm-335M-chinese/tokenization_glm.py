@@ -2,13 +2,17 @@ import os
 from typing import Optional, Tuple, List, Union
 from shutil import copyfile
 import torch
+import numpy as np
 
+from typing import Dict
 from transformers import PreTrainedTokenizer, RobertaTokenizer, GPT2Tokenizer, BertTokenizer
 from transformers.utils import logging
 from transformers.tokenization_utils_base import BatchEncoding
 from transformers.models.auto.tokenization_auto import get_tokenizer_config
 # from transformers.utils import torch_required
 from transformers.utils.generic import _is_torch_device
+from transformers.utils import PaddingStrategy
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase, TruncationStrategy, TensorType, EncodedInput
 import sentencepiece as spm
 
 logger = logging.get_logger(__name__)
@@ -35,8 +39,7 @@ class GLMBatchEncoding(BatchEncoding):
         return self
 
 
-
-class GLMTokenizerMixin:
+class GLMTokenizerMixin(PreTrainedTokenizerBase):
     @property
     def sop_token(self) -> Optional[str]:
         return "<|startofpiece|>"
@@ -201,6 +204,325 @@ class GLMTokenizerMixin:
             batch["labels"] = labels
         return BatchEncoding(batch)
 
+    def prepare_for_model(
+            self,
+            ids: List[int],
+            pair_ids: Optional[List[int]] = None,
+            add_special_tokens: bool = True,
+            padding: Union[bool, str, PaddingStrategy] = False,
+            truncation: Union[bool, str, TruncationStrategy] = None,
+            max_length: Optional[int] = None,
+            stride: int = 0,
+            pad_to_multiple_of: Optional[int] = None,
+            return_tensors: Optional[Union[str, TensorType]] = None,
+            return_token_type_ids: Optional[bool] = None,
+            return_attention_mask: Optional[bool] = None,
+            return_overflowing_tokens: bool = False,
+            return_special_tokens_mask: bool = False,
+            return_offsets_mapping: bool = False,
+            return_length: bool = False,
+            verbose: bool = True,
+            prepend_batch_axis: bool = False,
+            **kwargs
+    ) -> BatchEncoding:
+        """
+        Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model. It
+        adds special tokens, truncates sequences if overflowing while taking into account the special tokens and
+        manages a moving window (with user defined stride) for overflowing tokens. Please Note, for *pair_ids*
+        different than `None` and *truncation_strategy = longest_first* or `True`, it is not possible to return
+        overflowing tokens. Such a combination of arguments will raise an error.
+
+        Args:
+            ids (`List[int]`):
+                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize` and
+                `convert_tokens_to_ids` methods.
+            pair_ids (`List[int]`, *optional*):
+                Tokenized input ids of the second sequence. Can be obtained from a string by chaining the `tokenize`
+                and `convert_tokens_to_ids` methods.
+        """
+
+        # # if self.random_position and position_ids[-1] < self.max_seq_length - 1:
+        # #     position_bias = self.max_seq_length - position_ids[-1]
+        # #     position_bias = rng.randrange(0, position_bias)
+        # #     position_ids = position_ids + position_bias
+        # # if self.encoder_decoder or not self.shuffle_blocks:
+        # #     block_spans.sort(key=lambda x: x[0])
+        # # else:
+        # #     rng.shuffle(block_spans)
+        # # if self.sentinel_token:
+        # #     block_spans = [(start, end, idx) for idx, (start, end) in enumerate(block_spans)]
+        # # else:
+        # #     block_spans = [(start, end, 0) for start, end in block_spans]
+        # target_tokens, target_position_ids, target_block_position_ids, targets = [], [], [], []
+        # # for start, end, idx in block_spans:
+        # sop_token = 'sop' if idx == 0 else f"sop{idx}"
+        # target_tokens.append([self.tokenizer.get_command(sop_token).Id])
+        # span_tokens = copy.deepcopy(tokens[start: end])
+        # if self.block_mask_prob > 0.0 and task == 'bert':
+        #     for sub_idx in range(len(span_tokens)):
+        #         if random.random() < self.block_mask_prob:
+        #             span_tokens[sub_idx] = self.tokenizer.get_command('dBLOCK').Id
+        # target_tokens.append(span_tokens)
+        # targets.append(tokens[start: end])
+        # targets.append([self.tokenizer.get_command('eop').Id])
+        # if not self.sentinel_token:
+        #     target_position_id = position_ids[start: end]
+        #     target_position_ids.append(target_position_id)
+        #     target_position_ids.append([target_position_id[0]])
+        # else:
+        #     target_position_ids.append([self.max_seq_length] * (end - start + 1))
+        # if self.block_position_encoding:
+        #     target_block_position_ids.append(np.arange(1, end - start + 2, dtype=np.long))
+        # else:
+        #     target_block_position_ids.append([1] * (end - start + 1))
+        #
+        # block_spans.sort(key=lambda x: x[0])
+        # source_tokens, source_position_ids, local_spans = [], [], []
+        # last, current_length = 0, 0
+        # for start, end, idx in block_spans:
+        #     if task == 'generation':
+        #         mask_id = self.generation_mask
+        #     elif task == 'gap_sentence':
+        #         mask_id = self.gap_sentence_mask
+        #     else:
+        #         mask_token = 'MASK' if idx == 0 else f'MASK{idx}'
+        #         mask_id = self.tokenizer.get_command(mask_token).Id
+        #     local_spans.append((current_length, current_length + start - last))
+        #     source_tokens.append(tokens[last: start])
+        #     source_tokens.append([mask_id])
+        #     source_position_ids.append(position_ids[last: start])
+        #     source_position_ids.append([position_ids[start]])
+        #     current_length += start - last + 1
+        #     last = end
+        # if last < len(tokens):
+        #     local_spans.append((current_length, current_length + len(tokens) - last))
+        #     source_tokens.append(tokens[last:])
+        #     source_position_ids.append(position_ids[last:])
+        # source_length = sum(map(len, source_tokens))
+        # if attention_mask is not None:
+        #     assert source_length == attention_mask
+        # if target_tokens and self.eod_token in np.concatenate(target_tokens).tolist():
+        #     print("Found EOS in target", self.tokenizer.DecodeIds(tokens))
+        #     raise RuntimeError
+        # if self.encoder_decoder:
+        #     target_tokens = target_tokens + [self.tokenizer.get_command('eop').Id]
+        #     loss_masks = np.ones(len(target_tokens), dtype=np.long)
+        #     return source_tokens, target_tokens, loss_masks
+        # else:
+        #     tokens = np.concatenate(source_tokens + target_tokens)
+        #     if task == 'bert' and self.context_mask_ratio > 0:
+        #         mask_candidates = set()
+        #         for start, end in local_spans:
+        #             if start != 0:
+        #                 local_end = min(end, start + self.context_mask_range)
+        #                 mask_candidates.update(range(start, local_end))
+        #             if end != 0:
+        #                 local_start = max(start, end - self.context_mask_range)
+        #                 mask_candidates.update(range(local_start, end))
+        #         mask_pos = rng.sample(mask_candidates, int(self.context_mask_ratio * text_length))
+        #         for pos in mask_pos:
+        #             tokens[pos] = self.tokenizer.get_command('dBLOCK').Id
+        #     targets = np.concatenate(source_tokens + targets)
+        #     loss_masks = np.ones(len(tokens), dtype=np.long)
+        #     loss_masks[:source_length] = 0
+        #     position_ids = np.concatenate(source_position_ids + target_position_ids)
+        #     block_position_ids = np.concatenate(
+        #         [np.zeros(source_length, dtype=np.long)] + target_block_position_ids)
+        #     position_ids = np.stack([position_ids, block_position_ids], axis=0)
+        #     if attention_mask is not None:
+        #         return tokens, targets, loss_masks, position_ids
+        #     else:
+        #         return tokens, targets, loss_masks, position_ids, source_length
+
+        # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
+        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+            verbose=verbose,
+            **kwargs,
+        )
+
+        pair = bool(pair_ids is not None)
+        len_ids = len(ids)
+        len_pair_ids = len(pair_ids) if pair else 0
+
+        if return_token_type_ids and not add_special_tokens:
+            raise ValueError(
+                "Asking to return token_type_ids while setting add_special_tokens to False "
+                "results in an undefined behavior. Please set add_special_tokens to True or "
+                "set return_token_type_ids to None."
+            )
+
+        if (
+                return_overflowing_tokens
+                and truncation == TruncationStrategy.LONGEST_FIRST
+                and pair_ids is not None
+        ):
+            raise ValueError(
+                "Not possible to return overflowing tokens for pair of sequences with the "
+                "`longest_first`. Please select another truncation strategy than `longest_first`, "
+                "for instance `only_second` or `only_first`."
+            )
+
+        # Load from model defaults
+        if return_token_type_ids is None:
+            return_token_type_ids = "token_type_ids" in self.model_input_names
+        if return_attention_mask is None:
+            return_attention_mask = "attention_mask" in self.model_input_names
+
+        encoded_inputs = {}
+
+        # Compute the total size of the returned encodings
+        total_len = len_ids + len_pair_ids + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
+
+        # Truncation: Handle max sequence length
+        overflowing_tokens = []
+        if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
+            ids, pair_ids, overflowing_tokens = self.truncate_sequences(
+                ids,
+                pair_ids=pair_ids,
+                num_tokens_to_remove=total_len - max_length,
+                truncation_strategy=truncation_strategy,
+                stride=stride,
+            )
+
+        if return_overflowing_tokens:
+            encoded_inputs["overflowing_tokens"] = overflowing_tokens
+            encoded_inputs["num_truncated_tokens"] = total_len - max_length
+
+        # Add special tokens
+        if add_special_tokens:
+            sequence = self.build_inputs_with_special_tokens(ids, pair_ids)
+            assert sequence[0] == self.cls_token_id
+            text_length = len(sequence)
+            eos_position = sequence.index(self.eos_token_id)
+            mask_position = sequence.index(self.mask_token_id)
+            # sop_position = sequence.index(self.sop_token_id)
+            position_ids = np.array(list(range(eos_position+1)) + [mask_position]*(text_length-eos_position-1),
+                                    dtype=np.int64)
+            block_position_ids = np.array([0] * (eos_position+1) + list(range(text_length-eos_position-1)),
+                                          dtype=np.int64)
+            token_type_ids = np.stack([position_ids, block_position_ids], axis=0)
+            # token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids)
+        else:
+            sequence = ids + pair_ids if pair else ids
+            token_type_ids = [0] * len(ids) + ([0] * len(pair_ids) if pair else [])
+
+        # Build output dictionary
+        encoded_inputs["input_ids"] = sequence
+        if return_token_type_ids:
+            encoded_inputs["token_type_ids"] = token_type_ids
+        if return_special_tokens_mask:
+            if add_special_tokens:
+                encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(ids, pair_ids)
+            else:
+                encoded_inputs["special_tokens_mask"] = [0] * len(sequence)
+
+        # Check lengths
+        # self._eventual_warn_about_too_long_sequence(encoded_inputs["input_ids"], max_length, verbose)
+
+        # Padding
+        if padding_strategy != PaddingStrategy.DO_NOT_PAD or return_attention_mask:
+            encoded_inputs = self.pad(
+                encoded_inputs,
+                max_length=max_length,
+                padding=padding_strategy.value,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_attention_mask=return_attention_mask,
+            )
+
+        if return_length:
+            encoded_inputs["length"] = len(encoded_inputs["input_ids"])
+
+        batch_outputs = BatchEncoding(
+            encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis
+        )
+
+        return batch_outputs
+
+    def _pad(
+            self,
+            encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
+            max_length: Optional[int] = None,
+            padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
+            pad_to_multiple_of: Optional[int] = None,
+            return_attention_mask: Optional[bool] = None,
+    ) -> dict:
+        """
+        Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
+
+        Args:
+            encoded_inputs:
+                Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
+            max_length: maximum length of the returned list and optionally padding length (see below).
+                Will truncate by taking into account the special tokens.
+            padding_strategy: PaddingStrategy to use for padding.
+
+                - PaddingStrategy.LONGEST Pad to the longest sequence in the batch
+                - PaddingStrategy.MAX_LENGTH: Pad to the max length (default)
+                - PaddingStrategy.DO_NOT_PAD: Do not pad
+                The tokenizer padding sides are defined in self.padding_side:
+
+                    - 'left': pads on the left of the sequences
+                    - 'right': pads on the right of the sequences
+            pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
+                This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
+                `>= 7.5` (Volta).
+            return_attention_mask:
+                (optional) Set to False to avoid returning attention mask (default: set to model specifics)
+        """
+        # Load from model defaults
+        if return_attention_mask is None:
+            return_attention_mask = "attention_mask" in self.model_input_names
+
+        required_input = encoded_inputs[self.model_input_names[0]]
+
+        if padding_strategy == PaddingStrategy.LONGEST:
+            max_length = len(required_input)
+
+        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
+        #
+        needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) != max_length
+
+        # Initialize attention mask if not present.
+        if return_attention_mask and "attention_mask" not in encoded_inputs:
+            sop_position = encoded_inputs['input_ids'].index(self.sop_token_id)
+            # sop_position = encoded_inputs['input_ids'].tolist().index(self.sop_token_id)
+            encoded_inputs["attention_mask"] = [sop_position]
+            # encoded_inputs["attention_mask"] = [1] * len(required_input)
+
+        if needs_to_be_padded:
+            difference = max_length - len(required_input)
+
+            if self.padding_side == "right":
+                if return_attention_mask:
+
+                    encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
+                if "token_type_ids" in encoded_inputs:
+                    encoded_inputs["token_type_ids"] = (
+                            encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
+                    )
+                if "special_tokens_mask" in encoded_inputs:
+                    encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
+                encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
+            elif self.padding_side == "left":
+                if return_attention_mask:
+                    encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
+                if "token_type_ids" in encoded_inputs:
+                    encoded_inputs["token_type_ids"] = [self.pad_token_type_id] * difference + encoded_inputs[
+                        "token_type_ids"
+                    ]
+                if "special_tokens_mask" in encoded_inputs:
+                    encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
+                encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
+            else:
+                raise ValueError("Invalid padding strategy:" + str(self.padding_side))
+
+        return encoded_inputs
+
 
 class GLMRobertaTokenizer(RobertaTokenizer, GLMTokenizerMixin):
     model_input_names = ["input_ids", "position_ids", "attention_mask"]
@@ -285,10 +607,16 @@ class GLMChineseTokenizer(PreTrainedTokenizer, GLMTokenizerMixin):
         Returns:
             :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
-        assert token_ids_1 is None
+        # assert token_ids_1 is None
         cls = [self.cls_token_id]
         eos = [self.eos_token_id]
-        return cls + token_ids_0 + eos
+        mask = [self.mask_token_id]
+        sop = [self.sop_token_id]
+        # return cls + token_ids_0 + eos
+        if token_ids_1 is None:
+            return cls + token_ids_0 + mask + eos + sop
+        else:
+            return cls + token_ids_0 + mask + eos + sop + token_ids_1 + eos
 
 
 class GLMGPT2Tokenizer(GPT2Tokenizer, GLMTokenizerMixin):

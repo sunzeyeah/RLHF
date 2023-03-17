@@ -264,11 +264,15 @@ def test():
 
     text_generator = TextGenerationPipeline(model, tokenizer)
 
-    prompt = "阅读文章：《战国无双3》（）是由光荣和ω-force开发的战国无双系列的正统第三续作。本作以三大故事为主轴，分别是以武田信玄等人为主的《关东三国志》，织田信长等人为主的《战国三杰》，石田三成等人为主的《关原的年轻武者》，丰富游戏内的剧情。此部份专门介绍角色，欲知武器情报、奥义字或擅长攻击类型等，请至战国无双系列1.由于乡里大辅先生因故去世，不得不寻找其他声优接手。从猛将传 and Z开始。2.战国无双 编年史的原创男女主角亦有专属声优。此模式是任天堂>游戏谜之村雨城改编的新增模式。本作中共有20张战场地图（不含村雨城），后来发行的猛将传再新增3张战场地图。但游戏内>战役数量繁多，部分地图会有兼用的状况，战役虚实则是以光荣发行的2本「战国无双3 人物真书」内容为主，以下是相关介绍>。（注：前方加☆者为猛将传新增关卡及地图。）合并本篇和猛将传的内容，村雨城模式剔除，战国史模式可直接游玩。主打两>大模式「战史演武」&「争霸演武」。系列作品外传作品\n问：《战国无双3》是由哪两个公司合作开发的？\n答："
+    prompt = "问题:移花接玉(密封)能换到什么样法师技能书.或能换多少钱或是什么装配 问题描述:我打到这本的价钱是我少.能换飞混加多少点的或是参换什么技能.要是钱又是能换多少.我是每一次打到高级书的.不清楚这书怎样价钱.会的回答我.我是粤秀区的回答:"
+    target = "6000W-7000W,价格应该和怒神差不多,比魄冰高一些.移花接玉这技能不是很有用,三级之后,给每个宝宝加13点破坏,还得一个一个地加,非常麻烦.砍战士的威力不如砍法师大.(我曾经轮流砍过我的法师小号和战士小号,砍法师还偶尔出绿字,砍战士通常40-50,估计跟战士的物理防御高有关.)打新地图的作用也不大,刚使完移花接玉,抛石兵两个爆裂,宝宝全报销了.也就是挂机还有些用处,再就是和法师PK,配合云寂术效果更佳."
 
     # if "glm" in args.model_name_or_path:
-    inputs = tokenizer(prompt, add_special_tokens=False, return_token_type_ids=False, return_tensors="pt")
+    # inputs = tokenizer(prompt, add_special_tokens=False, return_token_type_ids=False, return_tensors="pt")
+    inputs = tokenizer(prompt, target, return_tensors="pt")
     # inputs = tokenizer.build_inputs_for_generation(inputs, max_gen_length=args.max_length_generation)
+    inputs_glm = tokenizer.build_inputs_for_generation(inputs, targets=[target],
+                                                       max_gen_length=200)
     # inputs = inputs.to(device)
     outputs = model.generate(**inputs,
                              max_new_tokens=args.max_length_generation,
@@ -291,5 +295,5 @@ def test():
 
 
 if __name__ == "__main__":
-    main()
-    # test()
+    # main()
+    test()

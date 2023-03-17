@@ -85,18 +85,23 @@ class PairwiseDataset(Dataset):
 
 
 class SFTDataset(Dataset):
-    def __init__(self, args, filename, tokenizer):
-        dataset = self.load_dataset(filename)
-        self.post_list = dataset
-        # self.post_list = []
-        # for sample in dataset:
-        #     self.post_list.append((sample["prompt"], "模型回答:" + sample["label"]))
-
-        self.tokenizer = tokenizer
+    def __init__(self, args, filename, tokenizer,
+                 # padding=False, truncation=False, return_tensors="pt",
+                 # add_special_tokens=True, return_token_type_ids=True, return_attention_mask=True
+                 ):
         self.args = args
+        self.tokenizer = tokenizer
+        # # tokenizer params
+        # self.padding = padding
+        # self.truncation = truncation
+        # self.return_tensors = return_tensors
+        # self.add_special_tokens = add_special_tokens
+        # self.return_token_type_ids = return_token_type_ids
+        # self.return_attention_mask = return_attention_mask
 
+        self.post_list = self.load_dataset(filename)
         for k in range(5):
-            logger.info(f"SFTDataset sample-{k}\n: {dataset[k]}")
+            logger.info(f"SFTDataset sample-{k}\n: {self.post_list[k]}")
 
     def __len__(self):
         return len(self.post_list)
@@ -105,8 +110,23 @@ class SFTDataset(Dataset):
         data = self.post_list[idx]
         prompt = data['prompt']
         label = data['label']
-        encoded_dict = self.tokenizer(prompt + label, max_length=self.args.max_length,
-                                      padding="max_length", truncation="longest_first", return_tensors="pt")
+        if "glm" in self.args.model_name_or_path:
+            # TODO: to be optimized
+            prompt += self.tokenizer.mask_token
+            encoded_dict = self.tokenizer(prompt + label,
+                                          padding=False,
+                                          truncation=False,
+                                          return_tensors="pt",
+                                          add_special_tokens=True,
+                                          return_token_type_ids=False,
+                                          return_attention_mask=False)
+            max_length = self.args.max_length + self.args.max_length_generation \
+                if self.args.max_length_generation is not None else self.args.max_length
+            encoded_dict = self.tokenizer.build_inputs_for_generation(encoded_dict,
+                                                                      max_gen_length=max_length)
+        else:
+            encoded_dict = self.tokenizer(prompt + label, max_length=self.args.max_length,
+                                          truncation="longest_first", padding="max_length", return_tensors="pt")
 
         return {
             "input_ids": encoded_dict["input_ids"],
@@ -174,78 +194,6 @@ class RLHFDataset(Dataset):
         logger.info(f"Finish loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets
-
-
-class ComparisonDataset(Dataset):
-    def __init__(self, comparison_path, tokenizer, max_length):
-        with open(comparison_path, "r", encoding="utf-8") as f:
-            dataset = [json.loads(line) for line in f]
-
-        self.tokenizer = tokenizer
-        self.post_list = []
-        self.summaries_0 = []
-        self.summaries_1 = []
-        self.labels = []
-        self.max_length = max_length
-
-        def make_text(post, summarize):
-            return f"SUBREDDIT: r/{post['subreddit']}\nTITLE: {post['title']}\nPOST: {post['post']}\nTL;DR: {summarize}"
-
-        for sample in dataset:  # chosen summary is always the first one
-            self.post_list.append(sample["info"]["post"])
-            # NOTE: The chosen summary is always the first one, i.e. `sample["summaries"][0]`
-            if sample["choice"] == 0:
-                self.summaries_0.append(make_text(sample["info"], sample["summaries"][0]["text"]))
-                self.summaries_1.append(make_text(sample["info"], sample["summaries"][1]["text"]))
-            else:
-                self.summaries_0.append(make_text(sample["info"], sample["summaries"][1]["text"]))
-                self.summaries_1.append(make_text(sample["info"], sample["summaries"][0]["text"]))
-            self.labels.append(0)
-
-    def __len__(self):
-        return len(self.post_list)
-
-    def __getitem__(self, idx):
-        summ0 = self.summaries_0[idx]
-        summ1 = self.summaries_1[idx]
-        encodings_dict = self.tokenizer(
-            [summ0, summ1],
-            truncation=True,
-            max_length=self.max_length,
-            padding="max_length",
-        )
-        input_ids = torch.tensor(encodings_dict["input_ids"])
-        attention_mask = torch.tensor(encodings_dict["attention_mask"])
-        return {"input_ids": input_ids, "attention_mask": attention_mask}
-
-
-class AllSummDataset(Dataset):
-    def __init__(self, train_path, tokenizer, split, max_length=1024):
-        df = pd.read_parquet(train_path)
-        if split == "valid":
-            df = df.sample(n=5000)
-        self.summarizes = []
-        for i, row in df.iterrows():
-            self.summarizes.append(f"Summarize: {row['text']}. TL;DR: {row['summary']}")
-        self.tokenizer = tokenizer
-        self.max_length = max_length
-        self.input_ids = []
-        self.attn_masks = []
-
-    def __len__(self):
-        return len(self.summarizes)
-
-    def __getitem__(self, idx):
-        txt = self.summarizes[idx]
-        encodings_dict = self.tokenizer(txt, truncation=True, max_length=self.max_length, padding="max_length")
-        input_ids = torch.tensor(encodings_dict["input_ids"])
-        attn_masks = torch.tensor(encodings_dict["attention_mask"])
-
-        return {
-            "input_ids": input_ids,
-            "attention_mask": attn_masks,
-            "labels": input_ids,
-        }
 
 
 class OCNLIDataset(Dataset):

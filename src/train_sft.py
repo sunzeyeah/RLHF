@@ -41,7 +41,7 @@ def get_parser():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--local_rank", type=int, default=-1)
     parser.add_argument("--max_length", type=int, default=1024)
-    # parser.add_argument("--max_length_prompt", type=int, default=200)
+    parser.add_argument("--max_length_generation", type=int, default=None)
     # parser.add_argument("--max_length_label", type=int, default=824)
     # train
     parser.add_argument("--do_train", action="store_true")
