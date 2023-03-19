@@ -40,6 +40,13 @@ class GLMBatchEncoding(BatchEncoding):
 
 
 class GLMTokenizerMixin(PreTrainedTokenizerBase):
+
+    model_input_names: List[str] = ["input_ids", "position_ids", "attention_mask", "labels"]
+
+    @property
+    def ignore_index(self) -> int:
+        return -100
+
     @property
     def sop_token(self) -> Optional[str]:
         return "<|startofpiece|>"
@@ -203,6 +210,30 @@ class GLMTokenizerMixin(PreTrainedTokenizerBase):
             batch["attention_mask"] = attention_mask
             batch["labels"] = labels
         return BatchEncoding(batch)
+
+    def num_special_tokens_to_add(self, pair: bool = False) -> int:
+        """
+        Returns the number of added tokens when encoding a sequence with special tokens.
+
+        <Tip>
+
+        This encodes a dummy input and checks the number of added tokens, and is therefore not efficient. Do not put
+        this inside your training loop.
+
+        </Tip>
+
+        Args:
+            pair (`bool`, *optional*, defaults to `False`):
+                Whether the number of added tokens should be computed in the case of a sequence pair or a single
+                sequence.
+
+        Returns:
+            `int`: Number of special tokens added to sequences.
+        """
+        token_ids_0 = []
+        token_ids_1 = []
+        t1, t2 = self.build_inputs_with_special_tokens(token_ids_0, token_ids_1 if pair else None)
+        return len(t1)
 
     def prepare_for_model(
             self,
@@ -368,7 +399,7 @@ class GLMTokenizerMixin(PreTrainedTokenizerBase):
 
         # Load from model defaults
         if return_token_type_ids is None:
-            return_token_type_ids = "token_type_ids" in self.model_input_names
+            return_token_type_ids = "position_ids" in self.model_input_names
         if return_attention_mask is None:
             return_attention_mask = "attention_mask" in self.model_input_names
 
@@ -394,26 +425,30 @@ class GLMTokenizerMixin(PreTrainedTokenizerBase):
 
         # Add special tokens
         if add_special_tokens:
-            sequence = self.build_inputs_with_special_tokens(ids, pair_ids)
+            sequence, labels = self.build_inputs_with_special_tokens(ids, pair_ids)
             assert sequence[0] == self.cls_token_id
             text_length = len(sequence)
             eos_position = sequence.index(self.eos_token_id)
             mask_position = sequence.index(self.mask_token_id)
             # sop_position = sequence.index(self.sop_token_id)
-            position_ids = np.array(list(range(eos_position+1)) + [mask_position]*(text_length-eos_position-1),
-                                    dtype=np.int64)
-            block_position_ids = np.array([0] * (eos_position+1) + list(range(text_length-eos_position-1)),
-                                          dtype=np.int64)
+            position_ids = np.array(list(range(eos_position+1)) + [mask_position]*(text_length-eos_position-1), dtype=np.int64)
+            block_position_ids = np.array([0] * (eos_position+1) + list(range(text_length-eos_position-1)), dtype=np.int64)
             token_type_ids = np.stack([position_ids, block_position_ids], axis=0)
             # token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids)
         else:
             sequence = ids + pair_ids if pair else ids
             token_type_ids = [0] * len(ids) + ([0] * len(pair_ids) if pair else [])
+            if pair:
+                labels = [self.ignore_index]*len(ids) + pair_ids
+            else:
+                labels = None
 
         # Build output dictionary
         encoded_inputs["input_ids"] = sequence
+        if labels is not None:
+            encoded_inputs["labels"] = labels
         if return_token_type_ids:
-            encoded_inputs["token_type_ids"] = token_type_ids
+            encoded_inputs["position_ids"] = token_type_ids
         if return_special_tokens_mask:
             if add_special_tokens:
                 encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(ids, pair_ids)
@@ -478,6 +513,7 @@ class GLMTokenizerMixin(PreTrainedTokenizerBase):
             return_attention_mask = "attention_mask" in self.model_input_names
 
         required_input = encoded_inputs[self.model_input_names[0]]
+        required_target = encoded_inputs[self.model_input_names[3]]
 
         if padding_strategy == PaddingStrategy.LONGEST:
             max_length = len(required_input)
@@ -489,35 +525,58 @@ class GLMTokenizerMixin(PreTrainedTokenizerBase):
 
         # Initialize attention mask if not present.
         if return_attention_mask and "attention_mask" not in encoded_inputs:
-            sop_position = encoded_inputs['input_ids'].index(self.sop_token_id)
-            # sop_position = encoded_inputs['input_ids'].tolist().index(self.sop_token_id)
-            encoded_inputs["attention_mask"] = [sop_position]
             # encoded_inputs["attention_mask"] = [1] * len(required_input)
+            # sop_position = encoded_inputs['input_ids'].index(self.sop_token_id)
+            # encoded_inputs["attention_mask"] = [sop_position]
+            input_length = required_input.index(self.sop_token_id)
+            target_length = len(required_input) - input_length
+            attention_mask = np.ones((len(required_input), input_length), dtype=np.int64)
+            generation_attention_mask = np.concatenate([np.zeros((input_length, target_length), dtype=np.int64),
+                                                   np.tril(np.ones((target_length, target_length), dtype=np.int64))],
+                                                  axis=0)#.unsqueeze(0).expand(-1, -1)
+            attention_mask = np.concatenate((attention_mask, generation_attention_mask), axis=1)
+            attention_mask = np.expand_dims(attention_mask, 0)
+            encoded_inputs["attention_mask"] = attention_mask
 
         if needs_to_be_padded:
             difference = max_length - len(required_input)
 
             if self.padding_side == "right":
                 if return_attention_mask:
-
-                    encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
-                if "token_type_ids" in encoded_inputs:
-                    encoded_inputs["token_type_ids"] = (
-                            encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
-                    )
+                    # encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
+                    attention_mask = encoded_inputs["attention_mask"][0]
+                    attention_mask = np.concatenate((attention_mask, np.zeros((len(required_input), difference), dtype=np.int64)), axis=1)
+                    # pad_attention_mask = attention_mask.new_zeros((max_length, difference))
+                    attention_mask = np.concatenate((attention_mask, np.zeros((difference, max_length), dtype=np.int64)), axis=0)
+                    attention_mask = np.expand_dims(attention_mask, 0)
+                    encoded_inputs["attention_mask"] = attention_mask
+                if "position_ids" in encoded_inputs:
+                    encoded_inputs["position_ids"][:, -difference:] = self.pad_token_type_id
+                    # encoded_inputs["token_type_ids"] = (
+                    #         encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
+                    # )
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
                 encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
+                encoded_inputs[self.model_input_names[3]] = required_target + [self.ignore_index] * difference
             elif self.padding_side == "left":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
-                if "token_type_ids" in encoded_inputs:
-                    encoded_inputs["token_type_ids"] = [self.pad_token_type_id] * difference + encoded_inputs[
-                        "token_type_ids"
-                    ]
+                    # encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
+                    attention_mask = encoded_inputs["attention_mask"][0]
+                    attention_mask = np.concatenate((np.zeros((len(required_input), difference), dtype=np.int64), attention_mask), axis=1)
+                    # pad_attention_mask = attention_mask.new_zeros((max_length, difference))
+                    attention_mask = np.concatenate((np.zeros((difference, max_length), dtype=np.int64), attention_mask), axis=0)
+                    attention_mask = np.expand_dims(attention_mask, 0)
+                    encoded_inputs["attention_mask"] = attention_mask
+                if "position_ids" in encoded_inputs:
+                    encoded_inputs["position_ids"][:, :-difference] = self.pad_token_type_id
+                    # encoded_inputs["token_type_ids"] = [self.pad_token_type_id] * difference + encoded_inputs[
+                    #     "token_type_ids"
+                    # ]
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
                 encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
+                encoded_inputs[self.model_input_names[3]] = [self.ignore_index] * difference + required_target
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
 
@@ -541,7 +600,7 @@ class GLMRobertaTokenizer(RobertaTokenizer, GLMTokenizerMixin):
         return [self.mask_token_id]
 
 
-class GLMChineseTokenizer(PreTrainedTokenizer, GLMTokenizerMixin):
+class GLMChineseTokenizer(GLMTokenizerMixin, PreTrainedTokenizer):
     vocab_files_names = {"vocab_file": "cog-pretrain.model"}
     truncation_side: str = "left"
 
@@ -610,13 +669,15 @@ class GLMChineseTokenizer(PreTrainedTokenizer, GLMTokenizerMixin):
         # assert token_ids_1 is None
         cls = [self.cls_token_id]
         eos = [self.eos_token_id]
+        eop = [self.eop_token_id]
         mask = [self.mask_token_id]
         sop = [self.sop_token_id]
-        # return cls + token_ids_0 + eos
+        token_ids_0 = cls + token_ids_0 + mask + eos
         if token_ids_1 is None:
-            return cls + token_ids_0 + mask + eos + sop
+            return token_ids_0 + sop, None
         else:
-            return cls + token_ids_0 + mask + eos + sop + token_ids_1 + eos
+
+            return token_ids_0 + sop + token_ids_1, [self.ignore_index]*len(token_ids_0) + token_ids_1 + eop
 
 
 class GLMGPT2Tokenizer(GPT2Tokenizer, GLMTokenizerMixin):
