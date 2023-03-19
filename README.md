@@ -122,17 +122,19 @@ bash train_rlhf.sh
 
 模型训练参数：
 
-| 模型 | 硬件 | batch size | sequence length | gpu memory used | speed |
-| --- | --- | :---: | :---: | :---: | --- |
-| Pangu-2.6B | A100 80G | 8 | 512 | 79.4G | 9.61 s/iter
+| 模型 | 可训练参数量 | 数据量 | batch size | sequence length | 硬件 | 显存占用 | speed | Hours per epoch |
+| --- | --- | --- | --- | :---: | :---: | :---: | --- | --- |
+| Pangu-350M | 345M | 5.4M | 48 | 512 | A100 80G | 78G | 1.91 s/iter | 27.5h
+| Pangu-2.6B | 2.6B | 5.4M |  8 | 512 | A100 80G | 79.4G | 9.61 s/iter | 116h
 
 SFT模型下载：
 
 | 预训练模型  |  SFT数据集  | size | 百度网盘地址  |  提取码      | 
 | ----------- | --- | ----------- | ----------- |  ----------- |
-| Pangu-2.6B |  SFT & Reward Data | 9.8GB | [Pangu-2.6B SFT](https://pan.baidu.com/s/1Q2PKf0MnFsiFlNhU-6WIrg) | r13w |
+| Pangu-350M |  SFT & Reward Data | 1.3GB | [Pangu-350M-SFT](https://pan.baidu.com/s/14nF63nAQz38jmplUC0EQ-g) | 0f8j |
+| Pangu-2.6B |  SFT & Reward Data | 9.8GB | [Pangu-2.6B-SFT](https://pan.baidu.com/s/1Q2PKf0MnFsiFlNhU-6WIrg) | r13w |
 
-部分生成示例：
+Pangu-2.6B-SFT部分生成示例：
 ```
 # 生成参数
 max_length = 512
@@ -178,13 +180,12 @@ do_sample=True
 ```
 
 ### 3. Reward Model
-以Pang-2.6B模型为例，在单张A100(80G)的训练结果如下:
 
-| |	SFT	| Reward |
-| --- | --- | --- |
-| # trainable params | 2.6B |	815M |
-| # samples	| 5.4M	| 12M |
-| Hours per epoch	| 116h	| 423h |
-| Batch size	| 8	| 8 |
-| GPU Memory used	| 79.4G	| 80.7G |
+模型训练参数：
+
+| 模型 | 可训练参数量 | 数据量 | batch size | sequence length | 硬件 | 显存占用 | speed | Hours per epoch |
+| --- | --- | --- | --- | :---: | :---: | :---: | --- | --- |
+| Pangu-350M | 131M | 12M | 32 | 512 | A100 80G | 72.6G | 1.91 s/iter | 105h
+| Pangu-2.6B | 815M | 12M |  8 | 512 | A100 80G | 80.7G |  | 423h
+
 
