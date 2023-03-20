@@ -6,11 +6,12 @@ MODEL="pangu-2.6B"
 ROOT="/root/autodl-tmp"
 DATR_DIR=$ROOT/Data/chatgpt/processed
 MAIN=$ROOT/Code/RLHF/src/train_reward.py
-MODEL_PATH=$ROOT/Data/models/$MODEL
+TOKENIZER_PATH=$ROOT/Data/models/$MODEL
+MODEL_PATH=$ROOT/Data/chatgpt/output/sft/${MODEL}
 OUTPUT_DIR=$ROOT/Data/chatgpt/output/reward/$MODEL
 TRAIN_FILENAME="train_data_external_v1.jsonl"
 EVAL_FILENAME="dev_data_external_v1.jsonl"
-CHECKPOINT="${ROOT}/Data/chatgpt/output/sft/${MODEL}/pytorch_modelstar.bin"
+#CHECKPOINT="${ROOT}/Data/chatgpt/output/sft/${MODEL}/pytorch_modelstar.bin"
 
 cd $ROOT/Code/RLHF || exit
 mkdir -p $OUTPUT_DIR
@@ -20,18 +21,17 @@ python $MAIN \
   --data_dir $DATR_DIR \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_PATH \
+  --tokenizer_path $TOKENIZER_PATH \
   --max_length 512 \
   --logging_steps 100 \
   --do_train \
   --train_filename $TRAIN_FILENAME \
-  --train_batch_size 16 \
-  --gradient_accumulation_steps 8 \
+  --train_batch_size 32 \
+  --gradient_accumulation_steps 4 \
   --save_strategy "steps" \
   --save_steps 1000 \
   --num_epochs 1 \
-  --deepspeed_config "ds_config_reward_pangu.json" \
-  --checkpoint $CHECKPOINT \
   --do_eval \
   --eval_filename $EVAL_FILENAME \
-  --eval_batch_size 64 \
+  --eval_batch_size 96 \
   > out/train_reward_${MODEL}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1 &
