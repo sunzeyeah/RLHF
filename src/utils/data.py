@@ -107,7 +107,7 @@ class PairwiseDataset(Dataset):
         discard = 0
         pairs = []
         with open(filename, "r", encoding="utf-8") as f:
-            for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
+            for line in tqdm(f, desc=f"Loading {os.path.basename(filename)}"):
                 item = json.loads(line)
                 prompt = clean_text(item['prompt'])
                 answers = item['answers']
