@@ -38,7 +38,8 @@ def weibo_summary_comment(args, tokenizer):
                 item = json.loads(line.strip("\n"))
                 article = item['article'].replace(" ", "")
                 abstract = item['abstract'].replace(" ", "")
-                prompt = f"新闻内容：{article}{tokenizer.sep_token}摘要：{abstract}{tokenizer.sep_token}评论："
+                prompt = f"新闻内容：{article} 摘要：{abstract}"
+                prefix = "评论："
                 answers = [
                     {
                         "answer": k.replace(" ", ""),
@@ -46,7 +47,7 @@ def weibo_summary_comment(args, tokenizer):
                     } for (k, v) in sorted(item['comments'], key=lambda x: (int(x[1]), len(x[0])), reverse=True)
                 ]
                 w.write(json.dumps({"prompt": prompt, "answers": answers}, ensure_ascii=False)+'\n')
-                data.append({"prompt": prompt, "answers": answers})
+                data.append({"prompt": prompt, "answers": answers, "prefix": prefix})
     logger.info(f"length: {len(data)}, time taken: {time.time()-t} s")
 
     return data
@@ -74,8 +75,9 @@ def couplets(args, tokenizer):
             idx = len(line) // 2
             prompt = line[:idx]
             answer = line[idx+1:]
+            prefix = "下联："
             answers = [{"answer": answer, "score": 1}]
-            l2.append({"prompt": f"上联：{prompt}{tokenizer.sep_token}下联：", "answers": answers})
+            l2.append({"prompt": f"上联：{prompt}", "answers": answers, "prefix": prefix})
             length = len(answer)
             if length not in nexts:
                 nexts[length] = list()
@@ -98,8 +100,8 @@ def couplets(args, tokenizer):
             keys.remove(length)
             answers.extend([{"answer": random.choice(nexts[key]), "score": -1} for key in random.sample(keys, 2)])
             #         answers = sorted(answers, key=lambda x: x['score'], reverse=True)
-            w.write(json.dumps({"prompt": l['prompt'], "answers": answers}, ensure_ascii=False)+'\n')
-            data.append({"prompt": l['prompt'], "answers": answers})
+            w.write(json.dumps({"prompt": l['prompt'], "answers": answers, "prefix": l['prefix']}, ensure_ascii=False)+'\n')
+            data.append({"prompt": l['prompt'], "answers": answers, "prefix": l['prefix']})
     #         if i % 1000 == 0:
     #             logger.info(f"{i} samples processed, time taken: {time.time()-t2} s")
     logger.info(f"length: {len(data)}, time taken: {time.time()-t2} s")
@@ -124,11 +126,12 @@ def zhidao(args, tokenizer):
             df = pd.read_csv(fi).sort_values(by=["title", "is_best"], ascending=False)
             prev_title = None
             prev_prompt = None
+            prefix = "答："
             for _, val in df.iterrows():
                 if isinstance(val['question'], str) and val['question'] != val['title']:
-                    prompt = f"问题：{val['title']}{tokenizer.sep_token}内容：{val['question']}{tokenizer.sep_token}回答："
+                    prompt = f"问题：{val['title']} 内容：{val['question']}"
                 else:
-                    prompt = f"问题：{val['title']}{tokenizer.sep_token}回答："
+                    prompt = f"问题：{val['title']}"
                 if prev_title is not None and prev_title == val['title']:
                     answers.append({"answer": val['reply'], "score": val['is_best']})
                 else:
@@ -140,8 +143,8 @@ def zhidao(args, tokenizer):
                 prev_prompt = prompt
                 prev_title = val['title']
             #         l3.append({"prompt": prev_prompt, "answers": copy.deepcopy(answers)})
-            w.write(json.dumps({"prompt": prev_prompt, "answers": answers}, ensure_ascii=False)+'\n')
-            data.append({"prompt": prev_prompt, "answers": answers})
+            w.write(json.dumps({"prompt": prev_prompt, "answers": answers, "prefix": prefix}, ensure_ascii=False)+'\n')
+            data.append({"prompt": prev_prompt, "answers": answers, "prefix": prefix})
             logger.info(f"finished processing {os.path.basename(fi)}")
     logger.info(f"length: {len(data)}, time taken: {time.time()-t} s")
 
@@ -176,9 +179,10 @@ def chinese_classical(args, tokenizer):
                 elif p1 is not None and p2 is not None:
                     pair = [("古文", p1), ("现代文", p2)]
                     random.shuffle(pair)
-                    prompt = f"{pair[0][0]}：{pair[0][1]}{tokenizer.sep_token}{pair[1][0]}："
+                    prompt = f"{pair[0][0]}：{pair[0][1]}"
+                    prefix = f"{pair[1][0]}："
                     answers = [{"answer": pair[1][1], "score": 1}]
-                    l3.append({"prompt": prompt, "answers": answers, "name": name})
+                    l3.append({"prompt": prompt, "answers": answers, "prefix": prefix, "name": name})
                     p1 = None
                     p2 = None
     t2 = time.time()
@@ -188,6 +192,7 @@ def chinese_classical(args, tokenizer):
         for l in tqdm(enumerate(l3), desc="Processing Chinese Classical-Modern"):
             name = l['name']
             prompt = l['prompt']
+            prefix = l['prefix']
             answer = l['answers'][0]['answer']
             if prompt.startswith("古文"):
                 answer_type = '现代文'
@@ -199,8 +204,8 @@ def chinese_classical(args, tokenizer):
             keys = set(dicts.keys())
             keys.remove(name)
             answers.extend([{"answer": random.choice(dicts[key][answer_type]), "score": -1} for key in random.sample(keys, 2)])
-            w.write(json.dumps({"prompt": prompt, "answers": answers}, ensure_ascii=False)+'\n')
-            data.append({"prompt": prompt, "answers": answers})
+            w.write(json.dumps({"prompt": prefix, "answers": answers}, ensure_ascii=False)+'\n')
+            data.append({"prompt": prefix, "answers": answers})
     #         if i % 100 == 0:
     #             logger.info(f"{i} samples processed, time taken: {time.time()-t2} s")
     logger.info(f"length: {len(data)}, time taken: {time.time()-t2} s")
@@ -318,7 +323,7 @@ def chinese_poetry(args, tokenizer):
             if author not in dicts[genre]:
                 dicts[genre][author] = dict()
             quantifier = "篇" if genre in ["经书", "楚辞"] else "首"
-            prompt = f"以{author}的风格，写一{quantifier}{genre}，题为{title}{tokenizer.sep_token}"
+            prompt = f"以{author}的风格，写一{quantifier}{genre}，题为{title}"
             answers = [{"answer": contents, "score": 1}]
             l5.append({"prompt": prompt, "answers": answers, "genre": genre, "title": title, "author": author})
             dicts[genre][author][title] = contents
@@ -352,8 +357,8 @@ def chinese_poetry(args, tokenizer):
             a = random.choice(list(dicts[g].keys()))
             t = random.choice(list(dicts[g][a].keys()))
             answers.append({"answer": dicts[g][a][t], "score": -2})
-            w.write(json.dumps({"prompt": prompt, "answers": answers}, ensure_ascii=False)+'\n')
-            data.append({"prompt": prompt, "answers": answers})
+            w.write(json.dumps({"prompt": prompt, "answers": answers, "prefix": ""}, ensure_ascii=False)+'\n')
+            data.append({"prompt": prompt, "answers": answers, "prefix": ""})
     logger.info(f"length: {len(data)}, time taken: {time.time()-t2} s")
 
     return data
@@ -380,11 +385,12 @@ def baike_qa_2019(args, tokenizer):
                         break
                     item = json.loads(line.strip("\n"))
                     question = clean_text(item['title'] if len(item['title']) > len(item['desc']) else item['desc'])
-                    prompt = f"{question}{tokenizer.sep_token}回答："
+                    prompt = question
+                    prefix = "答："
                     answer = clean_text(item['answer'])
                     answers = [{"answer": answer, "score": 1}]
-                    w.write(json.dumps({"prompt": prompt, "answers": answers}, ensure_ascii=False)+'\n')
-                    data.append({"prompt": prompt, "answers": answers})
+                    w.write(json.dumps({"prompt": prompt, "answers": answers, "prefix": prefix}, ensure_ascii=False)+'\n')
+                    data.append({"prompt": prompt, "answers": answers, "prefix": prefix})
     logger.info(f"length: {len(data)}, time taken: {time.time()-t} s")
 
     return data

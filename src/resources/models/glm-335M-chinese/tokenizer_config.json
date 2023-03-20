@@ -5,6 +5,7 @@
   "cls_token": "[CLS]",
   "mask_token": "[MASK]",
   "unk_token": "[UNK]",
+  "sep_token": "[SEP]",
   "additional_special_tokens": ["<|startofpiece|>", "<|endofpiece|>", "[gMASK]", "[sMASK]"],
   "add_prefix_space": false,
   "tokenizer_class": "GLMChineseTokenizer",

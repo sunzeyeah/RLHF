@@ -2,36 +2,39 @@
 import torch
 
 from torch import nn
+
 from src.models.loss import PairWiseLoss
 
 
 class GPTRewardModel(nn.Module):
-    def __init__(self, model, tokenizer):
+    def __init__(self, config, model, tokenizer):
         super().__init__()
-
+        self.model_type = config.model_type
         self.pad_id = tokenizer.pad_token_id
-
-        self.config = model.config
-        # `gpt-neo(x)` models use `hidden_size` attribute names instead of `n_embd``
-        self.config.n_embd = self.config.hidden_size if hasattr(self.config, "hidden_size") else self.config.n_embd
-        self.transformer = model.transformer
-        self.v_head = nn.Linear(self.config.n_embd, 1, bias=False)
+        self.transformer = model#.transformer
+        self.v_head = nn.Linear(config.hidden_size, 1, bias=False)
         self.loss_fn = PairWiseLoss()
 
     def reward(
             self,
             input_ids=None,
-            attention_mask=None
+            attention_mask=None,
+            position_ids=None
     ):
-        transformer_outputs = self.transformer(input_ids, attention_mask=attention_mask)
-        hidden_states = transformer_outputs[0]
+        transformer_outputs = self.transformer(input_ids, attention_mask=attention_mask, position_ids=position_ids)
+        if self.model_type == "glm":
+            hidden_states = transformer_outputs.mems[-1]
+        else:
+            hidden_states = transformer_outputs[0]
         rewards = self.v_head(hidden_states).squeeze(-1)
 
         # outputs = self.body(sequences, attention_mask=attention_mask)
         # last_hidden_states = outputs['last_hidden_state']
         # values = self.value_head(last_hidden_states)[:, :-1]
 
-        rewards = rewards.mean(dim=-1).squeeze(1)    # ensure shape is (B)
+        rewards = rewards.mean(dim=-1)
+        if len(rewards.shape) == 2:
+            rewards = rewards.squeeze(1)    # ensure shape is (B)
 
         return rewards
 
@@ -39,11 +42,12 @@ class GPTRewardModel(nn.Module):
             self,
             chosen_input_ids=None,
             chosen_attention_mask=None,
+            chosen_position_ids=None,
             rejected_input_ids=None,
             rejected_attention_mask=None,
+            rejected_position_ids=None,
             past_key_values=None,
             token_type_ids=None,
-            position_ids=None,
             head_mask=None,
             inputs_embeds=None,
             mc_token_ids=None,
@@ -52,8 +56,8 @@ class GPTRewardModel(nn.Module):
             output_attentions=False,
             output_hidden_states=False,
     ):
-        chosen_reward = self.reward(chosen_input_ids, attention_mask=chosen_attention_mask)
-        reject_reward = self.reward(rejected_input_ids, attention_mask=rejected_attention_mask)
+        chosen_reward = self.reward(chosen_input_ids, attention_mask=chosen_attention_mask, position_ids=chosen_position_ids)
+        reject_reward = self.reward(rejected_input_ids, attention_mask=rejected_attention_mask, position_ids=rejected_position_ids)
         loss = self.loss_fn(chosen_reward, reject_reward)
 
         # # Split the inputs and rewards into two parts, chosen and rejected

@@ -7,6 +7,7 @@ from transformers import PreTrainedTokenizer, RobertaTokenizer, GPT2Tokenizer, B
 from transformers.utils import logging
 from transformers.tokenization_utils_base import BatchEncoding
 from transformers.models.auto.tokenization_auto import get_tokenizer_config
+# from transformers.utils import torch_required
 from transformers.utils.generic import _is_torch_device
 import sentencepiece as spm
 
@@ -14,13 +15,12 @@ logger = logging.get_logger(__name__)
 
 
 class GLMBatchEncoding(BatchEncoding):
+    # @torch_required
     def to(self, device: Union[str, "torch.device"]) -> "BatchEncoding":
         """
         Send all values to device by calling `v.to(device)` (PyTorch only).
-
         Args:
             device (`str` or `torch.device`): The device to put the tensors on.
-
         Returns:
             [`BatchEncoding`]: The same instance after modification.
         """
@@ -163,7 +163,7 @@ class GLMTokenizerMixin:
             if not is_batched:
                 targets = [targets]
             assert len(targets) == len(input_ids)
-            targets = [(target + [self.eop_token_id])[:max_gen_length] for target in targets]
+            targets = [target[:(max_gen_length-1)] + [self.eop_token_id] for target in targets]
             if not padding:
                 max_gen_length = max(map(len, targets))
             targets = [[self.sop_token_id] + target for target in targets]
@@ -279,23 +279,30 @@ class GLMChineseTokenizer(PreTrainedTokenizer, GLMTokenizerMixin):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A BERT sequence has the following format:
-
         - single sequence: ``[CLS] X [SEP]``
         - pair of sequences: ``[CLS] A [SEP] B [SEP]``
-
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of IDs to which the special tokens will be added.
             token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
-
         Returns:
             :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
-        assert token_ids_1 is None
+        #assert token_ids_1 is None
+        #cls = [self.cls_token_id]
+        #eos = [self.eos_token_id]
+        #return cls + token_ids_0 + eos
         cls = [self.cls_token_id]
         eos = [self.eos_token_id]
-        return cls + token_ids_0 + eos
+        #eop = [self.eop_token_id]
+        #mask = [self.mask_token_id]
+        sep = [self.sep_token_id]
+        #token_ids_0 = cls + token_ids_0 + mask + eos
+        if token_ids_1 is None:
+            return cls + token_ids_0 + eos
+        else:
+            return  cls + token_ids_0 + sep + token_ids_1 + eos
 
 
 class GLMGPT2Tokenizer(GPT2Tokenizer, GLMTokenizerMixin):
@@ -308,16 +315,13 @@ class GLMGPT2Tokenizer(GPT2Tokenizer, GLMTokenizerMixin):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A BERT sequence has the following format:
-
         - single sequence: ``[CLS] X [SEP]``
         - pair of sequences: ``[CLS] A [SEP] B [SEP]``
-
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of IDs to which the special tokens will be added.
             token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
-
         Returns:
             :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """

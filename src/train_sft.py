@@ -61,7 +61,7 @@ def get_parser():
                              '- `"epoch"`: Save is done at the end of each epoch.'
                              '- `"steps"`: Save is done every `save_steps`.')
     parser.add_argument("--save_steps", type=int, default=None)
-    parser.add_argument("--save_total_limit", type=int, default=5)
+    parser.add_argument("--save_total_limit", type=int, default=2)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
     parser.add_argument("--gradient_checkpointing", type=bool, default=False,
                         help="If True, use gradient checkpointing to save memory at the expense of slower backward pass.")
@@ -136,7 +136,7 @@ def main():
         no_cuda=not torch.cuda.is_available(),
         seed=args.seed,
         data_seed=args.seed,
-        local_rank=args.local_rank,
+        # local_rank=args.local_rank,
         do_train=args.do_train,
         num_train_epochs=args.num_epochs,
         learning_rate=args.learning_rate,
@@ -154,7 +154,7 @@ def main():
         save_total_limit=args.save_total_limit,
         logging_steps=args.logging_steps,
         report_to=["tensorboard"],
-        deepspeed=deepspeed_config,
+        # deepspeed=deepspeed_config,
         gradient_checkpointing=args.gradient_checkpointing,
         do_eval=args.do_eval,
         evaluation_strategy=args.evaluation_strategy,

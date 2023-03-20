@@ -7,7 +7,7 @@ import os
 import torch
 import argparse
 
-from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments
+from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments, AutoModelForSeq2SeqLM
 
 from src.models.reward import GPTRewardModel
 from src.utils import logger, RESOURCE_PATH
@@ -43,7 +43,7 @@ def get_parser():
                              '- `"epoch"`: Save is done at the end of each epoch.'
                              '- `"steps"`: Save is done every `save_steps`.')
     parser.add_argument("--save_steps", type=int, default=None)
-    parser.add_argument("--save_total_limit", type=int, default=20)
+    parser.add_argument("--save_total_limit", type=int, default=2)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
     parser.add_argument("--gradient_checkpointing", type=bool, default=False,
                         help="If True, use gradient checkpointing to save memory at the expense of slower backward pass.")
@@ -78,15 +78,28 @@ def main():
     # load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
 
-    model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-    model.resize_token_embeddings(tokenizer.vocab_size)
-    # model.config.end_token_id = tokenizer.eos_token_id
-    # model.config.pad_token_id = tokenizer.pad_token_id
-    # model.config.bos_token_id = tokenizer.bos_token_id
-    # model.config.eos_token_id = tokenizer.eos_token_id
+    if "pangu" in args.model_name_or_path:
+        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+        model.resize_token_embeddings(tokenizer.vocab_size)
+        # model.config.end_token_id = tokenizer.eos_token_id
+        # model.config.pad_token_id = tokenizer.pad_token_id
+        # model.config.bos_token_id = tokenizer.bos_token_id
+        # model.config.eos_token_id = tokenizer.eos_token_id
+        # Initialize the reward model from the (supervised) fine-tuned SFT model
+        reward_model = GPTRewardModel(model.config, model.transformer, tokenizer)
+        layers = reward_model.transformer.h
+    else:
+        model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
+        # Initialize the reward model from the (supervised) fine-tuned SFT model
+        reward_model = GPTRewardModel(model.config, model.glm, tokenizer)
+        layers = reward_model.transformer.transformer.layers
 
-    # Initialize the reward model from the (supervised) fine-tuned SFT model
-    reward_model = GPTRewardModel(model, tokenizer)
+    # Freeze the first 70% of the hidden layers of the reward model backbone
+    num_layers = len(layers)
+    num_unfrozen = int(0.3 * num_layers)
+    for layer in layers[:-num_unfrozen]:
+        layer.requires_grad_(False)
+
     if args.checkpoint is not None:
         checkpoints = glob.glob(args.checkpoint.replace("star", "*"))
         st = dict()
@@ -96,13 +109,6 @@ def main():
         # st = torch.load(args.checkpoint, map_location="cpu")
         # reward_model.load_state_dict(st, strict=False)
     logger.info(f"Finished loading model and tokenizer")
-
-    # Freeze the first 70% of the hidden layers of the reward model backbone
-    layers = reward_model.transformer.h
-    num_layers = len(layers)
-    num_unfrozen = int(0.3 * num_layers)
-    for layer in layers[:-num_unfrozen]:
-        layer.requires_grad_(False)
 
     # Set up the datasets
     if args.do_train:

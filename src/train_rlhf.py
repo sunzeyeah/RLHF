@@ -47,7 +47,7 @@ def get_parser():
                              '- `"epoch"`: Save is done at the end of each epoch.'
                              '- `"steps"`: Save is done every `save_steps`.')
     parser.add_argument("--save_steps", type=int, default=None)
-    parser.add_argument("--save_total_limit", type=int, default=20)
+    parser.add_argument("--save_total_limit", type=int, default=2)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
     parser.add_argument("--gradient_checkpointing", type=bool, default=False,
                         help="If True, use gradient checkpointing to save memory at the expense of slower backward pass.")
