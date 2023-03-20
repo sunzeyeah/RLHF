@@ -11,3 +11,9 @@ triton
 ninja
 torchmetrics
 opencc
+torchtyping
+accelerate
+ray
+tqdm
+rich
+yaml

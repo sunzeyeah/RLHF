@@ -1,21 +1,23 @@
 train:
-  seq_length: 1024
-  epochs: 5
-  total_steps: 500000
-  batch_size: 4
+  seq_length: 512
+  epochs: 1
+  total_steps: 50000
+  batch_size: 1
 
-  checkpoint_interval: 10000
-  eval_interval: 200
+  checkpoint_interval: 1000
+  eval_interval: 1000
 
-  pipeline: "PromptPipeline"
+  pipeline: "PanguPipeline"
   trainer: "AcceleratePPOTrainer"
 
 model:
-  model_path: "/Users/zeyesun/Documents/Data/models/pangu-350M"
+  model_path: "D:\\Data\\models\\pangu-350M"
+#  model_path: "/Users/zeyesun/Documents/Data/models/pangu-350M"
   num_layers_unfrozen: -1
 
 tokenizer:
-  tokenizer_path: "/Users/zeyesun/Documents/Data/models/pangu-350M"
+  tokenizer_path: "D:\\Data\\models\\pangu-350M"
+#  tokenizer_path: "/Users/zeyesun/Documents/Data/models/pangu-350M"
   truncation_side: "right"
 
 optimizer:
@@ -35,8 +37,8 @@ scheduler:
 method:
   name: "ppoconfig"
   num_rollouts: 512
-  chunk_size: 64
-  ppo_epochs: 4
+  chunk_size: 2
+  ppo_epochs: 1
   init_kl_coef: 0.1
   target: 6
   horizon: 10000

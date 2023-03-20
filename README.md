@@ -48,7 +48,7 @@ pip install -e .
 | 数据集      | size | 百度网盘地址  |  提取码      | 
 | ----------- | ----------- | ----------- |  ----------- |
 | [CLUE Benchmark](https://github.com/CLUEbenchmark/CLUE)   | 500MB | [CLUE Benchmark](https://pan.baidu.com/s/15F60nRbBd6d6UvyXdwbXQA) |  m6gt |
-| SFT & Reward Data  | 4GB | [SFT & Reward Data](https://pan.baidu.com/s/1QRxtNZYTd2N_zOwqzfzvRw) |  ueiy |
+| SFT & Reward Data  | 4GB | [SFT & Reward Data](https://pan.baidu.com/s/1sl8PB-Dlt1xLIYczMODyRg) | ecyc |
 | [百科](https://github.com/brightmart/nlp_chinese_corpus)  | 652MB | [baike_qa_2019](https://pan.baidu.com/s/1N6I-fvx6FLHwuxJuDLLA8g) | 7jad |
 | [知道问答](https://github.com/SophonPlus/ChineseNlpCorpus) | 847MB | [zhidao](https://pan.baidu.com/s/1sjR3vABiMbdV1HkUt6kCKQ) | neds |
 | [对联](https://github.com/wb14123/couplet-dataset/releases/download/1.0/couplet.tar.gz)  | 221MB | [couplets](https://pan.baidu.com/s/1oo6oaephPXpyU-sDd_37qg) | 54ey |

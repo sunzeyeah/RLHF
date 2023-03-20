@@ -6,15 +6,16 @@ sys.path.insert(0, "/mnt/private-pa002-vol726121-prd/Code/RLHF")
 import os
 import argparse
 import torch
-import trlx
 
-from trlx.data.configs import TRLConfig
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM
 
 from src.utils import logger, RESOURCE_PATH
+from src.utils.config import TRLConfig, default_ilql_config, default_ppo_config, default_sft_config
 from src.models.reward import GPTRewardModel
 from src.utils.file_utils import set_seed
 from src.utils.data import RLHFDataset
+from src.utils.loading import get_pipeline, get_trainer
 
 
 def get_parser():
@@ -23,7 +24,7 @@ def get_parser():
     parser.add_argument("--data_dir", type=str, required=True)
     parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument("--model_name_or_path", type=str, required=True)
-    parser.add_argument("--sft_checkpoint", type=str, required=True)
+    parser.add_argument("--sft_model_path", type=str, required=True)
     parser.add_argument("--reward_checkpoint", type=str, required=True)
 
     parser.add_argument("--seed", type=int, default=42)
@@ -72,6 +73,86 @@ def get_parser():
     args = parser.parse_args()
 
     return args
+
+
+def train(model_path: Optional[str] = None,
+          reward_fn: Optional[Callable[[List[str], List[str], List[str]], List[float]]] = None,
+          dataset: Optional[Iterable[Tuple[str, float]]] = None,
+          samples: Optional[List[str]] = None,
+          rewards: Optional[List[float]] = None,
+          prompts: Optional[List[str]] = None,
+          eval_prompts: Optional[List[str]] = None,
+          metric_fn: Optional[Callable[[List[str], List[str], List[str]], Dict[str, List[float]]]] = None,
+          config: Optional[TRLConfig] = None,
+          stop_sequences: Optional[List[str]] = [],):
+    if config is None:
+        logger.warn(
+            "Passing the `config` argument implicitly is depreciated, use or"
+            "adapt some from default configs instead"
+        )
+        if reward_fn:
+            config = default_ppo_config()
+        elif rewards:
+            config = default_ilql_config()
+        else:
+            config = default_sft_config()
+
+    set_seed(config.train.seed)
+
+    if dataset:
+        logger.warn("the `dataset` argument is being depreciated, split it into `samples` and `rewards` instead")
+        samples, rewards = dataset
+
+    if model_path:
+        config.model.model_path = model_path
+
+    trainer = get_trainer(config.train.trainer)(
+        config=config,
+        reward_fn=reward_fn,
+        metric_fn=metric_fn,
+        stop_sequences=stop_sequences,
+        **config.train.trainer_kwargs,
+    )
+
+    batch_size = config.train.batch_size * int(os.environ.get("WORLD_SIZE", 1))
+    max_prompt_length = config.train.seq_length - config.method.gen_kwargs["max_new_tokens"]
+
+    # Online training against a reward function (e.g. PPO)
+    if reward_fn:
+        prompts = prompts or [trainer.tokenizer.bos_token] * batch_size
+
+        if eval_prompts is None:
+            eval_prompts = prompts[:batch_size]
+
+        pipeline = get_pipeline(config.train.pipeline)(prompts, config, trainer.tokenizer)
+        trainer.add_prompt_pipeline(pipeline)
+
+        if eval_prompts is None:
+            eval_prompts = prompts[:batch_size]
+
+        trainer.make_experience(config.method.num_rollouts)
+
+    # Offline training from the collected samples (e.g. SFT, ILQL)
+    elif samples:
+        if rewards:
+            if len(samples) != len(rewards):
+                raise ValueError(f"Number of samples {len(samples)} should match the number of rewards {len(rewards)}")
+
+        if eval_prompts is None:
+            eval_prompts = [trainer.tokenizer.bos_token] * batch_size
+
+        if rewards:
+            trainer.make_experience(samples, rewards, config.train.seq_length)
+        else:
+            trainer.store = get_pipeline(config.train.pipeline)(samples, max_prompt_length, trainer.tokenizer)
+
+    else:
+        raise ValueError("Either `samples` or `reward_fn` should be given for training")
+
+    eval_pipeline = get_pipeline(config.train.pipeline)(eval_prompts, max_prompt_length, trainer.tokenizer)
+    trainer.add_eval_pipeline(eval_pipeline)
+
+    trainer.learn()
 
 
 def main():
@@ -145,32 +226,30 @@ def main():
 
     # config_path = pathlib.Path(__file__).parent.joinpath("configs/ppo_config_pangu.yml")
     ppo_config = TRLConfig.load_yaml(os.path.join(RESOURCE_PATH, "config", "ppo_model", args.ppo_config))
-    # TODO: 待确定trlx中如何更新sft模型
-    ppo_config.model.model_path = args.sft_checkpoint
+    ppo_config.model.model_path = args.sft_model_path
     # tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
     logger.info(f"PPO config: {ppo_config}")
-    max_length = ppo_config.train.seq_length - ppo_config.method.gen_kwargs["max_new_tokens"]
+    max_prompt_length = ppo_config.train.seq_length - ppo_config.method.gen_kwargs["max_new_tokens"]
 
     # load dataset
-    post_summary_dict = dict()
     if args.do_train:
-        train_dataset = RLHFDataset(args, os.path.join(args.data_dir, args.train_filename), tokenizer)
-        # train_data = RLHFDataset.load_dataset(os.path.join(args.data_dir, args.train_filename), max_length)
+        # train_dataset = RLHFDataset(args, os.path.join(args.data_dir, args.train_filename), tokenizer)
+        train_dataset = RLHFDataset.load_dataset(os.path.join(args.data_dir, args.train_filename))
         # for td in train_dataset.post_list:
         #     post_summary_dict[td['prompt']] = td['label']
     else:
         train_dataset = None
     if args.do_eval:
-        dev_dataset = RLHFDataset(args, os.path.join(args.data_dir, args.eval_filename), tokenizer)
-        # dev_data = RLHFDataset.load_dataset(os.path.join(args.data_dir, args.eval_filename), max_length)
+        # dev_dataset = RLHFDataset(args, os.path.join(args.data_dir, args.eval_filename), tokenizer)
+        dev_dataset = RLHFDataset.load_dataset(os.path.join(args.data_dir, args.eval_filename))
         # for td in dev_dataset.post_list:
         #     post_summary_dict[td['prompt']] = td['label']
     else:
         dev_dataset = None
 
     if args.do_train:
-        trlx.train(reward_fn=reward_fn, prompts=train_dataset, eval_prompts=dev_dataset, config=ppo_config)
+        train(reward_fn=reward_fn, prompts=train_dataset, eval_prompts=dev_dataset, config=ppo_config)
 
 
 if __name__ == "__main__":
