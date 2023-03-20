@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MODEL="pangu-2.6B"
+MODEL="pangu-350M"
 
 #ROOT="/mnt/private-pa002-vol726121-prd"
 ROOT="/root/autodl-tmp"
