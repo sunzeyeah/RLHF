@@ -11,11 +11,12 @@ train:
   trainer: "AcceleratePPOTrainer"
 
 model:
-  model_path: "/Users/zeyesun/Documents/Data/models/pangu-350M"
+  model_path: "/Users/zeyesun/Documents/Data/models/glm-335M-chinese"
   num_layers_unfrozen: -1
+  model_arch_type: "seq2seq"
 
 tokenizer:
-  tokenizer_path: "/Users/zeyesun/Documents/Data/models/pangu-350M"
+  tokenizer_path: "/Users/zeyesun/Documents/Data/models/glm-335M-chinese"
   truncation_side: "right"
 
 optimizer:

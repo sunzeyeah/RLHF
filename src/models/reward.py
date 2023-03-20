@@ -57,8 +57,12 @@ class GPTRewardModel(nn.Module):
             output_hidden_states=False,
     ):
         chosen_reward = self.reward(chosen_input_ids, attention_mask=chosen_attention_mask, position_ids=chosen_position_ids)
-        reject_reward = self.reward(rejected_input_ids, attention_mask=rejected_attention_mask, position_ids=rejected_position_ids)
-        loss = self.loss_fn(chosen_reward, reject_reward)
+        if rejected_input_ids is not None and rejected_attention_mask is not None:
+            reject_reward = self.reward(rejected_input_ids, attention_mask=rejected_attention_mask, position_ids=rejected_position_ids)
+            loss = self.loss_fn(chosen_reward, reject_reward)
+        else:
+            reject_reward = None
+            loss = None
 
         # # Split the inputs and rewards into two parts, chosen and rejected
         # assert len(input_ids.shape) == 2

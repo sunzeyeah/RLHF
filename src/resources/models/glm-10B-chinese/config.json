@@ -1,5 +1,5 @@
 {
-  "_name_or_path": "THUDM/glm-10b-chinese",
+  "model_name_or_path": "THUDM/glm-10b-chinese",
   "architectures": [
     "GLMModel"
   ],
@@ -29,7 +29,6 @@
   "spell_func": "lstm",
   "spell_length": null,
   "torch_dtype": "float32",
-  "transformers_version": "4.23.1",
   "vocab_size": 50048,
   "bad_words_id": [50009]
 }

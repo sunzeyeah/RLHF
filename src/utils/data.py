@@ -121,10 +121,8 @@ class PairwiseDataset(Dataset):
                     if answer_1_score > answer_2_score:
                         chosen_answer = answer_1
                     rejected_answer = answer_2
-                    # if (len(prompt) + len(rejected_answer) > max_length) or (len(prompt) + len(chosen_answer) > max_length):
-                    #     discard += 1
-                    # else:
-                    if chosen_answer is not None:
+                    if chosen_answer is not None and rejected_answer is not None and \
+                            len(prompt) > 0 and len(chosen_answer) > 0 and len(rejected_answer) > 0:
                         pair = {
                             "prompt": prompt,
                             "prefix": prefix,
@@ -132,6 +130,9 @@ class PairwiseDataset(Dataset):
                             "rejected_answer": rejected_answer
                         }
                         pairs.append(pair)
+                    else:
+                        discard += 1
+
         logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return pairs
@@ -195,6 +196,7 @@ class SFTDataset(Dataset):
                 prefix = item['prefix']
 
                 if len(prompt) <= 0 or len(label) <= 0:
+                    discard += 1
                     continue
                 datasets.append({"prompt": prompt, "label": label, "prefix": prefix})
         logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
@@ -203,44 +205,73 @@ class SFTDataset(Dataset):
 
 
 class RLHFDataset(Dataset):
-    def __init__(self, dataset, tokenizer, max_length):
-
-        # dataset = self.load_dataset(filename)
-        self.post_list = dataset
+    def __init__(self, args, filename, tokenizer):
+        self.args = args
         self.tokenizer = tokenizer
-        self.max_length = max_length
+
+        self.post_list = self.load_dataset(filename)
 
         for k in range(5):
-            logger.info(f"TLDRDataset sample-{k}\n: {dataset[k]}")
+            logger.info(f"RLHFDataset sample-{k}\n: {self.post_list[k]}")
 
     def __len__(self):
         return len(self.post_list)
 
     def __getitem__(self, idx):
-        sample = self.post_list[idx]
-        encodings_dict = self.tokenizer(sample["prompt"], "模型回答:" + sample["label"], max_length=self.max_length,
-                                        truncation="longest_first", return_tensors="pt")
-        text = self.tokenizer.decode(encodings_dict['input_ids'], skip_special_tokens=True).strip()
+        # sample = self.post_list[idx]
+        # encodings_dict = self.tokenizer(sample["prompt"], "模型回答:" + sample["label"], max_length=self.max_length,
+        #                                 truncation="longest_first", return_tensors="pt")
+        # text = self.tokenizer.decode(encodings_dict['input_ids'], skip_special_tokens=True).strip()
+        # return text
+        data = self.post_list[idx]
+        prompt = data['prompt']
+        label = data['label']
+        prefix = data['prefix']
+        if "glm" in self.args.model_name_or_path:
+            prompt_length = len(self.tokenizer.tokenize(prompt+prefix)) + 4
+            label_length = len(self.tokenizer.tokenize(label)) + 1
+            if prompt_length + label_length > self.args.max_length:
+                if prompt_length >= label_length:
+                    prompt_length -= prompt_length + label_length - self.args.max_length
+                else:
+                    label_length -= prompt_length + label_length - self.args.max_length
+            else:
+                label_length = self.args.max_length - prompt_length
+            encoded_dict = self.tokenizer(prompt, prefix + self.tokenizer.mask_token,
+                                          max_length=prompt_length,
+                                          truncation="only_first",
+                                          return_tensors="pt",
+                                          return_token_type_ids=False)
+            encoded_dict = self.tokenizer.build_inputs_for_generation(encoded_dict, targets=label,
+                                                                      max_gen_length=label_length, padding=True)
+            return {
+                "input_ids": encoded_dict['input_ids'][0],
+                "position_ids": encoded_dict['position_ids'][0],
+                "attention_mask": encoded_dict['attention_mask'][0],
+                "labels": encoded_dict['labels'][0],
+            }
+        else:
+            encoded_dict = self.tokenizer(prompt, prefix+label, max_length=self.args.max_length, return_tensors="pt",
+                                          truncation="longest_first", padding="max_length", return_token_type_ids=False)
 
-        return text
+            return encoded_dict
 
     @staticmethod
-    def load_dataset(filename, max_length):
+    def load_dataset(filename):
         discard = 0
         datasets = []
         with open(filename, "r", encoding="utf-8") as f:
             for i, line in tqdm(enumerate(f), desc="Load Dataset"):
                 item = json.loads(line)
-                prompt = clean_text(item['title'] if len(item['title']) > len(item['desc']) else item['desc'])
-                label = clean_text(item['answer'])
+                prompt = clean_text(item['prompt'])
+                label = clean_text(item['answers'][0]['answer'])
+                prefix = item['prefix']
 
-                if len(prompt) + len(label) > max_length:
+                if len(prompt) <= 0 or len(label) <= 0:
                     discard += 1
-                else:
-                    datasets.append({"prompt": prompt, "label": label})
-                # if i-discard+1 == max_samples:
-                #     logger.info(f"File: {path}/web_text_zh_{split}.json Num of over-length: {discard}")
-                #     return datasets
+                    continue
+                datasets.append({"prompt": prompt, "label": label, "prefix": prefix})
+
         logger.info(f"Finish loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets

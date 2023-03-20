@@ -9,7 +9,7 @@ import torch
 import trlx
 
 from trlx.data.configs import TRLConfig
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM
 
 from src.utils import logger, RESOURCE_PATH
 from src.models.reward import GPTRewardModel
@@ -84,24 +84,29 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
 
     # load reward model
-    model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-    model.resize_token_embeddings(tokenizer.vocab_size)
-    model.config.end_token_id = tokenizer.eos_token_id
-    model.config.pad_token_id = tokenizer.pad_token_id
-    model.config.bos_token_id = tokenizer.bos_token_id
-    model.config.eos_token_id = tokenizer.eos_token_id
-    # assert rw_tokenizer.pad_token_id == rw_tokenizer.eos_token_id
-    # rw_model.config.end_token_id = rw_tokenizer.eos_token_id
-    # rw_model.config.pad_token_id = rw_model.config.eos_token_id
-    rw_model = GPTRewardModel(model, tokenizer)
+    if "pangu" in args.model_name_or_path:
+        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+        model.resize_token_embeddings(tokenizer.vocab_size)
+        # model.config.end_token_id = tokenizer.eos_token_id
+        # model.config.pad_token_id = tokenizer.pad_token_id
+        # model.config.bos_token_id = tokenizer.bos_token_id
+        # model.config.eos_token_id = tokenizer.eos_token_id
+        # assert rw_tokenizer.pad_token_id == rw_tokenizer.eos_token_id
+        # rw_model.config.end_token_id = rw_tokenizer.eos_token_id
+        # rw_model.config.pad_token_id = rw_model.config.eos_token_id
+        reward_model = GPTRewardModel(model.config, model.transformer, tokenizer)
+    else:
+        model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
+        # Initialize the reward model from the (supervised) fine-tuned SFT model
+        reward_model = GPTRewardModel(model.config, model.glm, tokenizer)
     state_dict_reward = torch.load(args.reward_checkpoint, map_location="cpu")
-    rw_model.load_state_dict(state_dict_reward)
+    reward_model.load_state_dict(state_dict_reward)
     logger.info(f"Finish loading reward model from {args.reward_checkpoint}")
 
-    rw_model.half()
-    rw_model.eval()
-    device = torch.device(f"cuda:{args.local_rank}")
-    rw_model.to(device)
+    # reward_model.half()
+    reward_model.eval()
+    device = torch.device(f"cuda:{args.local_rank}") if torch.cuda.is_available() else torch.device("cpu")
+    reward_model.to(device)
 
     def get_scores(samples):
         scores_list = []
@@ -121,7 +126,7 @@ def main():
             input_ids = input_ids.repeat(2, 1)
             attn_masks = attn_masks.repeat(2, 1)
             with torch.no_grad():
-                sub_scores = rw_model(input_ids=input_ids, attention_mask=attn_masks)
+                sub_scores = reward_model(input_ids=input_ids, attention_mask=attn_masks)
             scores_list.append(sub_scores["chosen_end_scores"])
         scores = torch.cat(scores_list, dim=0)
 
@@ -131,19 +136,17 @@ def main():
         # rank = torch.distributed.get_rank()
         # if rank == 0:
         #     logger.info(f"[rank-{rank}]: {samples[0]}")
-        original_samples = [text.split("模型回答:")[0] + "模型回答:" for text in samples]
-        original_samples = [text + post_summary_dict[text.strip()] for text in original_samples]
-        original_scores = get_scores(original_samples)
+        # original_samples = [text.split("模型回答:")[0] + "模型回答:" for text in samples]
+        # original_samples = [text + post_summary_dict[text.strip()] for text in original_samples]
+        original_scores = get_scores(samples)
         scores = get_scores(samples)
         norms_scores = scores - original_scores
         return norms_scores
 
     # config_path = pathlib.Path(__file__).parent.joinpath("configs/ppo_config_pangu.yml")
-    ppo_config = TRLConfig.load_yaml(os.path.join(RESOURCE_PATH, "config", "ppo_config", args.ppo_config))
+    ppo_config = TRLConfig.load_yaml(os.path.join(RESOURCE_PATH, "config", "ppo_model", args.ppo_config))
     # TODO: 待确定trlx中如何更新sft模型
     ppo_config.model.model_path = args.sft_checkpoint
-    # config.tokenizer.tokenizer_path = GPT_Token_PATH
-    # tokenizer = AutoTokenizer.from_pretrained(config.tokenizer.tokenizer_path)
     # tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
     logger.info(f"PPO config: {ppo_config}")
@@ -152,27 +155,22 @@ def main():
     # load dataset
     post_summary_dict = dict()
     if args.do_train:
-        train_data = RLHFDataset.load_dataset(os.path.join(args.data_dir, args.train_filename), max_length)
-        for td in train_data:
-            post_summary_dict[td['prompt']] = td['label']
-        train_dataset = RLHFDataset(train_data, tokenizer, max_length=max_length)
+        train_dataset = RLHFDataset(args, os.path.join(args.data_dir, args.train_filename), tokenizer)
+        # train_data = RLHFDataset.load_dataset(os.path.join(args.data_dir, args.train_filename), max_length)
+        # for td in train_dataset.post_list:
+        #     post_summary_dict[td['prompt']] = td['label']
     else:
         train_dataset = None
     if args.do_eval:
-        dev_data = RLHFDataset.load_dataset(os.path.join(args.data_dir, args.eval_filename), max_length)
-        for td in dev_data:
-            post_summary_dict[td['prompt']] = td['label']
-        dev_dataset = RLHFDataset(dev_data, tokenizer, max_length=max_length)
+        dev_dataset = RLHFDataset(args, os.path.join(args.data_dir, args.eval_filename), tokenizer)
+        # dev_data = RLHFDataset.load_dataset(os.path.join(args.data_dir, args.eval_filename), max_length)
+        # for td in dev_dataset.post_list:
+        #     post_summary_dict[td['prompt']] = td['label']
     else:
         dev_dataset = None
 
     if args.do_train:
-        trlx.train(
-            reward_fn=reward_fn,
-            prompts=train_dataset,
-            eval_prompts=dev_dataset,#[0:1000],  # sampling 1000 validation prompts for evaluation speed in training
-            config=ppo_config,
-        )
+        trlx.train(reward_fn=reward_fn, prompts=train_dataset, eval_prompts=dev_dataset, config=ppo_config)
 
 
 if __name__ == "__main__":
