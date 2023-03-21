@@ -169,10 +169,10 @@ class GLMTokenizerMixin:
             targets = [[self.sop_token_id] + target for target in targets]
             labels = [target[1:] for target in targets]
             targets = [target + [self.pad_token_id] * (max_gen_length + 1 - len(target)) for target in targets]
-            labels = [label + [-100] * (max_gen_length - len(label)) for label in labels]
+            labels = [label + [self.pad_token_id] * (max_gen_length - len(label)) for label in labels]
             targets = torch.tensor(targets, dtype=input_ids.dtype, device=input_ids.device)
             labels = torch.tensor(labels, dtype=input_ids.dtype, device=input_ids.device)
-            labels = torch.cat((input_ids.new_full((batch_size, seq_length), -100), labels), dim=1)
+            labels = torch.cat((input_ids.new_full((batch_size, seq_length), self.pad_token_id), labels), dim=1)
         for i in range(batch_size):
             mask_positions = []
             for mask_id in mask_ids:
