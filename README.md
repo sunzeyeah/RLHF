@@ -38,16 +38,16 @@ TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 p
 
 ### 2. 数据下载
 
-| 数据集      | size | 百度网盘地址  |  提取码      | 
-| ----------- | ----------- | ----------- |  ----------- |
-| [CLUE Benchmark](https://github.com/CLUEbenchmark/CLUE)   | 500MB | [CLUE Benchmark](https://pan.baidu.com/s/15F60nRbBd6d6UvyXdwbXQA) |  m6gt |
-| SFT & Reward Data  | 4GB | [SFT & Reward Data](https://pan.baidu.com/s/1sl8PB-Dlt1xLIYczMODyRg) | ecyc |
-| [百科](https://github.com/brightmart/nlp_chinese_corpus)  | 652MB | [baike_qa_2019](https://pan.baidu.com/s/1N6I-fvx6FLHwuxJuDLLA8g) | 7jad |
-| [知道问答](https://github.com/SophonPlus/ChineseNlpCorpus) | 847MB | [zhidao](https://pan.baidu.com/s/1sjR3vABiMbdV1HkUt6kCKQ) | neds |
-| [对联](https://github.com/wb14123/couplet-dataset/releases/download/1.0/couplet.tar.gz)  | 221MB | [couplets](https://pan.baidu.com/s/1oo6oaephPXpyU-sDd_37qg) | 54ey |
-| [古文](https://github.com/NiuTrans/Classical-Modern)  | 125MB | [Classical & Modern](https://pan.baidu.com/s/1ZyGkYOgzT9ZEVnpSpB4kQg) | a4cr |
-| [古诗词](https://github.com/chinese-poetry/chinese-poetry)  | 87MB | [chinese poetry](https://pan.baidu.com/s/13uvkA96PdKpKB7ZQ2GkXZQ) | 5zzj |
-| 微博新闻评论  | 522MB | [weibo summary comments](https://pan.baidu.com/s/1h45O0q6gQl3LbH-NjzuRlw) | w0g1 |
+| 数据集      | size | huggingface地址 | 百度网盘地址  |  提取码      | 
+| ----------- | ----------- | ----------- |  ----------- |  ----------- |
+| [CLUE Benchmark](https://github.com/CLUEbenchmark/CLUE)   | 500MB | | [CLUE Benchmark](https://pan.baidu.com/s/15F60nRbBd6d6UvyXdwbXQA) |  m6gt |
+| SFT & Reward Data  | 5GB | [sunzeyeah/chinese_chatgpt_corpus](https://huggingface.co/datasets/sunzeyeah/chinese_chatgpt_corpus) | [SFT & Reward Data](https://pan.baidu.com/s/1sl8PB-Dlt1xLIYczMODyRg) | ecyc |
+| [百科](https://github.com/brightmart/nlp_chinese_corpus)  | 652MB | | [baike_qa_2019](https://pan.baidu.com/s/1N6I-fvx6FLHwuxJuDLLA8g) | 7jad |
+| [知道问答](https://github.com/SophonPlus/ChineseNlpCorpus) | 847MB | | [zhidao](https://pan.baidu.com/s/1sjR3vABiMbdV1HkUt6kCKQ) | neds |
+| [对联](https://github.com/wb14123/couplet-dataset/releases/download/1.0/couplet.tar.gz)  | 221MB | | [couplets](https://pan.baidu.com/s/1oo6oaephPXpyU-sDd_37qg) | 54ey |
+| [古文](https://github.com/NiuTrans/Classical-Modern)  | 125MB | | [Classical & Modern](https://pan.baidu.com/s/1ZyGkYOgzT9ZEVnpSpB4kQg) | a4cr |
+| [古诗词](https://github.com/chinese-poetry/chinese-poetry)  | 87MB | | [chinese poetry](https://pan.baidu.com/s/13uvkA96PdKpKB7ZQ2GkXZQ) | 5zzj |
+| 微博新闻评论  | 522MB | | [weibo summary comments](https://pan.baidu.com/s/1h45O0q6gQl3LbH-NjzuRlw) | w0g1 |
 
 **PS**: SFT & Reward Data基于百科、知道问答、对联、古文、古诗词、微博新闻评论数据构造，可直接用于SFT和Reward阶段训练。详见[data_prepare.py](./src/data_prepare.py)
 
@@ -123,10 +123,10 @@ bash train_rlhf.sh
 
 SFT模型下载：
 
-| 预训练模型  |  SFT数据集  | size | 百度网盘地址  |  提取码      | 
-| ----------- | --- | ----------- | ----------- |  ----------- |
-| Pangu-350M |  SFT & Reward Data | 1.3GB | [Pangu-350M-SFT](https://pan.baidu.com/s/14nF63nAQz38jmplUC0EQ-g) | 0f8j |
-| Pangu-2.6B |  SFT & Reward Data | 9.8GB | [Pangu-2.6B-SFT](https://pan.baidu.com/s/1Q2PKf0MnFsiFlNhU-6WIrg) | r13w |
+| 预训练模型  |  SFT数据集  | size | huggingface地址 | 百度网盘地址  |  提取码      | 
+| ----------- | --- | ----------- | ----------- |  ----------- | ----------- |
+| Pangu-350M |  SFT & Reward Data | 1.3GB | [sunzeyeah/pangu-350M-sft](https://huggingface.co/sunzeyeah/pangu-350M-sft) | [Pangu-350M-SFT](https://pan.baidu.com/s/14nF63nAQz38jmplUC0EQ-g) | 0f8j |
+| Pangu-2.6B |  SFT & Reward Data | 9.8GB | [sunzeyeah/pangu-2.6B-sft](https://huggingface.co/sunzeyeah/pangu-2.6B-sft) | [Pangu-2.6B-SFT](https://pan.baidu.com/s/1Q2PKf0MnFsiFlNhU-6WIrg) | r13w |
 
 Pangu-2.6B-SFT部分生成示例：
 ```
