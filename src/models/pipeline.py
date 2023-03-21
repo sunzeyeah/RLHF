@@ -3,14 +3,16 @@ import os
 import sys
 import time
 import json
+import torch
 
 from abc import abstractmethod
-from typing import Any, Callable, Dict, Iterable, List
+from typing import Optional, Any, Callable, Dict, Iterable, List, Union
 from dataclasses import dataclass
 from torch.utils.data import DataLoader, Dataset
 from torch.nn.utils.rnn import pad_sequence
 from torchtyping import TensorType
-from transformers import DataCollatorWithPadding, PreTrainedTokenizer
+from transformers import DataCollatorWithPadding, PreTrainedTokenizer, PreTrainedTokenizerBase
+from transformers.tokenization_utils_base import PaddingStrategy
 
 from src.utils.data_types import PPORLBatch, PPORLElement
 from src.utils.config import TRLConfig
@@ -47,6 +49,54 @@ class BatchElement:
 
     tokens: TensorType["BATCH", "SEQ_LEN"]
     masks: TensorType["BATCH", "SEQ_LEN"]
+
+
+@dataclass
+class GLMDataCollator:
+
+    tokenizer: PreTrainedTokenizerBase
+    padding: Union[bool, str, PaddingStrategy] = True
+    max_length: Optional[int] = None
+    pad_to_multiple_of: Optional[int] = None
+    return_tensors: str = "pt"
+
+    def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
+        # batch = self.tokenizer.pad(
+        #     features,
+        #     padding=self.padding,
+        #     max_length=self.max_length,
+        #     pad_to_multiple_of=self.pad_to_multiple_of,
+        #     return_tensors=self.return_tensors,
+        # )
+        max_length = max(map(lambda x: x['input_ids'].shape[0], features))
+        input_ids_list = []
+        attention_mask_list = []
+        position_ids_list = []
+        labels_list = []
+        for feature in features:
+            input_ids = feature['input_ids']
+            seq_length = input_ids.shape[0]
+            # padding for GLM generation: cls_token_id + prompt_tokens + mask_token_id + [eos_token_id]*N + sop_token_id
+            input_ids = torch.cat((input_ids[:-1],
+                                   torch.tensor([self.tokenizer.pad_token_id]*(max_length-seq_length), dtype=input_ids.dtype),
+                                   input_ids[-1:]
+                                   ), dim=0)
+            input_ids_list.append(input_ids)
+            attention_mask_list.append(feature['generation_attention_mask'])
+            position_ids_list.append(feature['position_ids'])
+            if "labels" in feature:
+                labels_list.append(feature['labels'])
+
+        batch = {
+            "input_ids": torch.stack(input_ids_list, dim=0),
+            "generation_attention_mask": torch.stack(attention_mask_list, dim=0),
+            "position_ids": torch.stack(position_ids_list, dim=0)
+        }
+
+        if len(labels_list) > 0:
+            batch['labels'] = torch.stack(labels_list, dim=0)
+
+        return batch
 
 
 def register_datapipeline(name):
@@ -163,8 +213,8 @@ class PanguPipeline(BasePipeline):
                                       truncation="longest_first", padding="max_length", return_token_type_ids=False)
 
         return {
-            "input_ids": encoded_dict['input_ids'][:, :-1],
-            "attention_mask": encoded_dict['attention_mask'][:, :-1],
+            "input_ids": encoded_dict['input_ids'][0, :-1],
+            "attention_mask": encoded_dict['attention_mask'][0, :-1],
         }
 
     def create_loader(self, batch_size: int, shuffle=False) -> DataLoader:
@@ -203,21 +253,21 @@ class GLMPipeline(BasePipeline):
         # # label_length = len(self.tokenizer.tokenize(label)) + 1
         # if prompt_length > self.max_prompt_length:
         #     prompt_length -= prompt_length - self.max_prompt_length
-        encoded_dict = self.tokenizer(prompt, prefix + self.tokenizer.mask_token,
-                                      max_length=self.max_prompt_length,
-                                      truncation="only_first",
-                                      return_tensors="pt",
-                                      return_token_type_ids=False)
-        encoded_dict = self.tokenizer.build_inputs_for_generation(encoded_dict, max_gen_length=self.max_length)
+        inputs = self.tokenizer(prompt, prefix + self.tokenizer.mask_token,
+                                max_length=self.max_prompt_length, truncation="only_first",
+                                return_tensors="pt", return_token_type_ids=False)
+        max_gen_length = self.max_length - inputs['input_ids'].shape[1]
+        inputs_glm = self.tokenizer.build_inputs_for_generation(inputs, max_gen_length=max_gen_length,
+                                                                padding=True)
         return {
-            "input_ids": encoded_dict['input_ids'][0],
-            "position_ids": encoded_dict['position_ids'][0],
-            "attention_mask": encoded_dict['attention_mask'][0]
+            "input_ids": inputs_glm['input_ids'][0],
+            "position_ids": inputs_glm['position_ids'][0],
+            "generation_attention_mask": inputs_glm['generation_attention_mask'][0]
         }
 
     def create_loader(self, batch_size: int, shuffle=False) -> DataLoader:
-        # collate_fn = DataCollatorWithPadding(self.tokenizer) if self.tokenizer else torch.vstack
-        return DataLoader(self, batch_size=batch_size, shuffle=shuffle)
+        collate_fn = GLMDataCollator(self.tokenizer)
+        return DataLoader(self, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn)
 
 
 class PPORolloutStorage(BaseRolloutStore):

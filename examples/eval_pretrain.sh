@@ -2,7 +2,7 @@
 
 for TASK in  "cluewsc2020" "afqmc" "csl" "iflytek" "ocnli" "cmnli" "tnews" "c3" "cmrc2018" "chid"
 do
-  for MODEL in "pangu-350M" "pangu-2.6B" "glm-335M-chinese" "glm-10B-chinese" "pangu-13B"
+  for MODEL in "pangu-350M" "pangu-2.6B" "glm-350M-chinese" "glm-10B-chinese" "pangu-13B"
   do
     ROOT="/mnt/private-pa002-vol726121-prd/"
     #ROOT="/root/autodl-tmp/"

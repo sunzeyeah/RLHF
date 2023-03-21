@@ -1,0 +1,57 @@
+train:
+  seq_length: 512
+  epochs: 1
+  total_steps: 50000
+  batch_size: 4
+  checkpoint_interval: 1000
+  eval_interval: 1000
+  pipeline: "PanguPipeline"
+  trainer: "AcceleratePPOTrainer"
+  tracker: "tensorboard"
+  logging_dir: "tensorboard"
+
+model:
+  model_path: "/root/autodl-tmp/Data/models/pangu-2.6B"
+  num_layers_unfrozen: -1
+
+tokenizer:
+  model_path: "/root/autodl-tmp/Data/models/pangu-2.6B"
+  truncation_side: "right"
+
+optimizer:
+  name: "adamw"
+  kwargs:
+    lr: 5.0e-6
+    betas: [0.9, 0.999]
+    eps: 1.0e-8
+    weight_decay: 0.01
+
+scheduler:
+  name: "cosine_annealing"
+  kwargs:
+    T_max: 100000
+    eta_min: 5.0e-6
+
+method:
+  name: "ppoconfig"
+  num_rollouts: 512
+  chunk_size: 4
+  ppo_epochs: 1
+  init_kl_coef: 0.1
+  target: 6
+  horizon: 10000
+  gamma: 1
+  lam: 0.95
+  cliprange: 0.2
+  cliprange_value: 0.2
+  vf_coef: 0.2
+  scale_reward: False
+  ref_mean: null
+  ref_std: null
+  cliprange_reward: 10
+  gen_kwargs:
+    max_new_tokens: 100
+    top_k: 0.0
+    top_p: 0.9
+    do_sample: True
+    temperature: 1.0

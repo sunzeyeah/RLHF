@@ -156,18 +156,16 @@ class SFTDataset(Dataset):
         label = data['label']
         prefix = data['prefix']
         if "glm" in self.args.model_name_or_path:
-            prompt_length = len(self.tokenizer.tokenize(prompt+prefix)) + 4
+            encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
+            prompt_length = len(encoded_prompt['input_ids'])
             label_length = len(self.tokenizer.tokenize(label)) + 1
             if prompt_length + label_length > self.args.max_length:
-                excessive_length = prompt_length + label_length - self.args.max_length
-                excessive_prompt_length = int(prompt_length / (prompt_length + label_length) * excessive_length)
-                excessive_label_length = excessive_length - excessive_prompt_length
-                prompt_length -= excessive_prompt_length
-                label_length -= excessive_label_length
-                # if prompt_length >= label_length:
-                #     prompt_length -= prompt_length + label_length - self.args.max_length
-                # else:
-                #     label_length -= prompt_length + label_length - self.args.max_length
+                num_tokens_to_remove = prompt_length + label_length - self.args.max_length
+                for _ in range(num_tokens_to_remove):
+                    if prompt_length > label_length:
+                       prompt_length -= 1
+                    else:
+                        label_length -= 1
             else:
                 label_length = self.args.max_length - prompt_length
             assert prompt_length > 0

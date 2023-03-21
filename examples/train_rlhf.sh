@@ -6,7 +6,7 @@ MODEL="pangu-2.6B"
 ROOT="/root/autodl-tmp/"
 DATR_DIR=$ROOT/Data/chatgpt/processed
 MAIN=$ROOT/Code/RLHF/src/train_rlhf.py
-ACCELERATE_CONFIG=$ROOT/Code/RLHF/src/resources/ppo_model/default_accelerate_config.yaml
+#ACCELERATE_CONFIG=$ROOT/Code/RLHF/src/resources/ppo_model/default_accelerate_config.yaml
 MODEL_PATH=$ROOT/Data/models/$MODEL
 SFT_MODEL_PATH=$ROOT/Data/chatgpt/output/sft/$MODEL
 REWARD_CHECKPOINT=$ROOT/Data/chatgpt/output/reward/pangu-350M/pytorch_model.bin
@@ -32,7 +32,7 @@ python $ACCELERATE_CONFIG $MAIN \
   --train_batch_size 4 \
   --gradient_accumulation_steps 24 \
   --num_epochs 1 \
-  --ppo_config "ppo_config_pangu.yml" \
+  --ppo_config "ppo_config_${MODEL}.yml" \
   --do_eval \
   --eval_filename $EVAL_FILENAME \
   --eval_batch_size 16 \

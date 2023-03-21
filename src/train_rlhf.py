@@ -226,7 +226,7 @@ def main():
         norms_scores = scores - original_scores
         return norms_scores
 
-    # config_path = pathlib.Path(__file__).parent.joinpath("configs/ppo_config_pangu.yml")
+    # config_path = pathlib.Path(__file__).parent.joinpath("configs/ppo_config_pangu-350M.yml")
     ppo_config = TRLConfig.load_yaml(os.path.join(RESOURCE_PATH, "config", "ppo_model", args.ppo_config))
     ppo_config.model.model_path = args.sft_model_path
     # tokenizer.pad_token = tokenizer.eos_token

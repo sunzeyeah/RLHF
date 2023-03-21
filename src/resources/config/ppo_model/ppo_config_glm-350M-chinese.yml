@@ -2,22 +2,23 @@ train:
   seq_length: 512
   epochs: 1
   total_steps: 50000
-  batch_size: 1
-
+  batch_size: 16
   checkpoint_interval: 1000
   eval_interval: 1000
-
-  pipeline: "PanguPipeline"
+  pipeline: "GLMPipeline"
   trainer: "AcceleratePPOTrainer"
+  tracker: "tensorboard"
+  logging_dir: "tensorboard"
 
 model:
-  model_path: "D:\\Data\\models\\pangu-350M"
-#  model_path: "/Users/zeyesun/Documents/Data/models/pangu-350M"
+#  model_path: "/Users/zeyesun/Documents/Data/models/glm-350M-chinese"
+  model_path: "/root/autodl-tmp/Data/models/glm-350M-chinese"
   num_layers_unfrozen: -1
+  model_arch_type: "seq2seq"
 
 tokenizer:
-  tokenizer_path: "D:\\Data\\models\\pangu-350M"
-#  tokenizer_path: "/Users/zeyesun/Documents/Data/models/pangu-350M"
+#  tokenizer_path: "/Users/zeyesun/Documents/Data/models/glm-350M-chinese"
+  tokenizer_path: "/root/autodl-tmp/Data/models/glm-350M-chinese"
   truncation_side: "right"
 
 optimizer:
@@ -37,7 +38,7 @@ scheduler:
 method:
   name: "ppoconfig"
   num_rollouts: 512
-  chunk_size: 2
+  chunk_size: 16
   ppo_epochs: 1
   init_kl_coef: 0.1
   target: 6
