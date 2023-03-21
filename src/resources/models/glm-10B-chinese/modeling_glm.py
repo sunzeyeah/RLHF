@@ -903,7 +903,7 @@ class GLMForConditionalGeneration(GLMPreTrainedModel):
         lm_logits = model_output.logits
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss(ignore_index=-100)
+            loss_fct = CrossEntropyLoss(ignore_index=self.config.pad_token_id)
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
         return ModelOutput(
             loss=loss,

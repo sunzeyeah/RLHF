@@ -30,5 +30,6 @@
   "spell_length": null,
   "torch_dtype": "float32",
   "vocab_size": 50048,
-  "bad_words_id": [50009]
+  "bad_words_id": [50009],
+  "pad_token_id": 50000
 }

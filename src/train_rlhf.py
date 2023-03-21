@@ -180,6 +180,8 @@ def main():
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
         # Initialize the reward model from the (supervised) fine-tuned SFT model
         reward_model = GPTRewardModel(model.config, model.glm, tokenizer)
+    assert model.config.pad_token_id == tokenizer.pad_token_id
+
     state_dict_reward = torch.load(args.reward_checkpoint, map_location="cpu")
     reward_model.load_state_dict(state_dict_reward)
     logger.info(f"Finish loading reward model from {args.reward_checkpoint}")

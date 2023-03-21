@@ -23,13 +23,6 @@ TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 p
 根据下图，调整```TORCH_CUDA_ARCH_LIST="7.0"```为对应的NVIDIA GPU架构
 ![image info](./images/torch_cuda_list.png "torch_cuda_list")
 
-### 3. install trlx
-```bash
-pip install -r requirements.txt
-git clone https://github.com/sunzeyeah/trlx.git
-cd trlx
-pip install -e .
-```
 
 ## Data & Model Download
 

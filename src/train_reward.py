@@ -94,6 +94,7 @@ def main():
         # Initialize the reward model from the (supervised) fine-tuned SFT model
         reward_model = GPTRewardModel(model.config, model.glm, tokenizer)
         layers = reward_model.transformer.transformer.layers
+    assert model.config.pad_token_id == tokenizer.pad_token_id
 
     # Freeze the first 70% of the hidden layers of the reward model backbone
     num_layers = len(layers)

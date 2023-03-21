@@ -29,5 +29,6 @@
   "spell_func": "lstm",
   "spell_length": null,
   "torch_dtype": "float32",
-  "vocab_size": 50048
+  "vocab_size": 50048,
+  "pad_token_id": 50000
 }
