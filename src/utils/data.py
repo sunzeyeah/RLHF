@@ -159,12 +159,20 @@ class SFTDataset(Dataset):
             prompt_length = len(self.tokenizer.tokenize(prompt+prefix)) + 4
             label_length = len(self.tokenizer.tokenize(label)) + 1
             if prompt_length + label_length > self.args.max_length:
-                if prompt_length >= label_length:
-                    prompt_length -= prompt_length + label_length - self.args.max_length
-                else:
-                    label_length -= prompt_length + label_length - self.args.max_length
+                excessive_length = prompt_length + label_length - self.args.max_length
+                excessive_prompt_length = int(prompt_length / (prompt_length + label_length) * excessive_length)
+                excessive_label_length = excessive_length - excessive_prompt_length
+                prompt_length -= excessive_prompt_length
+                label_length -= excessive_label_length
+                # if prompt_length >= label_length:
+                #     prompt_length -= prompt_length + label_length - self.args.max_length
+                # else:
+                #     label_length -= prompt_length + label_length - self.args.max_length
             else:
                 label_length = self.args.max_length - prompt_length
+            assert prompt_length > 0
+            assert label_length > 0
+            assert prompt_length + label_length <= self.args.max_length
             encoded_dict = self.tokenizer(prompt, prefix + self.tokenizer.mask_token,
                                           max_length=prompt_length,
                                           truncation="only_first",
