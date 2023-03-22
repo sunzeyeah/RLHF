@@ -30,5 +30,8 @@
   "spell_length": null,
   "torch_dtype": "float32",
   "vocab_size": 50048,
-  "pad_token_id": 50000
+  "pad_token_id": 50000,
+  "lora_rank": 0,
+  "lora_alpha": 1,
+  "lora_train_bias": "none"
 }
