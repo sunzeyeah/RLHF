@@ -30,8 +30,5 @@
     "AutoTokenizer": ["tokenization_gptpangu.GPTPanguTokenizer", null],
     "AutoModelForCausalLM": "modeling_gptpangu.GPTPanguForCausalLM"
   },
-  "pad_token_id": 6,
-  "lora_rank": 0,
-  "lora_alpha": 1,
-  "lora_train_bias": "none"
+  "pad_token_id": 6
 }
