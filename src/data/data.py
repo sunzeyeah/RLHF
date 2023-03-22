@@ -81,6 +81,7 @@ class PairwiseDataset(Dataset):
                 "rejected_input_ids": rejected_encodings_dict["input_ids"][0],
                 "rejected_attention_mask": rejected_encodings_dict["attention_mask"][0],
                 "rejected_position_ids": rejected_encodings_dict["position_ids"][0],
+                "labels": rejected_encodings_dict["input_ids"][0],
             }
         else:
             # encoded_dict = self.tokenizer(prompt, prefix+label, max_length=self.args.max_length, return_tensors="pt",
@@ -99,7 +100,7 @@ class PairwiseDataset(Dataset):
                 # "chosen_position_ids": chosen_encodings_dict["position_ids"],
                 "rejected_input_ids": rejected_encodings_dict["input_ids"],
                 "rejected_attention_mask": rejected_encodings_dict["attention_mask"],
-                # "rejected_position_ids": rejected_encodings_dict["position_ids"],
+                "labels": rejected_encodings_dict["input_ids"],
             }
 
     @staticmethod
@@ -188,7 +189,11 @@ class SFTDataset(Dataset):
             encoded_dict = self.tokenizer(prompt, prefix+label, max_length=self.args.max_length, return_tensors="pt",
                                           truncation="longest_first", padding="max_length", return_token_type_ids=False)
 
-            return encoded_dict
+            return {
+                "input_ids": encoded_dict['input_ids'],
+                "attention_mask": encoded_dict['attention_mask'],
+                "labels": encoded_dict['input_ids'],
+            }
 
     @staticmethod
     def load_dataset(filename):

@@ -14,9 +14,8 @@ class SFTModel(LoRAModule):
     SFT model base class with LoRA enabled
 
     Args:
-        model (nn.Module): Reward model.
-        lora_rank (int): LoRA rank.
-        lora_train_bias (str): LoRA bias training mode.
+        config (PretrainedConfig): model config.
+        model (nn.Module): SFT model.
     """
 
     def __init__(self,
@@ -42,7 +41,8 @@ class SFTModel(LoRAModule):
                 labels: Optional[torch.Tensor] = None,
                 **kwargs) -> ModelOutput:
 
-        outputs = self.model(input_ids, attention_mask, position_ids, labels, **kwargs)
+        outputs = self.model(input_ids=input_ids, attention_mask=attention_mask,
+                             position_ids=position_ids, labels=labels, **kwargs)
 
         return outputs
 

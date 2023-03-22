@@ -57,16 +57,19 @@ def get_parser():
     parser.add_argument("--weight_decay", type=float, default=0.01)
     parser.add_argument("--warmup_ratio", type=int, default=0.1)
     parser.add_argument("--logging_steps", type=int, default=100)
-    parser.add_argument("--save_strategy", type=str, default="epoch",
+    parser.add_argument("--save_strategy", type=str, default="steps",
                         help='- `"no"`: No save is done during training.'
                              '- `"epoch"`: Save is done at the end of each epoch.'
                              '- `"steps"`: Save is done every `save_steps`.')
-    parser.add_argument("--save_steps", type=int, default=None)
+    parser.add_argument("--save_steps", type=int, default=1000)
     parser.add_argument("--save_total_limit", type=int, default=2)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
     parser.add_argument("--gradient_checkpointing", type=bool, default=False,
                         help="If True, use gradient checkpointing to save memory at the expense of slower backward pass.")
     parser.add_argument("--deepspeed_config", type=str, default=None)
+    parser.add_argument("--lora_rank", type=int, default=0)
+    parser.add_argument("--lora_alpha", type=int, default=1)
+    parser.add_argument("--lora_train_bias", type=str, default="none")
     # eval
     parser.add_argument("--do_eval", action="store_true")
     parser.add_argument("--eval_filename", type=str, default=None)
@@ -109,6 +112,9 @@ def main():
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
     assert model.config.pad_token_id == tokenizer.pad_token_id
 
+    model.config.lora_rank = args.lora_rank
+    model.config.lora_alpha = args.lora_alpha
+    model.config.lora_train_bias = args.lora_train_bias
     sft_model = SFTModel(model.config, model)
 
     if args.checkpoint is not None:

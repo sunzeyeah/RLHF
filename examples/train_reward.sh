@@ -28,9 +28,8 @@ python $MAIN \
   --train_filename $TRAIN_FILENAME \
   --train_batch_size 32 \
   --gradient_accumulation_steps 4 \
-  --save_strategy "steps" \
-  --save_steps 1000 \
   --num_epochs 1 \
+  --lora_rank 100 \
   --do_eval \
   --eval_filename $EVAL_FILENAME \
   --eval_batch_size 96 \

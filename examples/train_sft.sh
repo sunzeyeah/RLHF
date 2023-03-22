@@ -21,15 +21,12 @@ python $MAIN \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_PATH \
   --max_length 512 \
-  --logging_steps 100 \
   --do_train \
   --train_filename $TRAIN_FILENAME \
   --train_batch_size 8 \
   --gradient_accumulation_steps 16 \
-  --save_strategy "steps" \
-  --save_steps 1000 \
   --num_epochs 1 \
-  --deepspeed_config "ds_config_sft_pangu.json" \
+  --lora_rank 100 \
   --do_eval \
   --eval_filename $EVAL_FILENAME \
   --eval_batch_size 48 \
