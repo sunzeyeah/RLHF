@@ -43,6 +43,7 @@ from src.utils.modeling_utils import (
     make_head
 )
 
+# TODO: add lora
 
 class PreTrainedModelWrapper(nn.Module, transformers.utils.PushToHubMixin):
     """A wrapper around `transformers.PreTrainedModel`

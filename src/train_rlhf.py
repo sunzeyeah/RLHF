@@ -14,7 +14,7 @@ from src.utils import logger, RESOURCE_PATH
 from src.utils.config import TRLConfig, default_ilql_config, default_ppo_config, default_sft_config
 from src.models.reward import GPTRewardModel
 from src.utils.file_utils import set_seed
-from src.utils.data import RLHFDataset
+from src.data.data import RLHFDataset
 from src.utils.loading import get_pipeline, get_trainer
 
 
@@ -228,7 +228,7 @@ def main():
 
     # config_path = pathlib.Path(__file__).parent.joinpath("configs/ppo_config_pangu-350M.yml")
     ppo_config = TRLConfig.load_yaml(os.path.join(RESOURCE_PATH, "config", "ppo_model", args.ppo_config))
-    ppo_config.model.model_path = args.sft_model_path
+    # ppo_config.model.model_path = args.sft_model_path
     # tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
     logger.info(f"PPO config: {ppo_config}")
@@ -251,7 +251,8 @@ def main():
         dev_dataset = None
 
     if args.do_train:
-        train(reward_fn=reward_fn, prompts=train_dataset, eval_prompts=dev_dataset, config=ppo_config)
+        train(model_path=args.sft_model_path, reward_fn=reward_fn, prompts=train_dataset,
+              eval_prompts=dev_dataset, config=ppo_config)
 
 
 if __name__ == "__main__":

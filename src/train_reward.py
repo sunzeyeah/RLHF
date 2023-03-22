@@ -9,10 +9,10 @@ import argparse
 
 from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments, AutoModelForSeq2SeqLM
 
-from src.models.reward import GPTRewardModel
+from src.models.reward import RewardModel
 from src.utils import logger, RESOURCE_PATH
 from src.utils.file_utils import set_seed
-from src.utils.data import PairwiseDataset, DataCollatorReward
+from src.data.data import PairwiseDataset, DataCollatorReward
 
 
 def get_parser():
@@ -87,12 +87,12 @@ def main():
         # model.config.bos_token_id = tokenizer.bos_token_id
         # model.config.eos_token_id = tokenizer.eos_token_id
         # Initialize the reward model from the (supervised) fine-tuned SFT model
-        reward_model = GPTRewardModel(model.config, model.transformer, tokenizer)
+        reward_model = RewardModel(model.config, model.transformer, tokenizer)
         layers = reward_model.transformer.h
     else:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
         # Initialize the reward model from the (supervised) fine-tuned SFT model
-        reward_model = GPTRewardModel(model.config, model.glm, tokenizer)
+        reward_model = RewardModel(model.config, model.glm, tokenizer)
         layers = reward_model.transformer.transformer.layers
     assert model.config.pad_token_id == tokenizer.pad_token_id
 

@@ -20,7 +20,7 @@ from transformers import (
 )
 
 from src.utils import logger
-from src.utils.data import (
+from src.data.data import (
     OCNLIDataset,
     CMNLIDataset,
     CHIDDataset,

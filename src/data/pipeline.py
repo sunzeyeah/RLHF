@@ -11,10 +11,10 @@ from dataclasses import dataclass
 from torch.utils.data import DataLoader, Dataset
 from torch.nn.utils.rnn import pad_sequence
 from torchtyping import TensorType
-from transformers import DataCollatorWithPadding, PreTrainedTokenizer, PreTrainedTokenizerBase
+from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase
 from transformers.tokenization_utils_base import PaddingStrategy
 
-from src.utils.data_types import PPORLBatch, PPORLElement
+from src.data.data_types import PPORLBatch, PPORLElement
 from src.utils.config import TRLConfig
 
 
@@ -210,7 +210,7 @@ class PanguPipeline(BasePipeline):
         # label = data['label']
         prefix = data['prefix']
         encoded_dict = self.tokenizer(prompt, prefix, max_length=self.max_prompt_length, return_tensors="pt",
-                                      truncation="longest_first", padding="max_length", return_token_type_ids=False)
+                                      truncation="only_first", padding="max_length", return_token_type_ids=False)
 
         return {
             "input_ids": encoded_dict['input_ids'][0, :-1],

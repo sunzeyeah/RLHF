@@ -22,7 +22,7 @@ from transformers import AutoTokenizer, PretrainedConfig
 
 from src.utils.logger import logger
 from src.utils.config import TRLConfig
-from src.models.pipeline import BaseRolloutStore
+from src.data.pipeline import BaseRolloutStore
 from src.utils.file_utils import significant
 from src.utils.modeling_utils import (
     filter_non_scalars,
@@ -37,14 +37,14 @@ from src.utils.modeling_utils import (
     parse_delta_kwargs,
 )
 
-from src.utils.data_types import PromptBatch, PPORLBatch, PPORLElement
+from src.data.data_types import PromptBatch, PPORLBatch, PPORLElement
 from src.models.ppo import (
     AdaptiveKLController,
     AutoModelForCausalLMWithHydraValueHead,
     AutoModelForSeq2SeqLMWithHydraValueHead,
     FixedKLController,
 )
-from src.models.pipeline import BasePipeline, PPORolloutStorage
+from src.data.pipeline import BasePipeline, PPORolloutStorage
 from src.utils.modeling_utils import Clock, RunningMoments, logprobs_of_labels
 
 # specifies a dictionary of architectures

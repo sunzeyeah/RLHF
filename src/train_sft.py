@@ -2,12 +2,12 @@
 import sys
 sys.path.insert(0, "/root/autodl-tmp/Code/RLHF")
 sys.path.insert(0, "/mnt/private-pa002-vol726121-prd/Code/RLHF")
-
 import os
 import argparse
 import evaluate
 import torch
 
+from tqdm import tqdm
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -19,8 +19,9 @@ from transformers import (
 )
 
 from src.utils import logger, RESOURCE_PATH
-from src.utils.data import SFTDataset
+from src.data.data import SFTDataset
 from src.utils.file_utils import set_seed
+from src.models import SFTModel
 
 
 # Create a preprocessing function to extract out the proper logits from the model output
@@ -108,9 +109,11 @@ def main():
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
     assert model.config.pad_token_id == tokenizer.pad_token_id
 
+    sft_model = SFTModel(model.config, model)
+
     if args.checkpoint is not None:
         st = torch.load(args.checkpoint, map_location="cpu")
-        model.load_state_dict(st)
+        sft_model.load_state_dict(st)
     logger.info(f"Finished loading model and tokenizer")
 
     # Set up the datasets
@@ -181,7 +184,7 @@ def main():
 
     # Prepare the trainer and start training
     trainer = Trainer(
-        model=model,
+        model=sft_model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=dev_dataset,
@@ -200,29 +203,46 @@ def main():
 
     if args.do_pred:
         device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
-        text_generator = TextGenerationPipeline(model, tokenizer, device=device)
-        batch = []
         with open(os.path.join(args.output_dir, args.output_filename), "w", encoding="utf-8") as w:
             w.write("\t".join(["prompt"]+[f"model_answer_{i}" for i in range(args.num_return_sequences)])+"\n")
-            for test_data in test_dataset:
-                prompt = test_data['prompt'] + tokenizer.sep_token + "模型回答:"
-                # label = test_data['label']
-                batch.append(prompt)
-                if len(batch) >= args.eval_batch_size:
-                    results = text_generator(batch, max_length=args.max_length_label, do_sample=True,
+            for test_data in tqdm(test_dataset.post_list, desc="Prediction"):
+                prompt = test_data['prompt']
+                prefix = test_data['prefix']
+                # label = dev_data['label']
+                if "glm" in args.model_name_or_path:
+                    encoded_prompt = tokenizer(prompt, prefix + tokenizer.mask_token)
+                    prompt_length = len(encoded_prompt['input_ids'])
+                    encoded_dict = tokenizer(prompt, prefix + tokenizer.mask_token,
+                                             max_length=min(prompt_length, args.max_length),
+                                             truncation="only_first",
+                                             return_tensors="pt",
+                                             return_token_type_ids=False)
+                    max_gen_length = args.max_length - inputs['input_ids'].shape[1]
+                    inputs = tokenizer.build_inputs_for_generation(encoded_dict,
+                                                                   max_gen_length=max_gen_length, padding=True)
+                    inputs = inputs.to(device)
+                    outputs = model.generate(**inputs,
+                                             max_new_tokens=args.max_length_generation,
+                                             eos_token_id=tokenizer.eop_token_id,
+                                             pad_token_id=tokenizer.pad_token_id,
+                                             do_sample=False,
                                              num_return_sequences=args.num_return_sequences,
-                                             top_k=args.top_k, temperature=args.temperature)
-                    for prompt, res in zip(batch, results):
-                        w.write("\t".join([prompt]+[each['generated_text'].split("模型回答:")[1].replace(tokenizer.eos_token, "").replace(tokenizer.pad_token, "") for each in res])+"\n")
-                    batch = []
-            if len(batch) > 0:
-                results = text_generator(batch, max_length=args.max_length_label, do_sample=True,
-                                         num_return_sequences=args.num_return_sequences,
-                                         top_k=args.top_k, temperature=args.temperature)
-                for prompt, res in zip(batch, results):
-                    w.write("\t".join([prompt]+[each['generated_text'].split("模型回答:")[1].replace(tokenizer.eos_token, "").replace(tokenizer.pad_token, "") for each in res])+"\n")
-
-        # output = trainer.predict(test_dataset)
+                                             top_p=args.top_p,
+                                             temperature=args.temperature)
+                else:
+                    inputs = tokenizer(prompt, prefix, max_length=args.max_length, return_tensors="pt",
+                                       truncation="longest_first", return_token_type_ids=False)
+                    # inputs = tokenizer(prompt, add_special_tokens=False, return_token_type_ids=False, return_tensors="pt")
+                    inputs = inputs.to(device)
+                    outputs = model.generate(**inputs,
+                                             max_new_tokens=args.max_length_generation,
+                                             pad_token_id=tokenizer.pad_token_id,
+                                             do_sample=False,
+                                             num_return_sequences=args.num_return_sequences,
+                                             top_p=args.top_p,
+                                             temperature=args.temperature)
+                results = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+                w.write("\t".join([prompt]+[result.split(prefix, maxsplit=1)[1] for result in results])+"\n")
 
     
 if __name__ == "__main__":

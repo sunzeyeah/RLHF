@@ -55,7 +55,7 @@ TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 p
 ## Usage
 
 ### 1. LLM模型评测
-对开源中文LLM进行ZeroShot、OneShot或FewShot的评测，评测任务和数据集使用[CLUEBenchmark](https://github.com/CLUEbenchmark/CLUE) ，评测方法和prompt模板参考[Pangu-alpha论文](https://arxiv.org/abs/2104.12369) 。详见[eval_pretrain.py](./src/eval_pretrain.py) 和 [data.py](./src/utils/data.py)
+对开源中文LLM进行ZeroShot、OneShot或FewShot的评测，评测任务和数据集使用[CLUEBenchmark](https://github.com/CLUEbenchmark/CLUE) ，评测方法和prompt模板参考[Pangu-alpha论文](https://arxiv.org/abs/2104.12369) 。详见[eval_pretrain.py](./src/eval_pretrain.py) 和 [data.py](src/data/data.py)
 
 目前支持5个开源模型: 
 - Pangu-350M

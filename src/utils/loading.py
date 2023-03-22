@@ -1,7 +1,7 @@
 from typing import Callable
 
 # Register load pipelines via module import
-from src.models.pipeline import _DATAPIPELINE
+from src.data.pipeline import _DATAPIPELINE
 # from trlx.pipeline.offline_pipeline import PromptPipeline
 
 # Register load trainers via module import
