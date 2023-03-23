@@ -183,3 +183,9 @@ do_sample=True
 | Pangu-2.6B | 815M | 12M |  8 | 512 | A100 80G | 80.7G |  | 423h
 
 
+Reward模型下载：
+
+| 预训练模型  |  SFT数据集  | size | huggingface地址 | 百度网盘地址  |  提取码      | 
+| ----------- | --- | ----------- | ----------- |  ----------- | ----------- |
+| Pangu-350M |  SFT & Reward Data | 1.3GB | [sunzeyeah/pangu-350M-reward](https://huggingface.co/sunzeyeah/pangu-350M-reward) | [Pangu-350M-Reward](https://pan.baidu.com/s/1wC3w78t7pVn0Xn5tJHy06A) | 4gju |
+
