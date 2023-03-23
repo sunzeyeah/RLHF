@@ -43,6 +43,7 @@ from src.utils.modeling_utils import (
     make_head
 )
 from src.models.lora import LoRAModule
+from src.models.sft import SFTModelWithLoRA
 
 
 class PreTrainedModelWrapper(nn.Module, transformers.utils.PushToHubMixin):
@@ -305,6 +306,7 @@ class AutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
     def __init__(
             self,
             base_model: transformers.PreTrainedModel,
+            **kwargs
     ):
         super().__init__(base_model)
         self.v_head = make_head(hf_get_hidden_size(self.base_model.config), 1)
@@ -374,20 +376,19 @@ class AutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
         gc.collect()  # noqa: E702
 
 
-class AutoModelForCausalLMWithHydraValueHead(LoRAModule, AutoModelForCausalLMWithValueHead):
+class AutoModelForCausalLMWithHydraValueHead(AutoModelForCausalLMWithValueHead, LoRAModule):
     _supported_modules = ["v_head", "frozen_head"]
     _supported_args = ["num_layers_unfrozen"]
 
     def __init__(
             self,
             base_model: transformers.PreTrainedModel,
-            # *,
             num_layers_unfrozen: int = -1,
     ):
-        LoRAModule.__init__(self, lora_rank=base_model.config.lora_rank,
-                            lora_alpha=base_model.config.lora_alpha,
-                            lora_train_bias=base_model.config.lora_train_bias)
-        AutoModelForCausalLMWithValueHead.__init__(self, base_model)
+        super().__init__(base_model=base_model,
+                         lora_rank=base_model.config.lora_rank,
+                         lora_alpha=base_model.config.lora_alpha,
+                         lora_train_bias=base_model.config.lora_train_bias)
         self.num_layers_unfrozen = num_layers_unfrozen
         if self.num_layers_unfrozen > 0:
             config = self.base_model.config
@@ -440,6 +441,113 @@ class AutoModelForCausalLMWithHydraValueHead(LoRAModule, AutoModelForCausalLMWit
         if not return_dict:
             return hydra_outputs.logits
         return hydra_outputs
+
+    @classmethod
+    def from_pretrained(  # noqa: max-complexity
+            cls,
+            pretrained_model_name_or_path: Union[str, transformers.PreTrainedModel],
+            *model_args,
+            **kwargs,
+    ):
+        """Instantiate a pretrained pytorch model from a pretrained model configuration.
+        This method is a wrapper around `transformers.PreTrainedModel.from_pretrained`.
+        Please refer to the documentation of `transformers.PreTrainedModel.from_pretrained`
+        for more information.
+
+        Args:
+            pretrained_model_name_or_path (str or `transformers.PreTrainedModel`):
+                The identifier of the pretrained model to load or the pretrained model itself.
+            *model_args (sequence of positional arguments, *optional*):
+                All remaining positional arguments will be passed to the `_auto_model_parent_class`.
+            **kwargs (dict, *optional*):
+                Dictionary of keyword arguments to pass to both the underlying `_auto_model_parent_class`
+                call (e.g. `transformers.AutoModelForCausalLM.from_pretrained`) and the specific
+                instance of the wrapped model.
+
+        NOTE: You must pass in arguments specific to the wrapped model as keyword arguments.
+        """
+        if kwargs is not None:
+            wrapped_model_kwargs, from_pretrained_kwargs = cls._split_kwargs(kwargs)
+        else:
+            from_pretrained_kwargs = {}
+            wrapped_model_kwargs = {}
+
+        if isinstance(pretrained_model_name_or_path, str):
+            # Load the base model using the `transformers` AutoClass (e.g. AutoModelForCausalLM)
+            base_model = cls._auto_model_parent_class.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **from_pretrained_kwargs
+            )
+        elif isinstance(pretrained_model_name_or_path, transformers.PreTrainedModel):
+            base_model = pretrained_model_name_or_path
+        else:
+            raise ValueError(
+                f"Invalid type for `base_model_name_or_path`: {type(pretrained_model_name_or_path)}"
+                "Expected `str` or `transformers.PreTrainedModel`."
+            )
+
+        config = from_pretrained_kwargs.get("config", None)
+        if config is not None:
+            base_model.config.lora_rank = config.train.lora_rank
+            base_model.config.lora_alpha = config.train.lora_alpha
+            base_model.config.lora_train_bias = config.train.lora_train_bias
+
+        if isinstance(pretrained_model_name_or_path, str):
+            filename = os.path.join(pretrained_model_name_or_path, "pytorch_model.bin")
+            sharded_index_filename = os.path.join(pretrained_model_name_or_path, "pytorch_model.bin.index.json")
+            is_sharded = False
+
+            if not os.path.exists(filename):
+                try:
+                    filename = hf_hub_download(pretrained_model_name_or_path, "pytorch_model.bin")
+                # Sharded
+                except Exception:
+                    if os.path.exists(sharded_index_filename):
+                        index_file_name = sharded_index_filename
+                    else:
+                        index_file_name = hf_hub_download(
+                            pretrained_model_name_or_path,
+                            "pytorch_model.bin.index.json",
+                        )
+                    with open(index_file_name, "r") as f:
+                        index = json.load(f)
+                    # Collect files containing weights from supported modules
+                    files_to_download = set()
+                    for k, v in index["weight_map"].items():
+                        if any([module in k for module in cls._supported_modules]):
+                            files_to_download.add(v)
+                    is_sharded = True
+
+            if is_sharded:
+                # Merge each shard into a state dict
+                # TODO: Optimize this to avoid wasting RAM
+                state_dict = {}
+                for shard_file in files_to_download:
+                    filename = os.path.join(pretrained_model_name_or_path, shard_file)
+                    # Download if shard file doesn't exist locally
+                    if not os.path.exists(filename):
+                        filename = hf_hub_download(pretrained_model_name_or_path, shard_file)
+                    state_dict.update(torch.load(filename, map_location="cpu"))
+            else:
+                state_dict = torch.load(filename, map_location="cpu")
+        else:
+            state_dict = pretrained_model_name_or_path.state_dict()
+
+        # Check if sft model is LoRA checkpoint, load the state dict into model
+        is_lora_checkpoint = False
+        for key in state_dict.keys():
+            if "lora" in key:
+                is_lora_checkpoint = True
+                break
+
+        if is_lora_checkpoint:
+            base_model = SFTModelWithLoRA(base_model.config, base_model)
+            res = base_model.load_state_dict(state_dict, strict=False)
+
+        model = cls(base_model, **wrapped_model_kwargs)
+
+        model.post_init(state_dict=state_dict)
+
+        return model
 
 
 class ModelBranch(transformers.PreTrainedModel):
@@ -874,6 +982,7 @@ class AutoModelForSeq2SeqLMWithValueHead(PreTrainedModelWrapper):
     def __init__(
             self,
             base_model: transformers.PreTrainedModel,
+            **kwargs
     ):
         super().__init__(base_model)
         self.v_head = make_head(hf_get_hidden_size(self.base_model.config), 1)
@@ -957,13 +1066,12 @@ class AutoModelForSeq2SeqLMWithHydraValueHead(AutoModelForSeq2SeqLMWithValueHead
     def __init__(
             self,
             base_model: transformers.PreTrainedModel,
-            # *,
             num_layers_unfrozen: int = -1,
     ):
-        LoRAModule.__init__(self, lora_rank=base_model.config.lora_rank,
-                            lora_alpha=base_model.config.lora_alpha,
-                            lora_train_bias=base_model.config.lora_train_bias)
-        AutoModelForSeq2SeqLMWithValueHead.__init__(self, base_model)
+        super().__init__(base_model=base_model,
+                         lora_rank=base_model.config.lora_rank,
+                         lora_alpha=base_model.config.lora_alpha,
+                         lora_train_bias=base_model.config.lora_train_bias)
         self.num_layers_unfrozen = num_layers_unfrozen
         if self.num_layers_unfrozen > 0:
             branch_class = T5Branch  # TODO: Add support for other model branches
@@ -1030,6 +1138,113 @@ class AutoModelForSeq2SeqLMWithHydraValueHead(AutoModelForSeq2SeqLMWithValueHead
         if not return_dict:
             return hydra_outputs.logits
         return hydra_outputs
+
+    @classmethod
+    def from_pretrained(  # noqa: max-complexity
+            cls,
+            pretrained_model_name_or_path: Union[str, transformers.PreTrainedModel],
+            *model_args,
+            **kwargs,
+    ):
+        """Instantiate a pretrained pytorch model from a pretrained model configuration.
+        This method is a wrapper around `transformers.PreTrainedModel.from_pretrained`.
+        Please refer to the documentation of `transformers.PreTrainedModel.from_pretrained`
+        for more information.
+
+        Args:
+            pretrained_model_name_or_path (str or `transformers.PreTrainedModel`):
+                The identifier of the pretrained model to load or the pretrained model itself.
+            *model_args (sequence of positional arguments, *optional*):
+                All remaining positional arguments will be passed to the `_auto_model_parent_class`.
+            **kwargs (dict, *optional*):
+                Dictionary of keyword arguments to pass to both the underlying `_auto_model_parent_class`
+                call (e.g. `transformers.AutoModelForCausalLM.from_pretrained`) and the specific
+                instance of the wrapped model.
+
+        NOTE: You must pass in arguments specific to the wrapped model as keyword arguments.
+        """
+        if kwargs is not None:
+            wrapped_model_kwargs, from_pretrained_kwargs = cls._split_kwargs(kwargs)
+        else:
+            from_pretrained_kwargs = {}
+            wrapped_model_kwargs = {}
+
+        if isinstance(pretrained_model_name_or_path, str):
+            # Load the base model using the `transformers` AutoClass (e.g. AutoModelForCausalLM)
+            base_model = cls._auto_model_parent_class.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **from_pretrained_kwargs
+            )
+        elif isinstance(pretrained_model_name_or_path, transformers.PreTrainedModel):
+            base_model = pretrained_model_name_or_path
+        else:
+            raise ValueError(
+                f"Invalid type for `base_model_name_or_path`: {type(pretrained_model_name_or_path)}"
+                "Expected `str` or `transformers.PreTrainedModel`."
+            )
+
+        config = from_pretrained_kwargs.get("config", None)
+        if config is not None:
+            base_model.config.lora_rank = config.train.lora_rank
+            base_model.config.lora_alpha = config.train.lora_alpha
+            base_model.config.lora_train_bias = config.train.lora_train_bias
+
+        if isinstance(pretrained_model_name_or_path, str):
+            filename = os.path.join(pretrained_model_name_or_path, "pytorch_model.bin")
+            sharded_index_filename = os.path.join(pretrained_model_name_or_path, "pytorch_model.bin.index.json")
+            is_sharded = False
+
+            if not os.path.exists(filename):
+                try:
+                    filename = hf_hub_download(pretrained_model_name_or_path, "pytorch_model.bin")
+                # Sharded
+                except Exception:
+                    if os.path.exists(sharded_index_filename):
+                        index_file_name = sharded_index_filename
+                    else:
+                        index_file_name = hf_hub_download(
+                            pretrained_model_name_or_path,
+                            "pytorch_model.bin.index.json",
+                        )
+                    with open(index_file_name, "r") as f:
+                        index = json.load(f)
+                    # Collect files containing weights from supported modules
+                    files_to_download = set()
+                    for k, v in index["weight_map"].items():
+                        if any([module in k for module in cls._supported_modules]):
+                            files_to_download.add(v)
+                    is_sharded = True
+
+            if is_sharded:
+                # Merge each shard into a state dict
+                # TODO: Optimize this to avoid wasting RAM
+                state_dict = {}
+                for shard_file in files_to_download:
+                    filename = os.path.join(pretrained_model_name_or_path, shard_file)
+                    # Download if shard file doesn't exist locally
+                    if not os.path.exists(filename):
+                        filename = hf_hub_download(pretrained_model_name_or_path, shard_file)
+                    state_dict.update(torch.load(filename, map_location="cpu"))
+            else:
+                state_dict = torch.load(filename, map_location="cpu")
+        else:
+            state_dict = pretrained_model_name_or_path.state_dict()
+
+        # Check if sft model is LoRA checkpoint, load the state dict into model
+        is_lora_checkpoint = False
+        for key in state_dict.keys():
+            if "lora" in key:
+                is_lora_checkpoint = True
+                break
+
+        if is_lora_checkpoint:
+            base_model = SFTModelWithLoRA(base_model.config, base_model)
+            res = base_model.load_state_dict(state_dict, strict=False)
+
+        model = cls(base_model, **wrapped_model_kwargs)
+
+        model.post_init(state_dict=state_dict)
+
+        return model
 
 
 class T5Branch(ModelBranch):

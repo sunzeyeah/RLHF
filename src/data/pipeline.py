@@ -200,18 +200,12 @@ class PanguPipeline(BasePipeline):
         return len(self.prompts)
 
     def __getitem__(self, idx):
-        # sample = self.post_list[idx]
-        # encodings_dict = self.tokenizer(sample["prompt"], "模型回答:" + sample["label"], max_length=self.max_length,
-        #                                 truncation="longest_first", return_tensors="pt")
-        # text = self.tokenizer.decode(encodings_dict['input_ids'], skip_special_tokens=True).strip()
-        # return text
         data = self.prompts[idx]
         prompt = data['prompt']
-        # label = data['label']
         prefix = data['prefix']
         encoded_dict = self.tokenizer(prompt, self.tokenizer.sep_token + prefix,
                                       max_length=self.max_prompt_length, return_tensors="pt",
-                                      truncation="only_first", #padding="max_length",
+                                      truncation="only_first", padding="max_length",
                                       add_special_tokens=False, return_token_type_ids=False)
 
         return {
@@ -220,7 +214,6 @@ class PanguPipeline(BasePipeline):
         }
 
     def create_loader(self, batch_size: int, shuffle=False) -> DataLoader:
-        # collate_fn = DataCollatorWithPadding(self.tokenizer) if self.tokenizer else torch.vstack
         return DataLoader(self, batch_size=batch_size, shuffle=shuffle)
 
 
@@ -232,34 +225,22 @@ class GLMPipeline(BasePipeline):
 
         self.prompts = prompts
         self.tokenizer = tokenizer
-        self.config = config
-        self.max_length = config.train.seq_length
-        # self.max_new_tokens = config.method.gen_kwargs["max_new_tokens"]
-        self.max_prompt_length = config.train.seq_length - config.method.gen_kwargs["max_new_tokens"]
+        # self.config = config
+        self.max_generation_length = config.method.gen_kwargs["max_new_tokens"]
+        self.max_prompt_length = config.train.seq_length - self.max_generation_length
 
     def __len__(self):
         return len(self.prompts)
 
     def __getitem__(self, idx):
-        # sample = self.post_list[idx]
-        # encodings_dict = self.tokenizer(sample["prompt"], "模型回答:" + sample["label"], max_length=self.max_length,
-        #                                 truncation="longest_first", return_tensors="pt")
-        # text = self.tokenizer.decode(encodings_dict['input_ids'], skip_special_tokens=True).strip()
-        # return text
         data = self.prompts[idx]
         prompt = data['prompt']
-        # label = data['label']
         prefix = data['prefix']
 
-        # prompt_length = len(self.tokenizer.tokenize(prompt+prefix)) + 4
-        # # label_length = len(self.tokenizer.tokenize(label)) + 1
-        # if prompt_length > self.max_prompt_length:
-        #     prompt_length -= prompt_length - self.max_prompt_length
-        inputs = self.tokenizer(prompt, prefix + self.tokenizer.mask_token,
-                                max_length=self.max_prompt_length, truncation="only_first",
+        inputs = self.tokenizer(prompt, prefix + self.tokenizer.mask_token, max_length=self.max_prompt_length,
+                                truncation="only_first", padding="max_length",
                                 return_tensors="pt", return_token_type_ids=False)
-        max_gen_length = self.max_length - inputs['input_ids'].shape[1]
-        inputs_glm = self.tokenizer.build_inputs_for_generation(inputs, max_gen_length=max_gen_length,
+        inputs_glm = self.tokenizer.build_inputs_for_generation(inputs, max_gen_length=self.max_generation_length,
                                                                 padding=True)
         return {
             "input_ids": inputs_glm['input_ids'][0],
@@ -268,8 +249,8 @@ class GLMPipeline(BasePipeline):
         }
 
     def create_loader(self, batch_size: int, shuffle=False) -> DataLoader:
-        collate_fn = GLMDataCollator(self.tokenizer)
-        return DataLoader(self, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn)
+        # collate_fn = GLMDataCollator(self.tokenizer)
+        return DataLoader(self, batch_size=batch_size, shuffle=shuffle)#, collate_fn=collate_fn)
 
 
 class PPORolloutStorage(BaseRolloutStore):

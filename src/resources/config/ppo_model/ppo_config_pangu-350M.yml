@@ -1,7 +1,7 @@
 train:
   seq_length: 512
   epochs: 1
-  total_steps: 50000
+  total_steps: 100000
   batch_size: 16
   checkpoint_interval: 1000
   eval_interval: 1000
@@ -11,16 +11,12 @@ train:
   logging_dir: "tensorboard"
 
 model:
-#  model_path: "D:\\Data\\models\\pangu-350M"
-#  model_path: "/Users/zeyesun/Documents/Data/models/pangu-350M"
   model_path: "/root/autodl-tmp/Data/models/pangu-350M"
   num_layers_unfrozen: -1
 
 tokenizer:
-#  tokenizer_path: "D:\\Data\\models\\pangu-350M"
-#  tokenizer_path: "/Users/zeyesun/Documents/Data/models/pangu-350M"
-  model_path: "/root/autodl-tmp/Data/models/pangu-350M"
-  truncation_side: "right"
+  tokenizer_path: "/root/autodl-tmp/Data/models/pangu-350M"
+  padding_side: "left"
 
 optimizer:
   name: "adamw"

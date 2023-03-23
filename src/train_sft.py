@@ -21,7 +21,7 @@ from transformers import (
 from src.utils import logger, RESOURCE_PATH
 from src.data.data import SFTDataset
 from src.utils.file_utils import set_seed
-from src.models import SFTModel
+from src.models import SFTModelWithLoRA
 
 
 # Create a preprocessing function to extract out the proper logits from the model output
@@ -115,11 +115,12 @@ def main():
     model.config.lora_rank = args.lora_rank
     model.config.lora_alpha = args.lora_alpha
     model.config.lora_train_bias = args.lora_train_bias
-    sft_model = SFTModel(model.config, model)
+    model = SFTModelWithLoRA(model.config, model)
 
     if args.checkpoint is not None:
         st = torch.load(args.checkpoint, map_location="cpu")
-        sft_model.load_state_dict(st)
+        res = model.load_state_dict(st, strict=False)
+
     logger.info(f"Finished loading model and tokenizer")
 
     # Set up the datasets
@@ -190,7 +191,7 @@ def main():
 
     # Prepare the trainer and start training
     trainer = Trainer(
-        model=sft_model,
+        model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=dev_dataset,

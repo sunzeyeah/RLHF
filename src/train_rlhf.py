@@ -6,13 +6,14 @@ sys.path.insert(0, "/mnt/private-pa002-vol726121-prd/Code/RLHF")
 import os
 import argparse
 import torch
+import glob
 
 from typing import Callable, Dict, Iterable, List, Optional, Tuple, Any
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM
 
 from src.utils import logger, RESOURCE_PATH
 from src.utils.config import TRLConfig, default_ilql_config, default_ppo_config, default_sft_config
-from src.models.reward import RewardModel
+from src.models.reward import RewardModel, RewardModelWithLoRA
 from src.utils.file_utils import set_seed
 from src.data.data import RLHFDataset
 from src.utils.loading import get_pipeline, get_trainer
@@ -54,6 +55,7 @@ def get_parser():
                         help="If True, use gradient checkpointing to save memory at the expense of slower backward pass.")
     parser.add_argument("--deepspeed_config", type=str, default=None)
     parser.add_argument("--ppo_config", type=str, default=None)
+    parser.add_argument("--num_layers_unfrozen", type=int, default=-1, help="Number of layers to unfreeze for fine-tuning")
     parser.add_argument("--lora_rank", type=int, default=0)
     parser.add_argument("--lora_alpha", type=int, default=1)
     parser.add_argument("--lora_train_bias", type=str, default="none")
@@ -181,18 +183,25 @@ def main():
         model.config.lora_alpha = args.lora_alpha
         model.config.lora_train_bias = args.lora_train_bias
         # Initialize the reward model from the (supervised) fine-tuned SFT model
-        reward_model = RewardModel(model.config, model.transformer, tokenizer)
+        # reward_model = RewardModel(model.config, model.transformer, tokenizer)
+        reward_model = RewardModelWithLoRA(model.config, model.transformer, tokenizer)
     else:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
         model.config.lora_rank = args.lora_rank
         model.config.lora_alpha = args.lora_alpha
         model.config.lora_train_bias = args.lora_train_bias
         # Initialize the reward model from the (supervised) fine-tuned SFT model
-        reward_model = RewardModel(model.config, model.glm, tokenizer)
+        # reward_model = RewardModel(model.config, model.glm, tokenizer)
+        reward_model = RewardModelWithLoRA(model.config, model.glm, tokenizer)
     assert model.config.pad_token_id == tokenizer.pad_token_id
 
-    state_dict_reward = torch.load(args.reward_checkpoint, map_location="cpu")
-    reward_model.load_state_dict(state_dict_reward)
+    if args.reward_checkpoint is not None:
+        checkpoints = glob.glob(args.reward_checkpoint.replace("star", "*"))
+        st = dict()
+        for checkpoint in checkpoints:
+            st.update(torch.load(checkpoint, map_location="cpu"))
+        res = reward_model.load_state_dict(st, strict=False)
+
     device = torch.device(f"cuda:{args.local_rank}") if torch.cuda.is_available() else torch.device("cpu")
     reward_model.half()
     reward_model.eval()
@@ -205,7 +214,7 @@ def main():
         batch_size = 2
         for i in range(0, len(samples), batch_size):
             sub_samples = samples[i: i + batch_size]
-            # sub_samples = [tokenizer.bos_token + chosen + tokenizer.eos_token for chosen in sub_samples]
+            # TODO: to be modified for and tested against pangu and glm
             encodings_dict = tokenizer(
                 sub_samples,
                 max_length=ppo_config.train.seq_length,
@@ -225,11 +234,6 @@ def main():
         return scores
 
     def reward_fn(samples, **kwargs):
-        # rank = torch.distributed.get_rank()
-        # if rank == 0:
-        #     logger.info(f"[rank-{rank}]: {samples[0]}")
-        # original_samples = [text.split("模型回答:")[0] + "模型回答:" for text in samples]
-        # original_samples = [text + post_summary_dict[text.strip()] for text in original_samples]
         original_scores = get_scores(samples)
         scores = get_scores(samples)
         norms_scores = scores - original_scores
@@ -237,6 +241,17 @@ def main():
 
     # load ppo config
     ppo_config = TRLConfig.load_yaml(os.path.join(RESOURCE_PATH, "config", "ppo_model", args.ppo_config))
+    ppo_config.train.epochs = args.num_epochs
+    ppo_config.train.seq_length = args.max_length
+    ppo_config.train.batch_size = args.train_batch_size
+    ppo_config.train.checkpoint_interval = args.save_steps
+    ppo_config.train.eval_interval = args.eval_steps
+    ppo_config.model.num_layers_unfrozen = args.num_layers_unfrozen
+    ppo_config.model.model_path = args.model_name_or_path
+    ppo_config.tokenizer.tokenizer_path = args.model_name_or_path
+    ppo_config.optimizer.kwargs.lr = args.learning_rate
+    ppo_config.optimizer.kwargs.weight_decay = args.weight_decay
+    ppo_config.method.chunk_size = args.train_batch_size
     ppo_config.train.lora_rank = args.lora_rank
     ppo_config.train.lora_alpha = args.lora_alpha
     ppo_config.train.lora_train_bias = args.lora_train_bias

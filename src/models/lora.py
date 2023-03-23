@@ -117,7 +117,11 @@ class LoRAModule(nn.Module):
             Defaults to 'none'.
     """
 
-    def __init__(self, lora_rank: int = 0, lora_alpha: int = 1, lora_train_bias: str = 'none') -> None:
+    def __init__(self,
+                 lora_rank: int = 0,
+                 lora_alpha: int = 1,
+                 lora_train_bias: str = 'none',
+                 **kwargs) -> None:
         super().__init__()
         self.lora_rank = lora_rank
         self.lora_alpha = lora_alpha

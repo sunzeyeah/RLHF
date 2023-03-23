@@ -9,7 +9,7 @@ import argparse
 
 from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments, AutoModelForSeq2SeqLM
 
-from src.models.reward import RewardModel
+from src.models.reward import RewardModel, RewardModelWithLoRA
 from src.utils import logger, RESOURCE_PATH
 from src.utils.file_utils import set_seed
 from src.data.data import PairwiseDataset, DataCollatorReward
@@ -93,7 +93,8 @@ def main():
         model.config.lora_alpha = args.lora_alpha
         model.config.lora_train_bias = args.lora_train_bias
         # Initialize the reward model from the (supervised) fine-tuned SFT model
-        reward_model = RewardModel(model.config, model.transformer, tokenizer)
+        # reward_model = RewardModel(model.config, model.transformer, tokenizer)
+        reward_model = RewardModelWithLoRA(model.config, model.transformer, tokenizer)
         layers = reward_model.transformer.h
     else:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
@@ -101,7 +102,8 @@ def main():
         model.config.lora_alpha = args.lora_alpha
         model.config.lora_train_bias = args.lora_train_bias
         # Initialize the reward model from the (supervised) fine-tuned SFT model
-        reward_model = RewardModel(model.config, model.glm, tokenizer)
+        # reward_model = RewardModel(model.config, model.glm, tokenizer)
+        reward_model = RewardModelWithLoRA(model.config, model.glm, tokenizer)
         layers = reward_model.transformer.transformer.layers
     assert model.config.pad_token_id == tokenizer.pad_token_id
 
@@ -116,9 +118,7 @@ def main():
         st = dict()
         for checkpoint in checkpoints:
             st.update(torch.load(checkpoint, map_location="cpu"))
-        reward_model.load_state_dict(st, strict=False)
-        # st = torch.load(args.checkpoint, map_location="cpu")
-        # reward_model.load_state_dict(st, strict=False)
+        res = reward_model.load_state_dict(st, strict=False)
     logger.info(f"Finished loading model and tokenizer")
 
     # Set up the datasets

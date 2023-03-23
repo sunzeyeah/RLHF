@@ -9,7 +9,7 @@ from transformers.modeling_outputs import ModelOutput
 from src.models.lora import LoRAModule
 
 
-class SFTModel(LoRAModule):
+class SFTModelWithLoRA(LoRAModule):
     """
     SFT model base class with LoRA enabled
 
@@ -25,14 +25,8 @@ class SFTModel(LoRAModule):
                          lora_alpha=config.lora_alpha,
                          lora_train_bias=config.lora_train_bias)
         self.model = model
+        self.config = config
         self.convert_to_lora()
-
-        # if value_head is not None:
-        #     if value_head.out_features != 1:
-        #         raise ValueError("The value head of reward model's output dim should be 1!")
-        #     self.value_head = value_head
-        # else:
-        #     self.value_head = nn.Linear(model.config.n_embd, 1)
 
     def forward(self,
                 input_ids: Optional[torch.Tensor] = None,
