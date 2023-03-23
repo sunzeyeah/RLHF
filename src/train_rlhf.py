@@ -7,12 +7,12 @@ import os
 import argparse
 import torch
 
-from typing import Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Any
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM
 
 from src.utils import logger, RESOURCE_PATH
 from src.utils.config import TRLConfig, default_ilql_config, default_ppo_config, default_sft_config
-from src.models.reward import GPTRewardModel
+from src.models.reward import RewardModel
 from src.utils.file_utils import set_seed
 from src.data.data import RLHFDataset
 from src.utils.loading import get_pipeline, get_trainer
@@ -54,6 +54,9 @@ def get_parser():
                         help="If True, use gradient checkpointing to save memory at the expense of slower backward pass.")
     parser.add_argument("--deepspeed_config", type=str, default=None)
     parser.add_argument("--ppo_config", type=str, default=None)
+    parser.add_argument("--lora_rank", type=int, default=0)
+    parser.add_argument("--lora_alpha", type=int, default=1)
+    parser.add_argument("--lora_train_bias", type=str, default="none")
     # eval
     parser.add_argument("--do_eval", action="store_true")
     parser.add_argument("--eval_filename", type=str, default=None)
@@ -76,7 +79,7 @@ def get_parser():
 
 
 def train(model_path: Optional[str] = None,
-          reward_fn: Optional[Callable[[List[str], List[str], List[str]], List[float]]] = None,
+          reward_fn: Optional[Callable[[List[Any], Any], torch.Tensor]] = None,
           dataset: Optional[Iterable[Tuple[str, float]]] = None,
           samples: Optional[List[str]] = None,
           rewards: Optional[List[float]] = None,
@@ -163,6 +166,8 @@ def main():
 
     # load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+    # tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"
 
     # load reward model
     if "pangu" in args.model_name_or_path:
@@ -172,25 +177,29 @@ def main():
         # model.config.pad_token_id = tokenizer.pad_token_id
         # model.config.bos_token_id = tokenizer.bos_token_id
         # model.config.eos_token_id = tokenizer.eos_token_id
-        # assert rw_tokenizer.pad_token_id == rw_tokenizer.eos_token_id
-        # rw_model.config.end_token_id = rw_tokenizer.eos_token_id
-        # rw_model.config.pad_token_id = rw_model.config.eos_token_id
-        reward_model = GPTRewardModel(model.config, model.transformer, tokenizer)
+        model.config.lora_rank = args.lora_rank
+        model.config.lora_alpha = args.lora_alpha
+        model.config.lora_train_bias = args.lora_train_bias
+        # Initialize the reward model from the (supervised) fine-tuned SFT model
+        reward_model = RewardModel(model.config, model.transformer, tokenizer)
     else:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
+        model.config.lora_rank = args.lora_rank
+        model.config.lora_alpha = args.lora_alpha
+        model.config.lora_train_bias = args.lora_train_bias
         # Initialize the reward model from the (supervised) fine-tuned SFT model
-        reward_model = GPTRewardModel(model.config, model.glm, tokenizer)
+        reward_model = RewardModel(model.config, model.glm, tokenizer)
     assert model.config.pad_token_id == tokenizer.pad_token_id
 
     state_dict_reward = torch.load(args.reward_checkpoint, map_location="cpu")
     reward_model.load_state_dict(state_dict_reward)
+    device = torch.device(f"cuda:{args.local_rank}") if torch.cuda.is_available() else torch.device("cpu")
+    reward_model.half()
+    reward_model.eval()
+    reward_model.to(device)
     logger.info(f"Finish loading reward model from {args.reward_checkpoint}")
 
-    # reward_model.half()
-    reward_model.eval()
-    device = torch.device(f"cuda:{args.local_rank}") if torch.cuda.is_available() else torch.device("cpu")
-    reward_model.to(device)
-
+    # define reward functions in ppo training
     def get_scores(samples):
         scores_list = []
         batch_size = 2
@@ -226,27 +235,20 @@ def main():
         norms_scores = scores - original_scores
         return norms_scores
 
-    # config_path = pathlib.Path(__file__).parent.joinpath("configs/ppo_config_pangu-350M.yml")
+    # load ppo config
     ppo_config = TRLConfig.load_yaml(os.path.join(RESOURCE_PATH, "config", "ppo_model", args.ppo_config))
-    # ppo_config.model.model_path = args.sft_model_path
-    # tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = "left"
+    ppo_config.train.lora_rank = args.lora_rank
+    ppo_config.train.lora_alpha = args.lora_alpha
+    ppo_config.train.lora_train_bias = args.lora_train_bias
     logger.info(f"PPO config: {ppo_config}")
-    max_prompt_length = ppo_config.train.seq_length - ppo_config.method.gen_kwargs["max_new_tokens"]
 
     # load dataset
     if args.do_train:
-        # train_dataset = RLHFDataset(args, os.path.join(args.data_dir, args.train_filename), tokenizer)
         train_dataset = RLHFDataset.load_dataset(os.path.join(args.data_dir, args.train_filename))
-        # for td in train_dataset.post_list:
-        #     post_summary_dict[td['prompt']] = td['label']
     else:
         train_dataset = None
     if args.do_eval:
-        # dev_dataset = RLHFDataset(args, os.path.join(args.data_dir, args.eval_filename), tokenizer)
         dev_dataset = RLHFDataset.load_dataset(os.path.join(args.data_dir, args.eval_filename))
-        # for td in dev_dataset.post_list:
-        #     post_summary_dict[td['prompt']] = td['label']
     else:
         dev_dataset = None
 

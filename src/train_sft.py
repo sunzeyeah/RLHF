@@ -223,7 +223,7 @@ def main():
                                              truncation="only_first",
                                              return_tensors="pt",
                                              return_token_type_ids=False)
-                    max_gen_length = args.max_length - inputs['input_ids'].shape[1]
+                    max_gen_length = args.max_length - encoded_dict['input_ids'].shape[1]
                     inputs = tokenizer.build_inputs_for_generation(encoded_dict,
                                                                    max_gen_length=max_gen_length, padding=True)
                     inputs = inputs.to(device)
@@ -236,8 +236,9 @@ def main():
                                              top_p=args.top_p,
                                              temperature=args.temperature)
                 else:
-                    inputs = tokenizer(prompt, prefix, max_length=args.max_length, return_tensors="pt",
-                                       truncation="longest_first", return_token_type_ids=False)
+                    inputs = tokenizer(prompt, tokenizer.sep_token + prefix, max_length=args.max_length,
+                                       truncation="longest_first", add_special_tokens=False,
+                                       return_tensors="pt", return_token_type_ids=False)
                     # inputs = tokenizer(prompt, add_special_tokens=False, return_token_type_ids=False, return_tensors="pt")
                     inputs = inputs.to(device)
                     outputs = model.generate(**inputs,

@@ -229,6 +229,10 @@ class TrainConfig:
     tracker: Optional[str] = "wandb"
     logging_dir: Optional[str] = None
 
+    lora_rank: Optional[int] = 0
+    lora_alpha: Optional[int] = 1
+    lora_train_bias: Optional[str] = "none"
+
     seed: int = 1000
 
     @classmethod

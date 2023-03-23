@@ -773,11 +773,14 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
         if issubclass(type(config.model.model_path), PretrainedConfig):
             from_fn = model_class.from_config
 
-        return from_fn(
+        model = from_fn(
             config.model.model_path,
             trust_remote_code=True,
             num_layers_unfrozen=config.model.num_layers_unfrozen,
+            config=config
         )
+
+        return model
 
     def loss(self, batch: PPORLBatch):
         """Forward pass & loss

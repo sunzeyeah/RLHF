@@ -209,12 +209,14 @@ class PanguPipeline(BasePipeline):
         prompt = data['prompt']
         # label = data['label']
         prefix = data['prefix']
-        encoded_dict = self.tokenizer(prompt, prefix, max_length=self.max_prompt_length, return_tensors="pt",
-                                      truncation="only_first", padding="max_length", return_token_type_ids=False)
+        encoded_dict = self.tokenizer(prompt, self.tokenizer.sep_token + prefix,
+                                      max_length=self.max_prompt_length, return_tensors="pt",
+                                      truncation="only_first", #padding="max_length",
+                                      add_special_tokens=False, return_token_type_ids=False)
 
         return {
-            "input_ids": encoded_dict['input_ids'][0, :-1],
-            "attention_mask": encoded_dict['attention_mask'][0, :-1],
+            "input_ids": encoded_dict['input_ids'][0],
+            "attention_mask": encoded_dict['attention_mask'][0],
         }
 
     def create_loader(self, batch_size: int, shuffle=False) -> DataLoader:
