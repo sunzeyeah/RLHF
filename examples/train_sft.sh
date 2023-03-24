@@ -2,7 +2,7 @@
 
 MODEL="pangu-2.6B"
 
-#ROOT="/mnt/private-pa002-vol726121-prd"
+#ROOT="/mnt/sfevol775196"
 #ROOT="/mnt/pa002-28359-vol543625-private"
 ROOT="/root/autodl-tmp"
 DATR_DIR=$ROOT/Data/chatgpt/processed
