@@ -2,7 +2,7 @@
 
 MODEL="pangu-2.6B"
 
-#ROOT="/mnt/sfevol775196/sunzeye273/"
+#ROOT="/mnt/sfevol775196/sunzeye273"
 #ROOT="/mnt/pa002-28359-vol543625-private"
 ROOT="/root/autodl-tmp/"
 DATR_DIR=$ROOT/Data/chatgpt/raw
