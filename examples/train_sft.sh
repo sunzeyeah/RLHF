@@ -2,12 +2,13 @@
 
 MODEL="pangu-2.6B"
 
-#ROOT="/mnt/sfevol775196"
+#ROOT="/mnt/sfevol775196/sunzeye273/sunzeye273"
 #ROOT="/mnt/pa002-28359-vol543625-private"
 ROOT="/root/autodl-tmp"
 DATR_DIR=$ROOT/Data/chatgpt/processed
 MAIN=$ROOT/Code/RLHF/src/train_sft.py
 MODEL_PATH=$ROOT/Data/models/$MODEL
+#MODEL_PATH=/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/$MODEL
 OUTPUT_DIR=$ROOT/Data/chatgpt/output/sft/$MODEL
 TRAIN_FILENAME="train_data_external_v1.jsonl"
 EVAL_FILENAME="dev_data_external_v1.jsonl"

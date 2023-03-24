@@ -4,12 +4,13 @@ for TASK in  "cluewsc2020" "afqmc" "csl" "iflytek" "ocnli" "cmnli" "tnews" "c3" 
 do
   for MODEL in "pangu-350M" "pangu-2.6B" "glm-350M-chinese" "glm-10B-chinese" "pangu-13B"
   do
-    ROOT="/mnt/sfevol775196"
+    ROOT="/mnt/sfevol775196/sunzeye273"
     #ROOT="/mnt/pa002-28359-vol543625-private"
     #ROOT="/root/autodl-tmp"
     DATR_DIR=$ROOT/Data/chatgpt/raw/$TASK
     MAIN=$ROOT/Code/RLHF/src/eval_pretrain.py
     MODEL_PATH=$ROOT/Data/models/$MODEL
+    #MODEL_PATH=/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/$MODEL
     OUTPUT_DIR=$ROOT/Data/chatgpt/output/pretrain/$MODEL
     EVAL_FILENAME="dev.json"
     TRAIN_FILENAME="train.json"
