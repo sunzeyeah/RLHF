@@ -5,7 +5,6 @@ rouge-score>=0.1.2
 evaluate>=0.4.0
 transformers>=4.26.1
 numpy==1.23.2
-torch>=1.11.0
 tensorflow>=2.5.0
 triton
 ninja
@@ -16,5 +15,5 @@ accelerate
 ray
 tqdm
 rich
-yaml
 loralib
+xgboost>=1.7.4
