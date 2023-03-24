@@ -188,7 +188,11 @@ class SFTDataset(Dataset):
             encoded_dict = self.tokenizer(prompt, prefix+label, max_length=self.args.max_length, return_tensors="pt",
                                           truncation="longest_first", padding="max_length", return_token_type_ids=False)
 
-            return encoded_dict
+            return {
+                "input_ids": encoded_dict['input_ids'],
+                "attention_mask": encoded_dict['attention_mask'],
+                "labels": encoded_dict['input_ids'],
+            }
 
     @staticmethod
     def load_dataset(filename):
