@@ -142,13 +142,13 @@ def main():
         test_dataset = None
 
     # training arguments
-    deepspeed_config = os.path.join(RESOURCE_PATH, "config", "sft_model", args.deepspeed_config) if args.deepspeed_config is not None else None
+    deepspeed_config = os.path.join(RESOURCE_PATH, "config", "deepspeed", args.deepspeed_config) if args.deepspeed_config is not None else None
     training_args = TrainingArguments(
         output_dir=args.output_dir,
         no_cuda=not torch.cuda.is_available(),
         seed=args.seed,
         data_seed=args.seed,
-        # local_rank=args.local_rank,
+        local_rank=args.local_rank,
         do_train=args.do_train,
         num_train_epochs=args.num_epochs,
         learning_rate=args.learning_rate,
@@ -159,6 +159,7 @@ def main():
         weight_decay=args.weight_decay,
         half_precision_backend="auto",
         fp16=torch.cuda.is_available(),
+        bf16=torch.cuda.get_device_capability()[0] >= 8,
         adam_beta1=0.9,
         adam_beta2=0.95,
         save_strategy=args.save_strategy,
@@ -166,7 +167,7 @@ def main():
         save_total_limit=args.save_total_limit,
         logging_steps=args.logging_steps,
         report_to=["tensorboard"],
-        # deepspeed=deepspeed_config,
+        deepspeed=deepspeed_config,
         gradient_checkpointing=args.gradient_checkpointing,
         do_eval=args.do_eval,
         evaluation_strategy=args.evaluation_strategy,

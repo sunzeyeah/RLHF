@@ -137,7 +137,7 @@ def main():
         val_dataset = None
 
     # training arguments
-    deepspeed_config = os.path.join(RESOURCE_PATH, "config", "reward_model", args.deepspeed_config) if args.deepspeed_config is not None else None
+    deepspeed_config = os.path.join(RESOURCE_PATH, "config", "deepspeed", args.deepspeed_config) if args.deepspeed_config is not None else None
     training_args = TrainingArguments(
         output_dir=args.output_dir,
         no_cuda=not torch.cuda.is_available(),
