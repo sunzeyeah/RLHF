@@ -23,6 +23,8 @@ TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 p
 根据下图，调整```TORCH_CUDA_ARCH_LIST="7.0"```为对应的NVIDIA GPU架构
 ![image info](./images/torch_cuda_list.png "torch_cuda_list")
 
+或运行```torch.cuda.get_device_capability()```获取
+
 
 ## Data & Model Download
 

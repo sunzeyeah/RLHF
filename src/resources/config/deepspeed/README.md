@@ -22,8 +22,8 @@ Example of deepspeed config with key items explained:
           "eps": "auto",
           "weight_decay": "auto"
         }
-    }, 
-    
+    },
+
     "scheduler": {
         "type": "WarmupLR",
         "params": {
