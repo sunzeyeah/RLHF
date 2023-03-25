@@ -19,7 +19,7 @@ cd $ROOT/Code/RLHF || exit
 mkdir -p $OUTPUT_DIR
 
 #python $MAIN \
-deepspeed --num_gpus 1 $MAIN \
+CUDA_LAUNCH_BLOCKING=1 deepspeed --num_gpus 1 $MAIN \
   --data_dir $DATR_DIR \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_PATH \

@@ -68,6 +68,7 @@ Example of deepspeed config with key items explained:
             "max_in_cpu": 1e9
         },
         "overlap_comm": false, # "if set to true, trades off increased GPU RAM usage to lower all-reduce latency. overlap_comm uses 4.5x the allgather_bucket_size and reduce_bucket_size values. So if they are set to 5e8, this requires a 9GB footprint (5e8 x 2Bytes x 2 x 4.5). Therefore, if you have a GPU with 8GB or less RAM, to avoid getting OOM-errors you will need to reduce those parameters to about 2e8, which would require 3.6GB"
+        "reduce_bucket_size": "auto", # "Number of elements reduced/allreduced at a time. Limits the memory required for the allgather for large model sizes. When set auto, it equals hidden_size*hidden_size"
         # only stage-2 params
         "allgather_partitions": true,
         "allgather_bucket_size": 5e8, # "Number of elements allgathered at a time. Limits the memory required for the allgather for large model sizes"
@@ -77,7 +78,6 @@ Example of deepspeed config with key items explained:
         # only stage-3 params
         "stage3_max_live_parameters" : 1e9, # "The maximum number of parameters resident per GPU before releasing. Smaller values use less memory, but perform more communication. 1e9 would consume ~2GB"
         "stage3_max_reuse_distance" : 1e9, # "Do not release a parameter if it will be reused within this threshold of parameters. Smaller values use less memory, but perform more communication."
-        "reduce_bucket_size": "auto", # "Number of elements reduced/allreduced at a time. Limits the memory required for the allgather for large model sizes. When set auto, it equals hidden_size*hidden_size"
         "stage3_prefetch_bucket_size" : "auto", # "The size of the fixed buffer for prefetching parameters. Smaller values use less memory, but can increase stalls due to communication. When set auto, it equals 0.9 * hidden_size * hidden_size"
         "stage3_param_persistence_threshold" : "auto", # "Do not partition parameters smaller than this threshold. Smaller values use less memory, but can greatly increase communication (especially latency-bound messages). When set auto, it equals 10 * hidden_size"
         "sub_group_size" : 1e12, # controls the granularity in which parameters are updated during optimizer steps. Parameters are grouped into buckets of sub_group_size and each buckets is updated one at a time. When used with NVMe offload in ZeRO-Infinity, sub_group_size therefore controls the granularity in which model states are moved in and out of CPU memory from NVMe during the optimizer step. This prevents running out of CPU memory for extremely large models. 

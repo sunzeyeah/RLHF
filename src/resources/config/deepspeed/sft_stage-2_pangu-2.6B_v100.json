@@ -15,6 +15,7 @@
     "allgather_partitions": true,
     "allgather_bucket_size": 5e8,
     "reduce_scatter": true,
+    "reduce_bucket_size": 5e8,
     "contiguous_gradients" : true,
     "round_robin_gradients": true
   },
