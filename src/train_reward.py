@@ -138,12 +138,18 @@ def main():
 
     # training arguments
     deepspeed_config = os.path.join(RESOURCE_PATH, "config", "deepspeed", args.deepspeed_config) if args.deepspeed_config is not None else None
+    if torch.cuda.is_available():
+        bf16 = torch.cuda.get_device_capability()[0] >= 8
+        fp16 = False if bf16 else True
+    else:
+        fp16 = False
+        bf16 = False
     training_args = TrainingArguments(
         output_dir=args.output_dir,
         no_cuda=not torch.cuda.is_available(),
         seed=args.seed,
         data_seed=args.seed,
-        # local_rank=args.local_rank,
+        local_rank=args.local_rank,
         do_train=args.do_train,
         num_train_epochs=args.num_epochs,
         learning_rate=args.learning_rate,
@@ -153,13 +159,14 @@ def main():
         warmup_ratio=args.warmup_ratio,
         weight_decay=args.weight_decay,
         half_precision_backend="auto",
-        fp16=torch.cuda.is_available(),
+        fp16=fp16,
+        bf16=bf16,
         save_strategy=args.save_strategy,
         save_steps=args.save_steps,
         save_total_limit=args.save_total_limit,
         logging_steps=args.logging_steps,
         report_to=["tensorboard"],
-        # deepspeed=deepspeed_config,
+        deepspeed=deepspeed_config,
         do_eval=args.do_eval,
         evaluation_strategy=args.evaluation_strategy,
         eval_steps=args.eval_steps,

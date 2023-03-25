@@ -143,6 +143,12 @@ def main():
 
     # training arguments
     deepspeed_config = os.path.join(RESOURCE_PATH, "config", "deepspeed", args.deepspeed_config) if args.deepspeed_config is not None else None
+    if torch.cuda.is_available():
+        bf16 = torch.cuda.get_device_capability()[0] >= 8
+        fp16 = False if bf16 else True
+    else:
+        fp16 = False
+        bf16 = False
     training_args = TrainingArguments(
         output_dir=args.output_dir,
         no_cuda=not torch.cuda.is_available(),
@@ -158,8 +164,8 @@ def main():
         warmup_ratio=args.warmup_ratio,
         weight_decay=args.weight_decay,
         half_precision_backend="auto",
-        fp16=torch.cuda.is_available(),
-        bf16=torch.cuda.get_device_capability()[0] >= 8,
+        fp16=fp16,
+        bf16=bf16,
         adam_beta1=0.9,
         adam_beta2=0.95,
         save_strategy=args.save_strategy,
