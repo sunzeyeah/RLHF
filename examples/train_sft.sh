@@ -28,7 +28,7 @@ python $MAIN \
   --train_batch_size 8 \
   --gradient_accumulation_steps 16 \
   --num_epochs 1 \
-  --lora_rank 100 \
+  --deepspeed_config "sft_stage-2_${MODEL}_v100.json" \
   --do_eval \
   --eval_filename $EVAL_FILENAME \
   --eval_batch_size 48 \
