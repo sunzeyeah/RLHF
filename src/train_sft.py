@@ -155,10 +155,10 @@ def main():
         bf16 = False
     training_args = TrainingArguments(
         output_dir=args.output_dir,
-        no_cuda=True,#not torch.cuda.is_available(),
+        no_cuda=not torch.cuda.is_available(),
         seed=args.seed,
         data_seed=args.seed,
-        # local_rank=args.local_rank,
+        local_rank=args.local_rank,
         do_train=args.do_train,
         num_train_epochs=args.num_epochs,
         learning_rate=args.learning_rate,
