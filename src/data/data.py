@@ -156,7 +156,24 @@ class SFTDataset(Dataset):
         prompt = data['prompt']
         label = data['label']
         prefix = data['prefix']
-        if "glm" in self.args.model_name_or_path:
+        if "pangu" in self.args.model_name_or_path:
+            encoded_dict = self.tokenizer(prompt, prefix+label, max_length=self.args.max_length, return_tensors="pt",
+                                          truncation="longest_first", padding="max_length", return_token_type_ids=False)
+
+            return {
+                "input_ids": encoded_dict['input_ids'],
+                "attention_mask": encoded_dict['attention_mask'],
+                "labels": encoded_dict['input_ids'],
+            }
+        elif "chatglm" in self.args.model_name_or_path:
+            encoded_dict = self.tokenizer(prompt, prefix + self.tokenizer.mask_token + label, max_length=self.args.max_length,
+                                          return_tensors="pt", truncation="longest_first", padding="max_length")
+
+            return {
+                "input_ids": encoded_dict['input_ids'][0],
+                "labels": encoded_dict['input_ids'][0],
+            }
+        elif "glm" in self.args.model_name_or_path:
             encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
             prompt_length = len(encoded_prompt['input_ids'])
             label_length = len(self.tokenizer.tokenize(label)) + 1
@@ -186,14 +203,7 @@ class SFTDataset(Dataset):
                 "labels": encoded_dict['labels'][0],
             }
         else:
-            encoded_dict = self.tokenizer(prompt, prefix+label, max_length=self.args.max_length, return_tensors="pt",
-                                          truncation="longest_first", padding="max_length", return_token_type_ids=False)
-
-            return {
-                "input_ids": encoded_dict['input_ids'],
-                "attention_mask": encoded_dict['attention_mask'],
-                "labels": encoded_dict['input_ids'],
-            }
+            raise ValueError(f"Unsupported model name: {self.args.model_name_or_path}")
 
     @staticmethod
     def load_dataset(filename):

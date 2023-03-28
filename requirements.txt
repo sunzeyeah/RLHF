@@ -17,3 +17,5 @@ tqdm
 rich
 loralib
 xgboost>=1.7.4
+icetk
+cpm_kernels

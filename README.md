@@ -12,12 +12,11 @@ git clone https://github.com/NVIDIA/apex
 cd apex
 pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache -v --disable-pip-version-check .  2>&1 | tee build.log
 ```
-如果想创建binary wheel，方便在其他机器上安装，可使用如下命令，会在```dist```目录生成类似可安装文件```deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl```
+如果想创建binary wheel，方便在其他机器上安装，可使用如下命令，会在```dist```目录生成类似可安装文件```apex-0.0.1+7150e20-cp38-cp38-linux_x86_64.whl```
 ```bash
 git clone https://github.com/NVIDIA/apex
 cd apex
 python setup.py --cpp_ext --cuda_ext bdist_wheel 2>&1 | tee build.log
--j8 
 ```
 
 ### 2. Install deepspeed
@@ -42,15 +41,22 @@ TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_OPS=1 python setup.py build_ext -j8 bdist_wh
 
 ## Data & Model Download
 
-### 1. 模型下载
+### 1. 预训练模型下载
 
-| 模型      | size | 百度网盘地址  |  提取码      | 
-| ----------- | ----------- | ----------- |  ----------- |
-| [Pangu-350M](https://openi.pcl.ac.cn/PCL-Platform.Intelligence/PanGu-Alpha)   | 659MB | [Pangu-350M](https://pan.baidu.com/s/1IzgtW48S2PKyjxPPMe1rAQ) |  c5jj |
-| [Pangu-2.6B](https://openi.pcl.ac.cn/PCL-Platform.Intelligence/PanGu-Alpha)   | 9.8GB | [Pangu-2.6B](https://pan.baidu.com/s/1Tzvja4q_LgQOwkWPQ4jShw)    | 2rad |
-| [Pangu-13B](https://openi.pcl.ac.cn/PCL-Platform.Intelligence/PanGu-Alpha)   | 23.6GB | [Pangu-13B](https://pan.baidu.com/s/11fWAeYYKqI7pH0UiuJ5jEQ)    | u3dx |
-| [GLM-350M-chinese](https://github.com/THUDM/GLM) | 679MB | [GLM-350M-chinese](https://pan.baidu.com/s/11Lef-E7Tsz5OGOueCpiqaA) | ii8e |
-| [GLM-10B-chinese](https://github.com/THUDM/GLM)   | 18.4G |  [GLM-10B-chinese](https://pan.baidu.com/s/1GuOefx42n_GzFfwnjoBltw) | fynj  |
+| 模型      | size | huggingface地址 | 百度网盘地址  |  提取码      | 
+| ----------- | ----------- | ----------- |  ----------- |  ----------- |
+| [Pangu-350M](https://openi.pcl.ac.cn/PCL-Platform.Intelligence/PanGu-Alpha)   | 659MB | | [Pangu-350M](https://pan.baidu.com/s/1IzgtW48S2PKyjxPPMe1rAQ) |  c5jj |
+| [Pangu-2.6B](https://openi.pcl.ac.cn/PCL-Platform.Intelligence/PanGu-Alpha)   | 9.8GB | | [Pangu-2.6B](https://pan.baidu.com/s/1Tzvja4q_LgQOwkWPQ4jShw)    | 2rad |
+| [Pangu-13B](https://openi.pcl.ac.cn/PCL-Platform.Intelligence/PanGu-Alpha)   | 23.6GB | | [Pangu-13B](https://pan.baidu.com/s/11fWAeYYKqI7pH0UiuJ5jEQ)    | u3dx |
+| [GLM-350M-chinese](https://github.com/THUDM/GLM) | 679MB | | [GLM-350M-chinese](https://pan.baidu.com/s/11Lef-E7Tsz5OGOueCpiqaA) | ii8e |
+| [GLM-10B-chinese](https://github.com/THUDM/GLM)   | 18.4G |  | [GLM-10B-chinese](https://pan.baidu.com/s/1GuOefx42n_GzFfwnjoBltw) | fynj  |
+| [ChatGLM-6B](https://github.com/THUDM/ChatGLM-6B)   | 25.6G |  |  |  |
+
+**PS**: 本repo提供的预训练模型下载中，
+- 对于pytorch_model\*.bin
+  - 如果源文件已包括，则不做改动
+  - 如果源文件不包括，则根据其提供的checkpoint转换为pytorch_model\*.bin
+- 其余文件可能相对原文件有改动，包括：modeling_\*.py、tokenzation_\*.py、configuration_\*.py、config.json和tokenizer.config
 
 ### 2. 数据下载
 

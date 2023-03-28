@@ -109,9 +109,13 @@ def main():
         # model.config.pad_token_id = tokenizer.pad_token_id
         # model.config.bos_token_id = tokenizer.bos_token_id
         # model.config.eos_token_id = tokenizer.eos_token_id
-    else:
+    elif "glm" in args.model_name_or_path:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
-    assert model.config.pad_token_id == tokenizer.pad_token_id
+        if "chatglm" in args.model_name_or_path:
+            model = model.half()
+    else:
+        raise ValueError(f"Unsupported model name: {args.model_name_or_path}")
+    # assert model.config.pad_token_id == tokenizer.pad_token_id
 
     model.config.lora_rank = args.lora_rank
     model.config.lora_alpha = args.lora_alpha
@@ -143,7 +147,7 @@ def main():
 
     # training arguments
     deepspeed_config = os.path.join(RESOURCE_PATH, "config", "deepspeed", args.deepspeed_config) if args.deepspeed_config is not None else None
-    if torch.cuda.is_available():
+    if torch.cuda.is_available() and "chatglm" not in args.model_name_or_path:
         bf16 = torch.cuda.get_device_capability()[0] >= 8
         fp16 = False if bf16 else True
     else:
@@ -151,10 +155,10 @@ def main():
         bf16 = False
     training_args = TrainingArguments(
         output_dir=args.output_dir,
-        no_cuda=not torch.cuda.is_available(),
+        no_cuda=True,#not torch.cuda.is_available(),
         seed=args.seed,
         data_seed=args.seed,
-        local_rank=args.local_rank,
+        # local_rank=args.local_rank,
         do_train=args.do_train,
         num_train_epochs=args.num_epochs,
         learning_rate=args.learning_rate,
@@ -224,7 +228,41 @@ def main():
                 prompt = test_data['prompt']
                 prefix = test_data['prefix']
                 # label = dev_data['label']
-                if "glm" in args.model_name_or_path:
+                if "pangu" in args.model_name_or_path:
+                    inputs = tokenizer(prompt, tokenizer.sep_token + prefix, max_length=args.max_length,
+                                       truncation="longest_first", add_special_tokens=False,
+                                       return_tensors="pt", return_token_type_ids=False)
+                    # inputs = tokenizer(prompt, add_special_tokens=False, return_token_type_ids=False, return_tensors="pt")
+                    inputs = inputs.to(device)
+                    outputs = model.generate(**inputs,
+                                             max_new_tokens=args.max_length_generation,
+                                             pad_token_id=tokenizer.pad_token_id,
+                                             do_sample=False,
+                                             num_return_sequences=args.num_return_sequences,
+                                             top_p=args.top_p,
+                                             temperature=args.temperature)
+                elif "chatglm" in args.model_name_or_path:
+                    # TODO: to be updated
+                    encoded_prompt = tokenizer(prompt, prefix + tokenizer.mask_token)
+                    prompt_length = len(encoded_prompt['input_ids'])
+                    encoded_dict = tokenizer(prompt, prefix + tokenizer.mask_token,
+                                             max_length=min(prompt_length, args.max_length),
+                                             truncation="only_first",
+                                             return_tensors="pt",
+                                             return_token_type_ids=False)
+                    max_gen_length = args.max_length - encoded_dict['input_ids'].shape[1]
+                    # inputs = tokenizer.build_inputs_for_generation(encoded_dict,
+                    #                                                max_gen_length=max_gen_length, padding=True)
+                    inputs = inputs.to(device)
+                    outputs = model.generate(**inputs,
+                                             max_new_tokens=args.max_length_generation,
+                                             eos_token_id=tokenizer.eop_token_id,
+                                             pad_token_id=tokenizer.pad_token_id,
+                                             do_sample=False,
+                                             num_return_sequences=args.num_return_sequences,
+                                             top_p=args.top_p,
+                                             temperature=args.temperature)
+                elif "glm" in args.model_name_or_path:
                     encoded_prompt = tokenizer(prompt, prefix + tokenizer.mask_token)
                     prompt_length = len(encoded_prompt['input_ids'])
                     encoded_dict = tokenizer(prompt, prefix + tokenizer.mask_token,
@@ -245,18 +283,7 @@ def main():
                                              top_p=args.top_p,
                                              temperature=args.temperature)
                 else:
-                    inputs = tokenizer(prompt, tokenizer.sep_token + prefix, max_length=args.max_length,
-                                       truncation="longest_first", add_special_tokens=False,
-                                       return_tensors="pt", return_token_type_ids=False)
-                    # inputs = tokenizer(prompt, add_special_tokens=False, return_token_type_ids=False, return_tensors="pt")
-                    inputs = inputs.to(device)
-                    outputs = model.generate(**inputs,
-                                             max_new_tokens=args.max_length_generation,
-                                             pad_token_id=tokenizer.pad_token_id,
-                                             do_sample=False,
-                                             num_return_sequences=args.num_return_sequences,
-                                             top_p=args.top_p,
-                                             temperature=args.temperature)
+                    raise ValueError(f"Unsupported model name: {args.model_name_or_path}")
                 results = tokenizer.batch_decode(outputs, skip_special_tokens=True)
                 w.write("\t".join([prompt]+[result.split(prefix, maxsplit=1)[1] for result in results])+"\n")
 

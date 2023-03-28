@@ -181,6 +181,8 @@ class ChatGLMTokenizer(PreTrainedTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids"]
 
+    # TODO: add build inputs with attention mask and position ids
+
     def __init__(
             self,
             vocab_file,

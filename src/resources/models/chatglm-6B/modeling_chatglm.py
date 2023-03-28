@@ -827,6 +827,7 @@ class ChatGLMModel(ChatGLMPreTrainedModel):
             MASK, gMASK = 150000, 150001
             mask_token = MASK if MASK in input_ids else gMASK
             use_gmask = False if MASK in input_ids else gMASK
+            # TODO: to be modified for batch size > 1
             seq = input_ids[0].tolist()
 
             mask_position = seq.index(mask_token)
