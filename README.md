@@ -56,7 +56,7 @@ TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_OPS=1 python setup.py build_ext -j8 bdist_wh
 - 对于pytorch_model\*.bin
   - 如果源文件已包括，则不做改动
   - 如果源文件不包括，则根据其提供的checkpoint转换为pytorch_model\*.bin
-- 其余文件可能相对原文件有改动，包括：modeling_\*.py、tokenzation_\*.py、configuration_\*.py、config.json和tokenizer.config
+- 其余文件可能相对原文件有改动，包括：modeling_\*.py、tokenization_\*.py、configuration_\*.py、config.json和tokenizer.config
 
 ### 2. 数据下载
 
