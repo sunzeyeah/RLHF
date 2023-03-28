@@ -204,7 +204,8 @@ def main():
         trainer.save_model(args.output_dir)
 
     elif args.do_eval:
-        trainer.evaluate(eval_dataset=val_dataset)
+        res = trainer.evaluate(eval_dataset=val_dataset)
+        logger.info(res)
 
 
 if __name__ == "__main__":

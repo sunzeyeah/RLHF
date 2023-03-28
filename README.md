@@ -12,25 +12,32 @@ git clone https://github.com/NVIDIA/apex
 cd apex
 pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache -v --disable-pip-version-check .  2>&1 | tee build.log
 ```
+如果想创建binary wheel，方便在其他机器上安装，可使用如下命令，会在```dist```目录生成类似可安装文件```deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl```
+```bash
+git clone https://github.com/NVIDIA/apex
+cd apex
+python setup.py --cpp_ext --cuda_ext bdist_wheel 2>&1 | tee build.log
+-j8 
+```
 
 ### 2. Install deepspeed
 ```bash
 git clone https://github.com/microsoft/deepspeed
 cd deepspeed
 rm -rf build
-TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_OPS=1 pip install -e . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_OPS=1 pip install -e . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check 2>&1 | tee build.log
 ```
-如果想创建binary wheel，方便在其他机器上安装，可使用如下命令，会在```dist```目录生成类似可安装文件```deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl```
+同上，如果想创建binary wheel，可使用如下命令，会在```dist```目录生成类似可安装文件```deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl```
 ```bash
 git clone https://github.com/microsoft/deepspeed
 cd deepspeed
 rm -rf build
-TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_OPS=1 python setup.py build_ext -j8 bdist_wheel
+TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_OPS=1 python setup.py build_ext -j8 bdist_wheel 2>&1 | tee build.log
 ```
-根据下图，调整```TORCH_CUDA_ARCH_LIST="7.0"```为对应的NVIDIA GPU架构
+**PS**：需要根据下图，调整```TORCH_CUDA_ARCH_LIST="7.0"```为自己对应的NVIDIA GPU架构
 ![image info](./images/torch_cuda_list.png "torch_cuda_list")
 
-或运行```torch.cuda.get_device_capability()```获取
+或运行```torch.cuda.get_device_capability()```获取自己GPU的架构
 
 
 ## Data & Model Download
