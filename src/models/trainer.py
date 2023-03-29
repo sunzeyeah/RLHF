@@ -940,7 +940,7 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
             samples = self.generate(**batch)
             stats["time/exp_generate"] = time() - exp_generate_time
 
-            prompt_tensors = batch.input_ids
+            prompt_tensors = batch['input_ids']
             device = samples.device
 
             prompt_sizes = torch.tensor([prompt_tensors.shape[1]] * len(prompt_tensors), device=device)
@@ -1022,8 +1022,8 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
 
             # Precompute logprobs, values
             if self.config.model.model_arch_type == "seq2seq":
-                attention_mask = batch.attention_mask.to(device)
-                prompt_tensors = batch.input_ids.to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                prompt_tensors = batch['input_ids'].to(device)
                 decoder_attention_mask = sample_outputs.not_equal(self.tokenizer.pad_token_id)
                 decoder_attention_mask[:, 0] = 1
                 with torch.no_grad():

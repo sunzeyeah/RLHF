@@ -168,7 +168,7 @@ class SFTDataset(Dataset):
         elif "glm" in self.args.model_name_or_path:
             encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
             prompt_length = len(encoded_prompt['input_ids'])
-            label_length = len(self.tokenizer.tokenize(label)) + 1 if "chatglm" not in self.args.model_name_or_path else 0
+            label_length = len(self.tokenizer.tokenize(label)) + (1 if "chatglm" not in self.args.model_name_or_path else 0)
             if prompt_length + label_length > self.args.max_length:
                 num_tokens_to_remove = prompt_length + label_length - self.args.max_length
                 for _ in range(num_tokens_to_remove):

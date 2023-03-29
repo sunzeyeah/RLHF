@@ -254,8 +254,8 @@ def main():
     ppo_config.model.num_layers_unfrozen = args.num_layers_unfrozen
     ppo_config.model.model_path = args.model_name_or_path
     ppo_config.tokenizer.tokenizer_path = args.model_name_or_path
-    ppo_config.optimizer.kwargs.lr = args.learning_rate
-    ppo_config.optimizer.kwargs.weight_decay = args.weight_decay
+    ppo_config.optimizer.kwargs['lr'] = args.learning_rate
+    ppo_config.optimizer.kwargs['weight_decay'] = args.weight_decay
     ppo_config.method.chunk_size = args.train_batch_size
     ppo_config.train.lora_rank = args.lora_rank
     ppo_config.train.lora_alpha = args.lora_alpha

@@ -395,6 +395,7 @@ class ChatGLMTokenizer(PreTrainedTokenizer):
                                               dim=0).unsqueeze(0).expand(batch_size, -1, -1)
         attention_mask = torch.cat((attention_mask, generation_attention_mask), dim=2)
         attention_mask = attention_mask.unsqueeze(1)
+        attention_mask = (attention_mask < 0.5).bool()
         if targets is None:
             input_ids = torch.cat((input_ids, input_ids.new_full((batch_size, 1), bos_id)), dim=-1)
         else:
