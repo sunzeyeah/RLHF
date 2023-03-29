@@ -253,6 +253,7 @@ def main():
         logger.info(res)
 
     if args.do_pred:
+        model.eval()
         device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
         tokenizer.padding_side = "left"
         with open(os.path.join(args.output_dir, args.output_filename), "w", encoding="utf-8") as w:

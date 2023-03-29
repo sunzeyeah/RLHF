@@ -8,12 +8,14 @@ import os
 import torch
 import argparse
 
+from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments, AutoModelForSeq2SeqLM
+from torch.utils.data import DataLoader, SequentialSampler
 
 from src.models.reward import RewardModel, RewardModelWithLoRA
 from src.utils import logger, RESOURCE_PATH
 from src.utils.file_utils import set_seed
-from src.data.data import PairwiseDataset, DataCollatorReward
+from src.data.data import SFTDataset, PairwiseDataset, DataCollatorReward
 
 
 def get_parser():
@@ -128,17 +130,20 @@ def main():
 
     # Set up the datasets
     if args.do_train:
-        train_dataset = PairwiseDataset(args,
-                                        os.path.join(args.data_dir, args.train_filename),
+        train_dataset = PairwiseDataset(args, os.path.join(args.data_dir, args.train_filename),
                                         tokenizer)
     else:
         train_dataset = None
     if args.do_eval:
-        val_dataset = PairwiseDataset(args,
-                                      os.path.join(args.data_dir, args.eval_filename),
+        val_dataset = PairwiseDataset(args, os.path.join(args.data_dir, args.eval_filename),
                                       tokenizer)
     else:
         val_dataset = None
+    if args.do_pred:
+        test_dataset = SFTDataset(args, os.path.join(args.data_dir, args.test_filename),
+                                  tokenizer)
+    else:
+        test_dataset = None
 
     # training arguments
     deepspeed_config = os.path.join(RESOURCE_PATH, "config", "deepspeed", args.deepspeed_config) if args.deepspeed_config is not None else None
@@ -208,8 +213,29 @@ def main():
         trainer.save_model(args.output_dir)
 
     elif args.do_eval:
-        res = trainer.evaluate(eval_dataset=val_dataset)
-        logger.info(res)
+        eval_result = trainer.evaluate(eval_dataset=val_dataset)
+        logger.info(eval_result)
+
+    if args.do_pred:
+        model.eval()
+        device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
+        reward_model = reward_model.to(device)
+        sampler = SequentialSampler(test_dataset)
+        test_loader = DataLoader(test_dataset, batch_size=args.eval_batch_size, sampler=sampler)
+        rewards = []
+        with torch.no_grad():
+            for batch in tqdm(test_loader, desc="Prediction"):
+                chosen_input_ids = batch['input_ids'].to(device)
+                chosen_attention_mask = batch['attention_mask'].to(device)
+                chosen_position_ids = batch['position_ids'].to(device)
+                output = reward_model(chosen_input_ids, chosen_attention_mask, chosen_position_ids)
+                rewards.extend(output['chosen_reward'].cpu().detach().tolist())
+        # save result into file
+        with open(os.path.join(args.output_dir, args.output_filename), "w", encoding="utf-8") as w:
+            w.write("\t".join(("prompt", "answer", "score"))+"\n")
+            for item, reward in zip(test_dataset.post_list, rewards):
+                w.write("\t".join((item["prompt"], item["label"], str(reward))) + "\n")
+        logger.info(f"Finished prediction and saving into {args.output_filename}")
 
 
 if __name__ == "__main__":

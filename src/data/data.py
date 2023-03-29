@@ -165,14 +165,6 @@ class SFTDataset(Dataset):
                 "attention_mask": encoded_dict['attention_mask'],
                 "labels": encoded_dict['input_ids'],
             }
-        # elif "chatglm" in self.args.model_name_or_path:
-        #     encoded_dict = self.tokenizer(prompt, prefix + self.tokenizer.mask_token + label, max_length=self.args.max_length,
-        #                                   return_tensors="pt", truncation="longest_first", padding="max_length")
-        #
-        #     return {
-        #         "input_ids": encoded_dict['input_ids'][0],
-        #         "labels": encoded_dict['input_ids'][0],
-        #     }
         elif "glm" in self.args.model_name_or_path:
             encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
             prompt_length = len(encoded_prompt['input_ids'])
