@@ -7,6 +7,7 @@ import glob
 import os
 import torch
 import argparse
+import numpy as np
 
 from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments, AutoModelForSeq2SeqLM
@@ -227,14 +228,15 @@ def main():
             for batch in tqdm(test_loader, desc="Prediction"):
                 chosen_input_ids = batch['input_ids'].to(device)
                 chosen_attention_mask = batch['attention_mask'].to(device)
-                chosen_position_ids = batch['position_ids'].to(device)
+                chosen_position_ids = batch['position_ids'].to(device) if 'position_ids' in batch else None
                 output = reward_model(chosen_input_ids, chosen_attention_mask, chosen_position_ids)
                 rewards.extend(output['chosen_reward'].cpu().detach().tolist())
         # save result into file
         with open(os.path.join(args.output_dir, args.output_filename), "w", encoding="utf-8") as w:
             w.write("\t".join(("prompt", "answer", "score"))+"\n")
             for item, reward in zip(test_dataset.post_list, rewards):
-                w.write("\t".join((item["prompt"], item["label"], str(reward))) + "\n")
+                score = 1/(1+np.exp(-reward))
+                w.write("\t".join((item["prompt"], item["label"], str(score))) + "\n")
         logger.info(f"Finished prediction and saving into {args.output_filename}")
 
 
