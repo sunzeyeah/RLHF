@@ -827,7 +827,7 @@ class ChatGLMModel(ChatGLMPreTrainedModel):
             MASK, gMASK = 150000, 150001
             mask_token = MASK if MASK in input_ids else gMASK
             use_gmask = False if MASK in input_ids else gMASK
-            # TODO: to be modified for batch size > 1
+            # TODO: WARNING - Assuming batch size = 1 which is not always the case. With modified `tokenization_chatglm.py`, `attention_mask` and `position_ids` is provided beforehand, therefore escapes this problem.
             seq = input_ids[0].tolist()
 
             mask_position = seq.index(mask_token)

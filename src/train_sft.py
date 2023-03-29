@@ -103,6 +103,38 @@ def main():
 
     # load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+    # prompt = "你是谁"
+    # prefix = "答:"
+    # label = "我是***，很高兴为你服务"
+    # max_length = 512
+    # encoded_prompt = tokenizer(prompt, prefix + tokenizer.mask_token)
+    # prompt_length = len(encoded_prompt['input_ids'])
+    # label_length = len(tokenizer.tokenize(label)) + 1
+    # if prompt_length + label_length > max_length:
+    #     num_tokens_to_remove = prompt_length + label_length - max_length
+    #     for _ in range(num_tokens_to_remove):
+    #         if prompt_length > label_length:
+    #             prompt_length -= 1
+    #         else:
+    #             label_length -= 1
+    # else:
+    #     label_length = max_length - prompt_length
+    # assert prompt_length > 0
+    # assert label_length > 0
+    # assert prompt_length + label_length <= max_length
+    # encoded_dict = tokenizer(prompt, prefix + tokenizer.mask_token,
+    #                          max_length=prompt_length, truncation="only_first",
+    #                          return_tensors="pt", return_attention_mask=True)
+    # inputs = tokenizer.build_inputs_for_generation(encoded_dict, targets=label,
+    #                                                max_gen_length=label_length, padding=True)
+    # # inputs = build_inputs_for_generation(tokenizer, encoded_dict, targets=label, max_gen_length=label_length, padding=True)
+    # inputs_glm = {
+    #     "input_ids": inputs['input_ids'][0],
+    #     "position_ids": inputs['position_ids'][0],
+    #     "attention_mask": inputs['attention_mask'][0],
+    #     "labels": inputs['labels'][0],
+    # }
+
     if "pangu" in args.model_name_or_path:
         model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         model.resize_token_embeddings(tokenizer.vocab_size)
@@ -222,6 +254,7 @@ def main():
 
     if args.do_pred:
         device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
+        tokenizer.padding_side = "left"
         with open(os.path.join(args.output_dir, args.output_filename), "w", encoding="utf-8") as w:
             w.write("\t".join(["prompt"]+[f"model_answer_{i}" for i in range(args.num_return_sequences)])+"\n")
             for test_data in tqdm(test_dataset.post_list, desc="Prediction"):

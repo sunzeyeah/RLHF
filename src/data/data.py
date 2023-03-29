@@ -165,18 +165,18 @@ class SFTDataset(Dataset):
                 "attention_mask": encoded_dict['attention_mask'],
                 "labels": encoded_dict['input_ids'],
             }
-        elif "chatglm" in self.args.model_name_or_path:
-            encoded_dict = self.tokenizer(prompt, prefix + self.tokenizer.mask_token + label, max_length=self.args.max_length,
-                                          return_tensors="pt", truncation="longest_first", padding="max_length")
-
-            return {
-                "input_ids": encoded_dict['input_ids'][0],
-                "labels": encoded_dict['input_ids'][0],
-            }
+        # elif "chatglm" in self.args.model_name_or_path:
+        #     encoded_dict = self.tokenizer(prompt, prefix + self.tokenizer.mask_token + label, max_length=self.args.max_length,
+        #                                   return_tensors="pt", truncation="longest_first", padding="max_length")
+        #
+        #     return {
+        #         "input_ids": encoded_dict['input_ids'][0],
+        #         "labels": encoded_dict['input_ids'][0],
+        #     }
         elif "glm" in self.args.model_name_or_path:
             encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
             prompt_length = len(encoded_prompt['input_ids'])
-            label_length = len(self.tokenizer.tokenize(label)) + 1
+            label_length = len(self.tokenizer.tokenize(label)) + 1 if "chatglm" not in self.args.model_name_or_path else 0
             if prompt_length + label_length > self.args.max_length:
                 num_tokens_to_remove = prompt_length + label_length - self.args.max_length
                 for _ in range(num_tokens_to_remove):
@@ -193,6 +193,7 @@ class SFTDataset(Dataset):
                                           max_length=prompt_length,
                                           truncation="only_first",
                                           return_tensors="pt",
+                                          return_attention_mask=True,
                                           return_token_type_ids=False)
             encoded_dict = self.tokenizer.build_inputs_for_generation(encoded_dict, targets=label,
                                                                       max_gen_length=label_length, padding=True)

@@ -302,7 +302,7 @@ class GLMChineseTokenizer(PreTrainedTokenizer, GLMTokenizerMixin):
         if token_ids_1 is None:
             return cls + token_ids_0 + eos
         else:
-            return  cls + token_ids_0 + sep + token_ids_1 + eos
+            return cls + token_ids_0 + sep + token_ids_1 + eos
 
 
 class GLMGPT2Tokenizer(GPT2Tokenizer, GLMTokenizerMixin):
