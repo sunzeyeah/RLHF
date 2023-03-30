@@ -14,7 +14,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2Se
 
 from src.utils import logger, RESOURCE_PATH
 from src.utils.config import TRLConfig, default_ilql_config, default_ppo_config, default_sft_config
-from src.models.reward import RewardModel, RewardModelWithLoRA
+from src.models.reward import RewardModel
 from src.utils.file_utils import set_seed
 from src.data.data import RLHFDataset
 from src.utils.loading import get_pipeline, get_trainer
@@ -151,12 +151,12 @@ def train(model_path: Optional[str] = None,
         if rewards:
             trainer.make_experience(samples, rewards, config.train.seq_length)
         else:
-            trainer.store = get_pipeline(config.train.pipeline)(samples, max_prompt_length, trainer.tokenizer)
+            trainer.store = get_pipeline(config.train.pipeline)(samples, config, trainer.tokenizer)
 
     else:
         raise ValueError("Either `samples` or `reward_fn` should be given for training")
 
-    eval_pipeline = get_pipeline(config.train.pipeline)(eval_prompts, max_prompt_length, trainer.tokenizer)
+    eval_pipeline = get_pipeline(config.train.pipeline)(eval_prompts, config, trainer.tokenizer)
     trainer.add_eval_pipeline(eval_pipeline)
 
     trainer.learn()
@@ -195,8 +195,8 @@ def main():
         model.config.lora_alpha = args.lora_alpha
         model.config.lora_train_bias = args.lora_train_bias
         # Initialize the reward model from the (supervised) fine-tuned SFT model
-        # reward_model = RewardModel(model.config, model.glm, tokenizer)
-        reward_model = RewardModelWithLoRA(model.config, model.glm, tokenizer)
+        reward_model = RewardModel(model.config, model.glm, tokenizer)
+        # reward_model = RewardModelWithLoRA(model.config, model.glm, tokenizer)
     else:
         raise ValueError(f"Unsupported model name: {args.reward_model_path}")
     assert model.config.pad_token_id == tokenizer.pad_token_id

@@ -24,6 +24,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import transformers
+import loralib as lora
 
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -42,7 +43,7 @@ from src.utils.modeling_utils import (
     hf_get_num_hidden_layers,
     make_head
 )
-from src.models.lora import LoRAModule
+from src.models.lora import convert_to_lora_recursively
 from src.models.sft import SFTModelWithLoRA
 
 
@@ -376,7 +377,7 @@ class AutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
         gc.collect()  # noqa: E702
 
 
-class AutoModelForCausalLMWithHydraValueHead(AutoModelForCausalLMWithValueHead, LoRAModule):
+class AutoModelForCausalLMWithHydraValueHead(AutoModelForCausalLMWithValueHead):
     _supported_modules = ["v_head", "frozen_head"]
     _supported_args = ["num_layers_unfrozen"]
 
@@ -385,10 +386,7 @@ class AutoModelForCausalLMWithHydraValueHead(AutoModelForCausalLMWithValueHead, 
             base_model: transformers.PreTrainedModel,
             num_layers_unfrozen: int = -1,
     ):
-        super().__init__(base_model=base_model,
-                         lora_rank=base_model.config.lora_rank,
-                         lora_alpha=base_model.config.lora_alpha,
-                         lora_train_bias=base_model.config.lora_train_bias)
+        super().__init__(base_model)
         self.num_layers_unfrozen = num_layers_unfrozen
         if self.num_layers_unfrozen > 0:
             config = self.base_model.config
@@ -398,7 +396,9 @@ class AutoModelForCausalLMWithHydraValueHead(AutoModelForCausalLMWithValueHead, 
                 num_layers_unfrozen=self.num_layers_unfrozen,
             ).eval()
 
-        self.convert_to_lora()
+        if base_model.config.lora_rank > 0:
+            convert_to_lora_recursively(base_model, base_model.config.lora_rank, base_model.config.lora_alpha)
+            lora.mark_only_lora_as_trainable(base_model, base_model.config.lora_train_bias)
 
     def forward_hydra(
             self,
@@ -1059,7 +1059,7 @@ class AutoModelForSeq2SeqLMWithValueHead(PreTrainedModelWrapper):
         gc.collect()  # noqa: E702
 
 
-class AutoModelForSeq2SeqLMWithHydraValueHead(AutoModelForSeq2SeqLMWithValueHead, LoRAModule):
+class AutoModelForSeq2SeqLMWithHydraValueHead(AutoModelForSeq2SeqLMWithValueHead):
     _supported_modules = ["v_head", "frozen_head"]
     _supported_args = ["num_layers_unfrozen"]
 
@@ -1068,10 +1068,7 @@ class AutoModelForSeq2SeqLMWithHydraValueHead(AutoModelForSeq2SeqLMWithValueHead
             base_model: transformers.PreTrainedModel,
             num_layers_unfrozen: int = -1,
     ):
-        super().__init__(base_model=base_model,
-                         lora_rank=base_model.config.lora_rank,
-                         lora_alpha=base_model.config.lora_alpha,
-                         lora_train_bias=base_model.config.lora_train_bias)
+        super().__init__(base_model=base_model)
         self.num_layers_unfrozen = num_layers_unfrozen
         if self.num_layers_unfrozen > 0:
             branch_class = T5Branch  # TODO: Add support for other model branches
@@ -1080,7 +1077,9 @@ class AutoModelForSeq2SeqLMWithHydraValueHead(AutoModelForSeq2SeqLMWithValueHead
                 num_layers_unfrozen=self.num_layers_unfrozen,
             ).eval()
 
-        self.convert_to_lora()
+        if base_model.config.lora_rank > 0:
+            convert_to_lora_recursively(base_model, base_model.config.lora_rank, base_model.config.lora_alpha)
+            lora.mark_only_lora_as_trainable(base_model, base_model.config.lora_train_bias)
 
     def forward_hydra(
             self,

@@ -339,8 +339,8 @@ class ChatGLMTokenizer(PreTrainedTokenizer):
         if token_ids_1 is not None:
             token_ids_0 += token_ids_1
 
-        # if mask_id not in token_ids_0 and gmask_id not in token_ids_0:
-        #     token_ids_0 += [gmask_id]
+        if mask_id not in token_ids_0 and gmask_id not in token_ids_0 and len(token_ids_0) > 0:
+            token_ids_0 += [gmask_id]
 
         # if token_ids_0[-1] != mask_id and token_ids_0[-1] != gmask_id:
         token_ids_0 += [eos_id]
@@ -402,7 +402,7 @@ class ChatGLMTokenizer(PreTrainedTokenizer):
             input_ids = torch.cat((input_ids, targets[:, :-1]), dim=1)
         batch = {"input_ids": input_ids, "position_ids": position_ids}
         if labels is None:
-            batch["generation_attention_mask"] = attention_mask
+            batch["attention_mask"] = attention_mask
         else:
             batch["attention_mask"] = attention_mask
             batch["labels"] = labels

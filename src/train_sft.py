@@ -7,6 +7,7 @@ import os
 import argparse
 import evaluate
 import torch
+import loralib as lora
 
 from tqdm import tqdm
 from transformers import (
@@ -22,7 +23,7 @@ from transformers import (
 from src.utils import logger, RESOURCE_PATH
 from src.data.data import SFTDataset
 from src.utils.file_utils import set_seed
-from src.models import SFTModelWithLoRA
+from src.models import convert_to_lora_recursively
 
 
 # Create a preprocessing function to extract out the proper logits from the model output
@@ -148,11 +149,14 @@ def main():
     else:
         raise ValueError(f"Unsupported model name: {args.model_name_or_path}")
     # assert model.config.pad_token_id == tokenizer.pad_token_id
+    # model.config.lora_rank = args.lora_rank
+    # model.config.lora_alpha = args.lora_alpha
+    # model.config.lora_train_bias = args.lora_train_bias
+    # model = SFTModelWithLoRA(model.config, model)
 
-    model.config.lora_rank = args.lora_rank
-    model.config.lora_alpha = args.lora_alpha
-    model.config.lora_train_bias = args.lora_train_bias
-    model = SFTModelWithLoRA(model.config, model)
+    if args.lora_rank > 0:
+        convert_to_lora_recursively(model, args.lora_rank, args.lora_alpha)
+        lora.mark_only_lora_as_trainable(model, args.lora_train_bias)
 
     if args.checkpoint is not None:
         st = torch.load(args.checkpoint, map_location="cpu")
@@ -283,10 +287,11 @@ def main():
                                              max_length=min(prompt_length, args.max_length),
                                              truncation="only_first",
                                              return_tensors="pt",
+                                             return_attention_mask=True,
                                              return_token_type_ids=False)
                     max_gen_length = args.max_length - encoded_dict['input_ids'].shape[1]
-                    # inputs = tokenizer.build_inputs_for_generation(encoded_dict,
-                    #                                                max_gen_length=max_gen_length, padding=True)
+                    inputs = tokenizer.build_inputs_for_generation(encoded_dict,
+                                                                   max_gen_length=max_gen_length, padding=True)
                     inputs = inputs.to(device)
                     outputs = model.generate(**inputs,
                                              max_new_tokens=args.max_length_generation,

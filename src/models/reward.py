@@ -1,12 +1,13 @@
 
 import torch
+import loralib as lora
 
 from torch import nn
 from transformers.configuration_utils import PretrainedConfig
 from transformers.tokenization_utils import PreTrainedTokenizer
 
 from src.models.loss import PairWiseLoss
-from src.models.lora import LoRAModule
+from src.models.lora import convert_to_lora_recursively
 
 
 class RewardModel(nn.Module):
@@ -18,6 +19,9 @@ class RewardModel(nn.Module):
         self.transformer = model#.transformer
         self.v_head = nn.Linear(config.hidden_size, 1, bias=False)
         self.loss_fn = PairWiseLoss()
+        if config.lora_rank > 0:
+            convert_to_lora_recursively(model, config.lora_rank, config.lora_alpha)
+            lora.mark_only_lora_as_trainable(model, config.lora_train_bias)
 
     def reward(
             self,
@@ -125,61 +129,61 @@ class RewardModel(nn.Module):
         }
 
 
-class RewardModelWithLoRA(LoRAModule):
-    def __init__(self,
-                 config: PretrainedConfig,
-                 model: nn.Module,
-                 tokenizer: PreTrainedTokenizer) -> None:
-        super().__init__(lora_rank=config.lora_rank,
-                         lora_alpha=config.lora_alpha,
-                         lora_train_bias=config.lora_train_bias)
-        self.config = config
-        self.model_type = config.model_type
-        self.pad_id = tokenizer.pad_token_id
-
-        self.transformer = model
-        self.v_head = nn.Linear(config.hidden_size, 1, bias=False)
-        self.loss_fn = PairWiseLoss()
-        self.convert_to_lora()
-
-    def reward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            position_ids=None
-    ):
-        transformer_outputs = self.transformer(input_ids, attention_mask=attention_mask, position_ids=position_ids)
-        if self.model_type == "glm":
-            hidden_states = transformer_outputs.mems[-1]
-        else:
-            hidden_states = transformer_outputs[0]
-        rewards = self.v_head(hidden_states).squeeze(-1)
-
-        rewards = rewards.mean(dim=-1)
-        if len(rewards.shape) == 2:
-            rewards = rewards.squeeze(1)    # ensure shape is (B)
-
-        return rewards
-
-    def forward(
-            self,
-            chosen_input_ids,
-            chosen_attention_mask=None,
-            chosen_position_ids=None,
-            rejected_input_ids=None,
-            rejected_attention_mask=None,
-            rejected_position_ids=None
-    ):
-        chosen_reward = self.reward(chosen_input_ids, attention_mask=chosen_attention_mask, position_ids=chosen_position_ids)
-        if rejected_input_ids is not None and rejected_attention_mask is not None:
-            reject_reward = self.reward(rejected_input_ids, attention_mask=rejected_attention_mask, position_ids=rejected_position_ids)
-            loss = self.loss_fn(chosen_reward, reject_reward)
-        else:
-            reject_reward = None
-            loss = None
-
-        return {
-            "loss": loss,
-            "chosen_reward": torch.sigmoid(chosen_reward),
-            "reject_reward": torch.sigmoid(reject_reward) if reject_reward is not None else reject_reward,
-        }
+# class RewardModelWithLoRA(LoRAModule):
+#     def __init__(self,
+#                  config: PretrainedConfig,
+#                  model: nn.Module,
+#                  tokenizer: PreTrainedTokenizer) -> None:
+#         super().__init__(lora_rank=config.lora_rank,
+#                          lora_alpha=config.lora_alpha,
+#                          lora_train_bias=config.lora_train_bias)
+#         self.config = config
+#         self.model_type = config.model_type
+#         self.pad_id = tokenizer.pad_token_id
+#
+#         self.transformer = model
+#         self.v_head = nn.Linear(config.hidden_size, 1, bias=False)
+#         self.loss_fn = PairWiseLoss()
+#         self.convert_to_lora()
+#
+#     def reward(
+#             self,
+#             input_ids=None,
+#             attention_mask=None,
+#             position_ids=None
+#     ):
+#         transformer_outputs = self.transformer(input_ids, attention_mask=attention_mask, position_ids=position_ids)
+#         if self.model_type == "glm":
+#             hidden_states = transformer_outputs.mems[-1]
+#         else:
+#             hidden_states = transformer_outputs[0]
+#         rewards = self.v_head(hidden_states).squeeze(-1)
+#
+#         rewards = rewards.mean(dim=-1)
+#         if len(rewards.shape) == 2:
+#             rewards = rewards.squeeze(1)    # ensure shape is (B)
+#
+#         return rewards
+#
+#     def forward(
+#             self,
+#             chosen_input_ids,
+#             chosen_attention_mask=None,
+#             chosen_position_ids=None,
+#             rejected_input_ids=None,
+#             rejected_attention_mask=None,
+#             rejected_position_ids=None
+#     ):
+#         chosen_reward = self.reward(chosen_input_ids, attention_mask=chosen_attention_mask, position_ids=chosen_position_ids)
+#         if rejected_input_ids is not None and rejected_attention_mask is not None:
+#             reject_reward = self.reward(rejected_input_ids, attention_mask=rejected_attention_mask, position_ids=rejected_position_ids)
+#             loss = self.loss_fn(chosen_reward, reject_reward)
+#         else:
+#             reject_reward = None
+#             loss = None
+#
+#         return {
+#             "loss": loss,
+#             "chosen_reward": torch.sigmoid(chosen_reward),
+#             "reject_reward": torch.sigmoid(reject_reward) if reject_reward is not None else reject_reward,
+#         }

@@ -98,8 +98,8 @@ def main():
         model.config.lora_alpha = args.lora_alpha
         model.config.lora_train_bias = args.lora_train_bias
         # Initialize the reward model from the (supervised) fine-tuned SFT model
-        # reward_model = RewardModel(model.config, model.transformer, tokenizer)
-        reward_model = RewardModelWithLoRA(model.config, model.transformer, tokenizer)
+        reward_model = RewardModel(model.config, model.transformer, tokenizer)
+        # reward_model = RewardModelWithLoRA(model.config, model.transformer, tokenizer)
         layers = reward_model.transformer.h
     elif "glm" in args.model_name_or_path:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
@@ -109,8 +109,8 @@ def main():
         model.config.lora_alpha = args.lora_alpha
         model.config.lora_train_bias = args.lora_train_bias
         # Initialize the reward model from the (supervised) fine-tuned SFT model
-        # reward_model = RewardModel(model.config, model.glm, tokenizer)
-        reward_model = RewardModelWithLoRA(model.config, model.glm, tokenizer)
+        reward_model = RewardModel(model.config, model.glm, tokenizer)
+        # reward_model = RewardModelWithLoRA(model.config, model.glm, tokenizer)
         layers = reward_model.transformer.transformer.layers
     else:
         raise ValueError(f"Unsupported model name: {args.model_name_or_path}")
