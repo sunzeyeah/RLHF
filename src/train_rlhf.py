@@ -221,8 +221,8 @@ def main():
             attention_mask_list = []
             position_ids_list = []
             for sample in samples[i: i + ppo_config.train.batch_size]:
-                prompt, pred = sample.split(tokenizer.sep_token)
-                logger.info(f"prompt: {prompt}, pred: {pred}")
+                prompt, pred = sample.split(tokenizer.sep_token, maxsplit=1)
+                logger.debug(f"prompt: {prompt}, pred: {pred}")
                 if "pangu" in ppo_config.model.model_path:
                     encodings_dict = tokenizer(prompt, pred, max_length=ppo_config.train.seq_length,
                                                truncation="longest_first", padding="max_length", return_tensors="pt",
@@ -264,9 +264,9 @@ def main():
             #     padding="max_length",
             #     return_tensors="pt",
             # )
-            input_ids = torch.stack(input_ids_list, dim=0)
-            attention_mask = torch.stack(attention_mask_list, dim=0)
-            position_ids = torch.stack(position_ids_list, dim=0) if len(position_ids_list) > 0 else None
+            input_ids = torch.stack(input_ids_list, dim=0).to(device)
+            attention_mask = torch.stack(attention_mask_list, dim=0).to(device)
+            position_ids = torch.stack(position_ids_list, dim=0).to(device) if len(position_ids_list) > 0 else None
             with torch.no_grad():
                 sub_scores = reward_model(input_ids, attention_mask, position_ids)
             scores_list.append(sub_scores["chosen_reward"])

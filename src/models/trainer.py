@@ -943,9 +943,9 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
 
             # Generate samples from the language model (similar to using HuggingFace `generate` method)
             samples = self.generate(**batch)
-            generated_texts = self.tokenizer.batch_decode(samples, skip_special_tokens=True)
-            for generated_text in generated_texts:
-                logger.info(generated_text)
+            # generated_texts = self.tokenizer.batch_decode(samples, skip_special_tokens=True)
+            # for generated_text in generated_texts:
+            #     logger.info(generated_text)
             stats["time/exp_generate"] = time() - exp_generate_time
 
             prompt_tensors = batch['input_ids']
