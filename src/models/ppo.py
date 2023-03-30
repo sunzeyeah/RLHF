@@ -484,7 +484,7 @@ class AutoModelForCausalLMWithHydraValueHead(AutoModelForCausalLMWithValueHead, 
                 f"Invalid type for `base_model_name_or_path`: {type(pretrained_model_name_or_path)}"
                 "Expected `str` or `transformers.PreTrainedModel`."
             )
-
+        # TODO: add model.resize_token_embeddings(tokenizer.vocab_size)
         config = from_pretrained_kwargs.get("config", None)
         if config is not None:
             base_model.config.lora_rank = config.train.lora_rank

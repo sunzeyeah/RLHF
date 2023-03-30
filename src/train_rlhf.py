@@ -174,7 +174,7 @@ def main():
     tokenizer.padding_side = "left" # PS: padding side does affect output of reward model
 
     # load reward model
-    if "pangu" in args.model_name_or_path:
+    if "pangu" in args.reward_model_path:
         model = AutoModelForCausalLM.from_pretrained(args.reward_model_path, use_cache=False, trust_remote_code=True)
         model.resize_token_embeddings(tokenizer.vocab_size)
         # model.config.end_token_id = tokenizer.eos_token_id
@@ -187,9 +187,9 @@ def main():
         # Initialize the reward model from the (supervised) fine-tuned SFT model
         reward_model = RewardModel(model.config, model.transformer, tokenizer)
         # reward_model = RewardModelWithLoRA(model.config, model.transformer, tokenizer)
-    elif "glm" in args.model_name_or_path:
+    elif "glm" in args.reward_model_path:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.reward_model_path, trust_remote_code=True)
-        if "chatglm" in args.model_name_or_path:
+        if "chatglm" in args.reward_model_path:
             model = model.half()
         model.config.lora_rank = args.lora_rank
         model.config.lora_alpha = args.lora_alpha
@@ -198,7 +198,7 @@ def main():
         # reward_model = RewardModel(model.config, model.glm, tokenizer)
         reward_model = RewardModelWithLoRA(model.config, model.glm, tokenizer)
     else:
-        raise ValueError(f"Unsupported model name: {args.model_name_or_path}")
+        raise ValueError(f"Unsupported model name: {args.reward_model_path}")
     assert model.config.pad_token_id == tokenizer.pad_token_id
 
     if args.reward_checkpoint is not None:
@@ -290,7 +290,7 @@ def main():
     ppo_config.train.eval_interval = args.eval_steps
     ppo_config.model.num_layers_unfrozen = args.num_layers_unfrozen
     ppo_config.model.model_path = args.sft_model_path
-    ppo_config.tokenizer.tokenizer_path = args.model_name_or_path
+    ppo_config.tokenizer.tokenizer_path = args.tokenzier_path
     ppo_config.optimizer.kwargs['lr'] = args.learning_rate
     ppo_config.optimizer.kwargs['weight_decay'] = args.weight_decay
     ppo_config.method.chunk_size = args.train_batch_size
