@@ -170,7 +170,7 @@ def main():
     # load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
     # tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = "left"
+    tokenizer.padding_side = "left" # PS: padding side does affect output of reward model
 
     # load reward model
     if "pangu" in args.model_name_or_path:
@@ -216,23 +216,59 @@ def main():
     # define reward functions in ppo training
     def get_scores(samples):
         scores_list = []
-        batch_size = 2
-        for i in range(0, len(samples), batch_size):
-            sub_samples = samples[i: i + batch_size]
-            for sub_sample in sub_samples:
-                logger.info(sub_sample)
-            # TODO: to be modified for and tested against pangu and glm
-            encodings_dict = tokenizer(
-                sub_samples,
-                max_length=ppo_config.train.seq_length,
-                truncation="longest_first",
-                padding="max_length",
-                return_tensors="pt",
-            )
-            input_ids = encodings_dict["input_ids"].to(device)
-            attn_masks = encodings_dict["attention_mask"].to(device)
+        for i in range(0, len(samples), ppo_config.train.batch_size):
+            input_ids_list = []
+            attention_mask_list = []
+            position_ids_list = []
+            for sample in samples[i: i + ppo_config.train.batch_size]:
+                prompt, pred = sample.split(tokenizer.sep_token)
+                logger.info(f"prompt: {prompt}, pred: {pred}")
+                if "pangu" in ppo_config.model.model_path:
+                    encodings_dict = tokenizer(prompt, pred, max_length=ppo_config.train.seq_length,
+                                               truncation="longest_first", padding="max_length", return_tensors="pt",
+                                               return_token_type_ids=False)
+                    input_ids_list.append(encodings_dict["input_ids"])
+                    attention_mask_list.append(encodings_dict["attention_mask"])
+                elif "glm" in ppo_config.model.model_path:
+                    # TODO: to be modified for and tested against glm
+                    encoded_prompt = tokenizer(prompt, tokenizer.mask_token)
+                    prompt_length = len(encoded_prompt['input_ids'])
+                    label_length = len(tokenizer.tokenize(pred)) + (1 if "chatglm" not in ppo_config.model.model_path else 0)
+                    if prompt_length + label_length > ppo_config.train.seq_length:
+                        num_tokens_to_remove = prompt_length + label_length - ppo_config.train.seq_length
+                        for _ in range(num_tokens_to_remove):
+                            if prompt_length > label_length:
+                                prompt_length -= 1
+                            else:
+                                label_length -= 1
+                    else:
+                        label_length = ppo_config.train.seq_length - prompt_length
+                    assert prompt_length > 0
+                    assert label_length > 0
+                    assert prompt_length + label_length <= ppo_config.train.seq_length
+                    encoded_dict = tokenizer(prompt, tokenizer.mask_token,
+                                             max_length=prompt_length, truncation="only_first",
+                                             return_tensors="pt", return_attention_mask=True,
+                                             return_token_type_ids=False)
+                    encoded_dict = tokenizer.build_inputs_for_generation(encoded_dict, targets=pred,
+                                                                         max_gen_length=label_length, padding=True)
+                    input_ids_list.append(encoded_dict["input_ids"][0])
+                    attention_mask_list.append(encoded_dict["attention_mask"][0])
+                    position_ids_list.append(encoded_dict["position_ids"][0])
+                else:
+                    raise ValueError(f"Unsupported model type: {ppo_config.model.model_path}")
+            # encodings_dict = tokenizer(
+            #     sub_samples,
+            #     max_length=ppo_config.train.seq_length,
+            #     truncation="longest_first",
+            #     padding="max_length",
+            #     return_tensors="pt",
+            # )
+            input_ids = torch.stack(input_ids_list, dim=0)
+            attention_mask = torch.stack(attention_mask_list, dim=0)
+            position_ids = torch.stack(position_ids_list, dim=0) if len(position_ids_list) > 0 else None
             with torch.no_grad():
-                sub_scores = reward_model(input_ids, attn_masks)
+                sub_scores = reward_model(input_ids, attention_mask, position_ids)
             scores_list.append(sub_scores["chosen_reward"])
         scores = torch.cat(scores_list, dim=0)
 

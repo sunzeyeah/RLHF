@@ -44,7 +44,7 @@ class RewardModel(nn.Module):
 
     def forward(
             self,
-            chosen_input_ids=None,
+            chosen_input_ids,
             chosen_attention_mask=None,
             chosen_position_ids=None,
             rejected_input_ids=None,
@@ -121,7 +121,7 @@ class RewardModel(nn.Module):
         return {
             "loss": loss,
             "chosen_reward": torch.sigmoid(chosen_reward),
-            "reject_reward": torch.sigmoid(reject_reward),
+            "reject_reward": torch.sigmoid(reject_reward) if reject_reward is not None else reject_reward,
         }
 
 
@@ -163,7 +163,7 @@ class RewardModelWithLoRA(LoRAModule):
 
     def forward(
             self,
-            chosen_input_ids=None,
+            chosen_input_ids,
             chosen_attention_mask=None,
             chosen_position_ids=None,
             rejected_input_ids=None,
@@ -181,5 +181,5 @@ class RewardModelWithLoRA(LoRAModule):
         return {
             "loss": loss,
             "chosen_reward": torch.sigmoid(chosen_reward),
-            "reject_reward": torch.sigmoid(reject_reward),
+            "reject_reward": torch.sigmoid(reject_reward) if reject_reward is not None else reject_reward,
         }

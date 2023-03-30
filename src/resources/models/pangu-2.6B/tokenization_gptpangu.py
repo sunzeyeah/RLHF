@@ -6,6 +6,13 @@ import numpy as np
 
 from transformers.tokenization_utils import PreTrainedTokenizer
 
+jieba.add_word('<s>')
+jieba.add_word('</s>')
+jieba.add_word('<eot>')
+jieba.add_word('<unk>')
+jieba.add_word('<sep>')
+jieba.add_word('<pad>')
+
 
 class GPTPanguTokenizer(PreTrainedTokenizer):
     # Ref: https://git.openi.org.cn/PCL-Platform.Intelligence/PanGu-Alpha/src/branch/master/tokenization_jieba.py
@@ -69,10 +76,25 @@ class GPTPanguTokenizer(PreTrainedTokenizer):
 
         if isinstance(tokens, str):
             return self._convert_token_to_id_with_added_voc(tokens)
-            
-        new_seg = " ".join(tokens)
-        return self.sp.encode(new_seg)
-        # return tokens
+
+        special_tokens_index = [i for i, token in enumerate(tokens) if token in self.all_special_tokens]
+
+        ids = []
+        i = 0
+        for j in special_tokens_index:
+            new_seg = " ".join(tokens[i:j])
+            ids.extend(self.sp.encode(new_seg))
+            ids.append(self._convert_token_to_id(tokens[j]))
+            i = j + 1
+
+        new_seg = " ".join(tokens[i:])
+        ids.extend(self.sp.encode(new_seg))
+
+        return ids
+
+        # new_seg = " ".join(tokens)
+        # return self.sp.encode(new_seg)
+        # # return tokens
 
     def _convert_token_to_id(self, token):
         return self.sp.piece_to_id(token)
@@ -83,16 +105,16 @@ class GPTPanguTokenizer(PreTrainedTokenizer):
     def convert_ids_to_tokens(self, ids):
         return self.decode(ids)
 
-    def decode(self, tokens, **kwargs):
-        if isinstance(tokens, torch.Tensor) or isinstance(tokens, np.ndarray):
-            tokens = tokens.tolist()
+    def decode(self, ids, **kwargs):
+        if isinstance(ids, torch.Tensor) or isinstance(ids, np.ndarray):
+            ids = ids.tolist()
 
         if kwargs.get('skip_special_tokens', None) is True:
-            tokens = [token for token in tokens if token not in self.all_special_ids]
-        text = self.sp.decode(tokens)
+            ids = [token_id for token_id in ids if token_id not in self.all_special_ids]
+        text = self.sp.decode(ids)
         if isinstance(text, list):
             text = text[0]
-        text = text.replace(' ', '').replace('\u2582', ' ').replace('\u2583', '\n')
+        text = text.replace(' ', '').replace('\u2582', ' ').replace('\u2583', '\n').replace('⁇', self.unk_token)
         return text
 
     @property

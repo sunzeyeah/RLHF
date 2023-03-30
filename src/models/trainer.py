@@ -292,9 +292,14 @@ class AccelerateRLTrainer(BaseRLTrainer):
         """
         Decode tensor generations into lists of strings (`samples`: List[str], `prompts`: List[str], `outputs`: List[str])
         """
-        if prompt_sizes is None:
-            # Assuming prompts were left-padded
-            prompt_sizes = [prompts.shape[1]] * len(prompts)
+        # if prompt_sizes is None:
+        # Assuming prompts were left-padded
+        prompt_sizes = []
+        for prompt in prompts:
+            if "chatglm" in self.config.model.model_path:
+                prompt_sizes.append(len(prompt))
+            else:
+                prompt_sizes.append(prompt.cpu().detach().tolist().index(self.tokenizer.sep_token_id))
 
         str_samples, str_prompts, str_outputs = [], [], []
         for prompt, sample, prompt_size in zip(prompts, samples, prompt_sizes):
@@ -316,10 +321,10 @@ class AccelerateRLTrainer(BaseRLTrainer):
             str_prompts.append(str_prompt)
             str_outputs.append(str_output)
 
-            if self.config.model.model_arch_type == "seq2seq":
-                sample = str_prompt + self.tokenizer.sep_token + str_output
-            else:
+            if "chatglm" in self.config.model.model_path:
                 sample = str_prompt + str_output
+            else:
+                sample = str_prompt + self.tokenizer.sep_token + str_output
 
             str_samples.append(sample)
 
