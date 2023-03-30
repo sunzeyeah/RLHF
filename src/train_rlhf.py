@@ -25,8 +25,9 @@ def get_parser():
 
     parser.add_argument("--data_dir", type=str, required=True)
     parser.add_argument("--output_dir", type=str, required=True)
-    parser.add_argument("--model_name_or_path", type=str, required=True)
+    parser.add_argument("--tokenizer_path", type=str, required=True)
     parser.add_argument("--sft_model_path", type=str, required=True)
+    parser.add_argument("--reward_model_path", type=str, required=True)
     parser.add_argument("--reward_checkpoint", type=str, required=True)
 
     parser.add_argument("--seed", type=int, default=42)
@@ -168,13 +169,13 @@ def main():
     set_seed(args.seed)
 
     # load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path, use_cache=False, trust_remote_code=True)
     # tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left" # PS: padding side does affect output of reward model
 
     # load reward model
     if "pangu" in args.model_name_or_path:
-        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+        model = AutoModelForCausalLM.from_pretrained(args.reward_model_path, use_cache=False, trust_remote_code=True)
         model.resize_token_embeddings(tokenizer.vocab_size)
         # model.config.end_token_id = tokenizer.eos_token_id
         # model.config.pad_token_id = tokenizer.pad_token_id
@@ -187,7 +188,7 @@ def main():
         reward_model = RewardModel(model.config, model.transformer, tokenizer)
         # reward_model = RewardModelWithLoRA(model.config, model.transformer, tokenizer)
     elif "glm" in args.model_name_or_path:
-        model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
+        model = AutoModelForSeq2SeqLM.from_pretrained(args.reward_model_path, trust_remote_code=True)
         if "chatglm" in args.model_name_or_path:
             model = model.half()
         model.config.lora_rank = args.lora_rank
@@ -288,7 +289,7 @@ def main():
     ppo_config.train.checkpoint_interval = args.save_steps
     ppo_config.train.eval_interval = args.eval_steps
     ppo_config.model.num_layers_unfrozen = args.num_layers_unfrozen
-    ppo_config.model.model_path = args.model_name_or_path
+    ppo_config.model.model_path = args.sft_model_path
     ppo_config.tokenizer.tokenizer_path = args.model_name_or_path
     ppo_config.optimizer.kwargs['lr'] = args.learning_rate
     ppo_config.optimizer.kwargs['weight_decay'] = args.weight_decay
