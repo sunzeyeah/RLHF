@@ -184,8 +184,8 @@ def main():
         model.config.lora_alpha = args.lora_alpha
         model.config.lora_train_bias = args.lora_train_bias
         # Initialize the reward model from the (supervised) fine-tuned SFT model
-        # reward_model = RewardModel(model.config, model.transformer, tokenizer)
-        reward_model = RewardModelWithLoRA(model.config, model.transformer, tokenizer)
+        reward_model = RewardModel(model.config, model.transformer, tokenizer)
+        # reward_model = RewardModelWithLoRA(model.config, model.transformer, tokenizer)
     elif "glm" in args.model_name_or_path:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
         if "chatglm" in args.model_name_or_path:
@@ -219,6 +219,8 @@ def main():
         batch_size = 2
         for i in range(0, len(samples), batch_size):
             sub_samples = samples[i: i + batch_size]
+            for sub_sample in sub_samples:
+                logger.info(sub_sample)
             # TODO: to be modified for and tested against pangu and glm
             encodings_dict = tokenizer(
                 sub_samples,
@@ -229,11 +231,9 @@ def main():
             )
             input_ids = encodings_dict["input_ids"].to(device)
             attn_masks = encodings_dict["attention_mask"].to(device)
-            input_ids = input_ids.repeat(2, 1)
-            attn_masks = attn_masks.repeat(2, 1)
             with torch.no_grad():
-                sub_scores = reward_model(input_ids=input_ids, attention_mask=attn_masks)
-            scores_list.append(sub_scores["chosen_end_scores"])
+                sub_scores = reward_model(input_ids, attn_masks)
+            scores_list.append(sub_scores["chosen_reward"])
         scores = torch.cat(scores_list, dim=0)
 
         return scores

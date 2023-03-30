@@ -40,6 +40,7 @@ def get_parser():
                              "linear, cosine, cosine_with_restarts, polynomial, constant,"
                              "constant_with_warmup")
     parser.add_argument("--train_batch_size", type=int, default=4)
+    parser.add_argument("--freeze_ratio", type=float, default=0.0, help="ratio of layers frozen for reward training")
     parser.add_argument("--weight_decay", type=float, default=0.01)
     parser.add_argument("--warmup_ratio", type=int, default=0.1)
     parser.add_argument("--logging_steps", type=int, default=100)
@@ -117,7 +118,7 @@ def main():
 
     # Freeze the first 70% of the hidden layers of the reward model backbone
     num_layers = len(layers)
-    num_unfrozen = int(0.3 * num_layers)
+    num_unfrozen = int(args.freeze_ratio * num_layers)
     for layer in layers[:-num_unfrozen]:
         layer.requires_grad_(False)
 
@@ -235,8 +236,7 @@ def main():
         with open(os.path.join(args.output_dir, args.output_filename), "w", encoding="utf-8") as w:
             w.write("\t".join(("prompt", "answer", "score"))+"\n")
             for item, reward in zip(test_dataset.post_list, rewards):
-                score = 1/(1+np.exp(-reward))
-                w.write("\t".join((item["prompt"], item["label"], str(score))) + "\n")
+                w.write("\t".join((item["prompt"], item["label"], str(reward))) + "\n")
         logger.info(f"Finished prediction and saving into {args.output_filename}")
 
 

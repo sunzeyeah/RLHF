@@ -6,7 +6,8 @@ evaluate>=0.4.0
 transformers>=4.26.1
 numpy==1.23.2
 tensorflow>=2.5.0
-triton==1.0.0
+#triton==1.0.0
+triton
 ninja
 torchmetrics
 opencc
@@ -19,3 +20,4 @@ loralib
 xgboost>=1.7.4
 icetk
 cpm_kernels
+protobuf==3.20.0

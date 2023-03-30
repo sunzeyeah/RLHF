@@ -120,8 +120,8 @@ class RewardModel(nn.Module):
 
         return {
             "loss": loss,
-            "chosen_reward": chosen_reward,
-            "reject_reward": reject_reward,
+            "chosen_reward": torch.sigmoid(chosen_reward),
+            "reject_reward": torch.sigmoid(reject_reward),
         }
 
 
@@ -180,6 +180,6 @@ class RewardModelWithLoRA(LoRAModule):
 
         return {
             "loss": loss,
-            "chosen_reward": chosen_reward,
-            "reject_reward": reject_reward,
+            "chosen_reward": torch.sigmoid(chosen_reward),
+            "reject_reward": torch.sigmoid(reject_reward),
         }
