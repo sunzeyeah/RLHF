@@ -115,7 +115,7 @@ class GPTPanguTokenizer(PreTrainedTokenizer):
         text = self.sp.decode(ids)
         if isinstance(text, list):
             text = text[0]
-        text = text.replace(' ', '').replace('\u2582', ' ').replace('\u2583', '\n').replace('⁇', self.unk_token)
+        text = text.replace(' ', '').replace('\u2582', ' ').replace('\u2583', '\n')#.replace('⁇', self.unk_token)
         return text
 
     @property
