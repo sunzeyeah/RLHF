@@ -290,7 +290,7 @@ def main():
     ppo_config.train.eval_interval = args.eval_steps
     ppo_config.model.num_layers_unfrozen = args.num_layers_unfrozen
     ppo_config.model.model_path = args.sft_model_path
-    ppo_config.tokenizer.tokenizer_path = args.tokenzier_path
+    ppo_config.tokenizer.tokenizer_path = args.tokenizer_path
     ppo_config.optimizer.kwargs['lr'] = args.learning_rate
     ppo_config.optimizer.kwargs['weight_decay'] = args.weight_decay
     ppo_config.method.chunk_size = args.train_batch_size
