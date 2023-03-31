@@ -189,7 +189,7 @@ class BaseRolloutStore(Dataset):
 class PanguPipeline(BasePipeline):
     def __init__(self, prompts: List[dict], config: TRLConfig, tokenizer: PreTrainedTokenizer):
 
-        super(PanguPipeline).__init__()
+        super().__init__()
 
         self.prompts = prompts
         self.tokenizer = tokenizer
@@ -221,7 +221,7 @@ class PanguPipeline(BasePipeline):
 class GLMPipeline(BasePipeline):
     def __init__(self, prompts: List[dict], config: TRLConfig, tokenizer: PreTrainedTokenizer):
 
-        super(GLMPipeline).__init__()
+        super().__init__()
 
         self.prompts = prompts
         self.tokenizer = tokenizer
@@ -251,6 +251,35 @@ class GLMPipeline(BasePipeline):
     def create_loader(self, batch_size: int, shuffle=False) -> DataLoader:
         # collate_fn = GLMDataCollator(self.tokenizer)
         return DataLoader(self, batch_size=batch_size, shuffle=shuffle)#, collate_fn=collate_fn)
+
+
+@register_datapipeline
+class ChatGLMPipeline(BasePipeline):
+    def __init__(self, prompts: List[dict], config: TRLConfig, tokenizer: PreTrainedTokenizer):
+
+        super().__init__()
+
+        self.prompts = prompts
+        self.tokenizer = tokenizer
+        self.config = config
+        self.max_prompt_length = config.train.seq_length - config.method.gen_kwargs["max_new_tokens"]
+
+    def __len__(self):
+        return len(self.prompts)
+
+    def __getitem__(self, idx):
+        data = self.prompts[idx]
+        prompt = data['prompt']
+        encoded_dict = self.tokenizer(prompt, max_length=self.max_prompt_length, return_tensors="pt",
+                                      truncation="only_first", padding="max_length")
+
+        return {
+            "input_ids": encoded_dict['input_ids'][0],
+            # "attention_mask": encoded_dict['attention_mask'][0],
+        }
+
+    def create_loader(self, batch_size: int, shuffle=False) -> DataLoader:
+        return DataLoader(self, batch_size=batch_size, shuffle=shuffle)
 
 
 class PPORolloutStorage(BaseRolloutStore):

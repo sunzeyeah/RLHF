@@ -87,9 +87,10 @@ def get_parser():
     parser.add_argument("--checkpoint", type=str, default=None)
     parser.add_argument("--test_filename", type=str, default=None)
     parser.add_argument("--output_filename", type=str, default=None)
-    parser.add_argument("--num_return_sequences", type=int, default=3)
+    parser.add_argument("--num_return_sequences", type=int, default=1)
     parser.add_argument("--top_k", type=int, default=50)
-    parser.add_argument("--temperature", type=float, default=10.0)
+    parser.add_argument("--top_p", type=float, default=0.8)
+    parser.add_argument("--temperature", type=float, default=1.0)
 
     args = parser.parse_args()
     
@@ -104,38 +105,6 @@ def main():
 
     # load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-    # prompt = "你是谁"
-    # prefix = "答:"
-    # label = "我是***，很高兴为你服务"
-    # max_length = 512
-    # encoded_prompt = tokenizer(prompt, prefix + tokenizer.mask_token)
-    # prompt_length = len(encoded_prompt['input_ids'])
-    # label_length = len(tokenizer.tokenize(label)) + 1
-    # if prompt_length + label_length > max_length:
-    #     num_tokens_to_remove = prompt_length + label_length - max_length
-    #     for _ in range(num_tokens_to_remove):
-    #         if prompt_length > label_length:
-    #             prompt_length -= 1
-    #         else:
-    #             label_length -= 1
-    # else:
-    #     label_length = max_length - prompt_length
-    # assert prompt_length > 0
-    # assert label_length > 0
-    # assert prompt_length + label_length <= max_length
-    # encoded_dict = tokenizer(prompt, prefix + tokenizer.mask_token,
-    #                          max_length=prompt_length, truncation="only_first",
-    #                          return_tensors="pt", return_attention_mask=True)
-    # inputs = tokenizer.build_inputs_for_generation(encoded_dict, targets=label,
-    #                                                max_gen_length=label_length, padding=True)
-    # # inputs = build_inputs_for_generation(tokenizer, encoded_dict, targets=label, max_gen_length=label_length, padding=True)
-    # inputs_glm = {
-    #     "input_ids": inputs['input_ids'][0],
-    #     "position_ids": inputs['position_ids'][0],
-    #     "attention_mask": inputs['attention_mask'][0],
-    #     "labels": inputs['labels'][0],
-    # }
-
     if "pangu" in args.model_name_or_path:
         model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         model.resize_token_embeddings(tokenizer.vocab_size)
@@ -280,18 +249,15 @@ def main():
                                              top_p=args.top_p,
                                              temperature=args.temperature)
                 elif "chatglm" in args.model_name_or_path:
-                    # TODO: to be updated
-                    encoded_prompt = tokenizer(prompt, prefix + tokenizer.mask_token)
+                    encoded_prompt = tokenizer(prompt)
                     prompt_length = len(encoded_prompt['input_ids'])
-                    encoded_dict = tokenizer(prompt, prefix + tokenizer.mask_token,
-                                             max_length=min(prompt_length, args.max_length),
-                                             truncation="only_first",
-                                             return_tensors="pt",
-                                             return_attention_mask=True,
-                                             return_token_type_ids=False)
-                    max_gen_length = args.max_length - encoded_dict['input_ids'].shape[1]
-                    inputs = tokenizer.build_inputs_for_generation(encoded_dict,
-                                                                   max_gen_length=max_gen_length, padding=True)
+                    inputs = tokenizer(prompt,
+                                       max_length=min(prompt_length, args.max_length),
+                                       truncation="only_first",
+                                       return_tensors="pt")
+                    # max_gen_length = args.max_length - encoded_dict['input_ids'].shape[1]
+                    # inputs = tokenizer.build_inputs_for_generation(encoded_dict,
+                    #                                                max_gen_length=max_gen_length, padding=True)
                     inputs = inputs.to(device)
                     outputs = model.generate(**inputs,
                                              max_new_tokens=args.max_length_generation,

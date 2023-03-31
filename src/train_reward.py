@@ -13,7 +13,7 @@ from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments, AutoModelForSeq2SeqLM
 from torch.utils.data import DataLoader, SequentialSampler
 
-from src.models.reward import RewardModel, RewardModelWithLoRA
+from src.models.reward import RewardModel
 from src.utils import logger, RESOURCE_PATH
 from src.utils.file_utils import set_seed
 from src.data.data import SFTDataset, PairwiseDataset, DataCollatorReward

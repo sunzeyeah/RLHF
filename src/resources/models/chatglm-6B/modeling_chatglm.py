@@ -3,7 +3,9 @@
 import math
 import copy
 import os
-import time
+import warnings
+import re
+import sys
 
 import torch
 import torch.utils.checkpoint
@@ -11,7 +13,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss, LayerNorm
 from torch.nn.utils import skip_init
-from typing import Optional, Tuple, Union, List
+from typing import Optional, Tuple, Union, List, Callable
 
 from transformers.utils import (
     add_code_sample_docstrings,
@@ -26,15 +28,17 @@ from transformers.modeling_outputs import (
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 from transformers.generation.logits_process import LogitsProcessor
-from transformers.generation.utils import LogitsProcessorList
+from transformers.generation.utils import LogitsProcessorList, StoppingCriteriaList, GenerationConfig
 
 from .configuration_chatglm import ChatGLMConfig
 
 # flags required to enable jit fusion kernels
-torch._C._jit_set_profiling_mode(False)
-torch._C._jit_set_profiling_executor(False)
-torch._C._jit_override_can_fuse_on_cpu(True)
-torch._C._jit_override_can_fuse_on_gpu(True)
+
+if sys.platform != 'darwin':
+    torch._C._jit_set_profiling_mode(False)
+    torch._C._jit_set_profiling_executor(False)
+    torch._C._jit_override_can_fuse_on_cpu(True)
+    torch._C._jit_override_can_fuse_on_gpu(True)
 
 logger = logging.get_logger(__name__)
 
@@ -51,7 +55,7 @@ class InvalidScoreLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         if torch.isnan(scores).any() or torch.isinf(scores).any():
             scores.zero_()
-            scores[..., 20005] = 1e5
+            scores[..., 20005] = 5e4
         return scores
 
 
@@ -129,6 +133,36 @@ def load_tf_weights_in_chatglm_6b(model, config, tf_checkpoint_path):
     return model
 
 
+class PrefixEncoder(torch.nn.Module):
+    """
+    The torch.nn model to encode the prefix
+    Input shape: (batch-size, prefix-length)
+    Output shape: (batch-size, prefix-length, 2*layers*hidden)
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.prefix_projection = config.prefix_projection
+        if self.prefix_projection:
+            # Use a two-layer MLP to encode the prefix
+            self.embedding = torch.nn.Embedding(config.pre_seq_len, config.hidden_size)
+            self.trans = torch.nn.Sequential(
+                torch.nn.Linear(config.hidden_size, config.hidden_size),
+                torch.nn.Tanh(),
+                torch.nn.Linear(config.hidden_size, config.num_layers * config.hidden_size * 2)
+            )
+        else:
+            self.embedding = torch.nn.Embedding(config.pre_seq_len, config.num_layers * config.hidden_size * 2)
+
+    def forward(self, prefix: torch.Tensor):
+        if self.prefix_projection:
+            prefix_tokens = self.embedding(prefix)
+            past_key_values = self.trans(prefix_tokens)
+        else:
+            past_key_values = self.embedding(prefix)
+        return past_key_values
+
+
 @torch.jit.script
 def gelu_impl(x):
     """OpenAI's gelu implementation."""
@@ -183,6 +217,13 @@ class RotaryEmbedding(torch.nn.Module):
             self.cos_cached, self.sin_cached = cos_cached, sin_cached
         return self.cos_cached[:seq_len, ...], self.sin_cached[:seq_len, ...]
 
+    def _apply(self, fn):
+        if self.cos_cached is not None:
+            self.cos_cached = fn(self.cos_cached)
+        if self.sin_cached is not None:
+            self.sin_cached = fn(self.sin_cached)
+        return super()._apply(fn)
+
 
 def rotate_half(x):
     x1, x2 = x[..., :x.shape[-1] // 2], x[..., x.shape[-1] // 2:]
@@ -211,7 +252,7 @@ def attention_fn(
         use_cache=False,
 ):
     if layer_past is not None:
-        past_key, past_value = layer_past
+        past_key, past_value = layer_past[0], layer_past[1]
         key_layer = torch.cat((past_key, key_layer), dim=0)
         value_layer = torch.cat((past_value, value_layer), dim=0)
 
@@ -265,7 +306,7 @@ def attention_fn(
         if not (attention_mask == 0).all():
             # if auto-regressive, skip
             attention_scores.masked_fill_(attention_mask, -10000.0)
-        dtype = attention_scores.type()
+        dtype = attention_scores.dtype
         attention_scores = attention_scores.float()
         attention_scores = attention_scores * query_key_layer_scaling_coeff
 
@@ -610,8 +651,8 @@ class ChatGLMPreTrainedModel(PreTrainedModel):
     a simple interface for downloading and loading pretrained models.
     """
 
-    # is_parallelizable = True
-    supports_gradient_checkpointing = False
+    is_parallelizable = False
+    supports_gradient_checkpointing = True
     config_class = ChatGLMConfig
     base_model_prefix = "transformer"
     _no_split_modules = ["GLM6BBlock"]
@@ -622,6 +663,10 @@ class ChatGLMPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
         return
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, ChatGLMModel):
+            module.gradient_checkpointing = value
 
 
 CHATGLM_6B_START_DOCSTRING = r"""
@@ -719,12 +764,15 @@ class ChatGLMModel(ChatGLMPreTrainedModel):
         self.inner_hidden_size = config.inner_hidden_size
         self.hidden_size_per_attention_head = self.hidden_size // self.num_attention_heads
         self.position_encoding_2d = config.position_encoding_2d
+        self.pre_seq_len = config.pre_seq_len
+        self.prefix_projection = config.prefix_projection
 
         self.word_embeddings = skip_init(
             torch.nn.Embedding,
             num_embeddings=self.vocab_size, embedding_dim=self.hidden_size,
             dtype=self.params_dtype
         )
+        self.gradient_checkpointing = False
 
         def get_layer(layer_id):
             return GLMBlock(
@@ -747,42 +795,70 @@ class ChatGLMModel(ChatGLMPreTrainedModel):
         # Final layer norm before output.
         self.final_layernorm = LayerNorm(self.hidden_size, eps=self.layernorm_epsilon)
 
+        if self.pre_seq_len is not None:
+            for param in self.parameters():
+                param.requires_grad = False
+            self.prefix_tokens = torch.arange(self.pre_seq_len).long()
+            self.prefix_encoder = PrefixEncoder(config)
+            self.dropout = torch.nn.Dropout(0.1)
+
+            # total_params = sum(p.numel() for p in self.parameters())
+            # trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+            # print("Using p-tuning v2: # trainable_params = {} / {}".format(trainable_params, total_params))
+
     def get_input_embeddings(self):
         return self.word_embeddings
 
     def set_input_embeddings(self, new_embeddings: torch.Tensor):
         self.word_embeddings = new_embeddings
 
-    @staticmethod
-    def get_masks(seq, device):
-        context_length = seq.index(150004) + 1
+    def get_prompt(self, batch_size, device, dtype=torch.half):
+        prefix_tokens = self.prefix_tokens.unsqueeze(0).expand(batch_size, -1).to(device)
+        past_key_values = self.prefix_encoder(prefix_tokens).type(dtype)
+        past_key_values = past_key_values.view(
+            batch_size,
+            self.pre_seq_len,
+            self.num_layers * 2,
+            self.num_attention_heads,
+            self.hidden_size // self.num_attention_heads
+        )
+        # seq_len, b, nh, hidden_size
+        past_key_values = self.dropout(past_key_values)
+        past_key_values = past_key_values.permute([2, 1, 0, 3, 4]).split(2)
+        # past_key_values = [(v[0], v[1]) for v in past_key_values]
+        return past_key_values
 
-        attention_mask = torch.ones((1, len(seq), len(seq)), device=device)
+    def get_masks(self, input_ids, device):
+        batch_size, seq_length = input_ids.shape
+        context_lengths = [seq.tolist().index(self.config.bos_token_id) for seq in input_ids]
+        attention_mask = torch.ones((batch_size, seq_length, seq_length), device=device)
         attention_mask.tril_()
-        attention_mask[..., :context_length - 1] = 1
+        for i, context_length in enumerate(context_lengths):
+            attention_mask[i, :, :context_length] = 1
         attention_mask.unsqueeze_(1)
         attention_mask = (attention_mask < 0.5).bool()
 
         return attention_mask
 
-    def get_position_ids(self, seq, mask_position, device, gmask=False):
-        context_length = seq.index(150004) + 1
+    def get_position_ids(self, input_ids, mask_positions, device, gmask=False):
+        batch_size, seq_length = input_ids.shape
+        context_lengths = [seq.tolist().index(self.config.bos_token_id) for seq in input_ids]
         if self.position_encoding_2d:
-            seq_length = seq.index(150004)
-            position_ids = torch.arange(context_length, dtype=torch.long, device=device)
+            position_ids = torch.arange(seq_length, dtype=torch.long, device=device).expand(batch_size, seq_length)
             if not gmask:
-                position_ids[seq_length:] = mask_position
-            block_position_ids = torch.cat((
-                torch.zeros(seq_length, dtype=torch.long, device=device),
-                torch.arange(context_length - seq_length, dtype=torch.long, device=device) + 1
-            ))
-            position_ids = torch.stack((position_ids, block_position_ids), dim=0)
+                for i, context_length in enumerate(context_lengths):
+                    position_ids[i, context_length:] = mask_positions[i]
+            block_position_ids = [torch.cat((
+                torch.zeros(context_length, dtype=torch.long, device=device),
+                torch.arange(seq_length - context_length, dtype=torch.long, device=device) + 1
+            )) for context_length in context_lengths]
+            block_position_ids = torch.stack(block_position_ids, dim=0)
+            position_ids = torch.stack((position_ids, block_position_ids), dim=1)
         else:
-            position_ids = torch.arange(context_length, dtype=torch.long, device=device)
+            position_ids = torch.arange(seq_length, dtype=torch.long, device=device).expand(batch_size, seq_length)
             if not gmask:
-                position_ids[context_length - 1:] = mask_position
-
-        position_ids = position_ids.unsqueeze(0)
+                for i, context_length in enumerate(context_lengths):
+                    position_ids[context_length:] = mask_positions[i]
 
         return position_ids
 
@@ -812,6 +888,13 @@ class ChatGLMModel(ChatGLMPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -821,33 +904,40 @@ class ChatGLMModel(ChatGLMPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+        if inputs_embeds is None:
+            inputs_embeds = self.word_embeddings(input_ids)
+
         if past_key_values is None:
-            past_key_values = tuple([None] * len(self.layers))
-
-            MASK, gMASK = 150000, 150001
-            mask_token = MASK if MASK in input_ids else gMASK
-            use_gmask = False if MASK in input_ids else gMASK
-            # TODO: WARNING - Assuming batch size = 1 which is not always the case. With modified `tokenization_chatglm.py`, `attention_mask` and `position_ids` is provided beforehand, therefore escapes this problem.
-            seq = input_ids[0].tolist()
-
-            mask_position = seq.index(mask_token)
+            if self.pre_seq_len is not None:
+                past_key_values = self.get_prompt(batch_size=input_ids.shape[0], device=input_ids.device,
+                                                  dtype=inputs_embeds.dtype)
+            else:
+                past_key_values = tuple([None] * len(self.layers))
 
             if attention_mask is None:
                 attention_mask = self.get_masks(
-                    seq=seq,
+                    input_ids,
                     device=input_ids.device
                 )
 
+            if self.pre_seq_len is not None:
+                prefix_attention_mask = torch.ones(batch_size, 1, input_ids.size(-1), self.pre_seq_len).to(
+                    attention_mask.device)
+                prefix_attention_mask = (prefix_attention_mask < 0.5).bool()
+                attention_mask = torch.cat((prefix_attention_mask, attention_mask), dim=3)
+
             if position_ids is None:
+                MASK, gMASK = 150000, 150001
+                mask_token = MASK if MASK in input_ids else gMASK
+                use_gmask = False if MASK in input_ids else gMASK
+
+                mask_positions = [seq.tolist().index(mask_token) for seq in input_ids]
                 position_ids = self.get_position_ids(
-                    seq=seq,
-                    mask_position=mask_position,
+                    input_ids,
+                    mask_positions=mask_positions,
                     device=input_ids.device,
                     gmask=use_gmask
                 )
-
-        if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
 
         # [seq_len, batch, hidden_size]
         hidden_states = inputs_embeds.transpose(0, 1)
@@ -856,11 +946,6 @@ class ChatGLMModel(ChatGLMPreTrainedModel):
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
 
-        seq_length_with_past = seq_length
-        past_key_values_length = 0
-        if past_key_values[0] is not None:
-            past_key_values_length = past_key_values[0][0].shape[0]
-            seq_length_with_past = seq_length_with_past + past_key_values_length
         if attention_mask is None:
             attention_mask = torch.zeros(1, 1, device=input_ids.device).bool()
 
@@ -871,16 +956,29 @@ class ChatGLMModel(ChatGLMPreTrainedModel):
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
+            layer_past = past_key_values[i]
 
-            layer_ret = layer(
-                hidden_states,
-                position_ids=position_ids,
-                attention_mask=attention_mask,
-                layer_id=torch.tensor(i),
-                layer_past=past_key_values[i],
-                use_cache=use_cache,
-                output_attentions=output_attentions
-            )
+            if self.gradient_checkpointing and self.training:
+                layer_ret = torch.utils.checkpoint.checkpoint(
+                    layer,
+                    hidden_states,
+                    position_ids,
+                    attention_mask,
+                    torch.tensor(i),
+                    layer_past,
+                    use_cache,
+                    output_attentions
+                )
+            else:
+                layer_ret = layer(
+                    hidden_states,
+                    position_ids=position_ids,
+                    attention_mask=attention_mask,
+                    layer_id=torch.tensor(i),
+                    layer_past=layer_past,
+                    use_cache=use_cache,
+                    output_attentions=output_attentions
+                )
 
             hidden_states = layer_ret[0]
 
@@ -908,7 +1006,7 @@ class ChatGLMModel(ChatGLMPreTrainedModel):
 
 
 class ChatGLMForConditionalGeneration(ChatGLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ChatGLMConfig):
         super().__init__(config)
 
         # self.hidden_size = config.hidden_size
@@ -928,35 +1026,47 @@ class ChatGLMForConditionalGeneration(ChatGLMPreTrainedModel):
             dtype=torch.half
         )
 
+        self.config = config
+
+        self.quantized = False
+
+        if self.config.quantization_bit:
+            self.quantize(self.config.quantization_bit, empty_init=True)
+
     def get_output_embeddings(self):
         return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def get_masks_and_position_ids(self, seq, mask_position, context_length, device, gmask=False):
-        attention_mask = torch.ones((1, context_length, context_length), device=device)
+    def get_masks_and_position_ids(self, input_ids, mask_positions, device, gmask=False):
+        batch_size, seq_length = input_ids.shape
+        context_lengths = [seq.tolist().index(self.config.bos_token_id) for seq in input_ids]
+        attention_mask = torch.ones((batch_size, seq_length, seq_length), device=device)
         attention_mask.tril_()
-        attention_mask[..., :context_length - 1] = 1
+        for i, context_length in enumerate(context_lengths):
+            attention_mask[i, :, :context_length] = 1
         attention_mask.unsqueeze_(1)
         attention_mask = (attention_mask < 0.5).bool()
 
+        batch_size, seq_length = input_ids.shape
+        context_lengths = [seq.tolist().index(self.config.bos_token_id) for seq in input_ids]
         if self.position_encoding_2d:
-            seq_length = seq.index(150004)
-            position_ids = torch.arange(context_length, dtype=torch.long, device=device)
+            position_ids = torch.arange(seq_length, dtype=torch.long, device=device).expand(batch_size, seq_length)
             if not gmask:
-                position_ids[seq_length:] = mask_position
-            block_position_ids = torch.cat((
-                torch.zeros(seq_length, dtype=torch.long, device=device),
-                torch.arange(context_length - seq_length, dtype=torch.long, device=device) + 1
-            ))
-            position_ids = torch.stack((position_ids, block_position_ids), dim=0)
+                for i, context_length in enumerate(context_lengths):
+                    position_ids[i, context_length:] = mask_positions[i]
+            block_position_ids = [torch.cat((
+                torch.zeros(context_length, dtype=torch.long, device=device),
+                torch.arange(seq_length - context_length, dtype=torch.long, device=device) + 1
+            )) for context_length in context_lengths]
+            block_position_ids = torch.stack(block_position_ids, dim=0)
+            position_ids = torch.stack((position_ids, block_position_ids), dim=1)
         else:
-            position_ids = torch.arange(context_length, dtype=torch.long, device=device)
+            position_ids = torch.arange(seq_length, dtype=torch.long, device=device).expand(batch_size, seq_length)
             if not gmask:
-                position_ids[context_length - 1:] = mask_position
-
-        position_ids = position_ids.unsqueeze(0)
+                for i, context_length in enumerate(context_lengths):
+                    position_ids[context_length:] = mask_positions[i]
 
         return attention_mask, position_ids
 
@@ -968,26 +1078,24 @@ class ChatGLMForConditionalGeneration(ChatGLMPreTrainedModel):
             attention_mask: Optional[torch.Tensor] = None,
             **kwargs
     ) -> dict:
-
+        batch_size, seq_length = input_ids.shape
         MASK, gMASK = 150000, 150001
         mask_token = MASK if MASK in input_ids else gMASK
         use_gmask = False if MASK in input_ids else gMASK
-        seq = input_ids[0].tolist()
-        mask_position = seq.index(mask_token)
-        position_ids = kwargs.get("position_ids", None)
-
-        if mask_token not in seq:
-            raise ValueError("You have to add either [MASK] or [gMASK] in your input")
+        seqs = input_ids.tolist()
+        mask_positions = [seq.index(mask_token) for seq in seqs]
 
         # only last token for input_ids if past is not None
         if past is not None or past_key_values is not None:
-            context_length = seq.index(150004)
+            context_lengths = [seq.index(self.config.bos_token_id) for seq in seqs]
             last_token = input_ids[:, -1].unsqueeze(-1)
             if self.position_encoding_2d:
-                position_ids = torch.tensor([[[mask_position], [len(seq) - context_length]]], dtype=torch.long,
-                                            device=input_ids.device)
+                position_ids = torch.tensor(
+                    [[mask_position, seq_length - context_length] for mask_position, context_length in
+                     zip(mask_positions, context_lengths)], dtype=torch.long, device=input_ids.device).unsqueeze(-1)
             else:
-                position_ids = torch.tensor([[mask_position]], dtype=torch.long, device=input_ids.device)
+                position_ids = torch.tensor([mask_position for mask_position in mask_positions], dtype=torch.long,
+                                            device=input_ids.device).unsqueeze(-1)
 
             if past is None:
                 past = past_key_values
@@ -997,14 +1105,12 @@ class ChatGLMForConditionalGeneration(ChatGLMPreTrainedModel):
                 "position_ids": position_ids,
             }
         else:
-            if position_ids is None or attention_mask is None:
-                attention_mask, position_ids = self.get_masks_and_position_ids(
-                    seq=seq,
-                    mask_position=mask_position,
-                    context_length=len(seq),
-                    device=input_ids.device,
-                    gmask=use_gmask
-                )
+            attention_mask, position_ids = self.get_masks_and_position_ids(
+                input_ids,
+                mask_positions=mask_positions,
+                device=input_ids.device,
+                gmask=use_gmask
+            )
 
             return {
                 "input_ids": input_ids,
@@ -1053,7 +1159,7 @@ class ChatGLMForConditionalGeneration(ChatGLMPreTrainedModel):
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
+            loss_fct = CrossEntropyLoss(ignore_index=self.config.pad_token_id)
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
             lm_logits = lm_logits.to(hidden_states.dtype)
@@ -1090,6 +1196,21 @@ class ChatGLMForConditionalGeneration(ChatGLMPreTrainedModel):
             for layer_past in past
         )
 
+    def process_response(self, response):
+        response = response.strip()
+        response = response.replace("[[训练时间]]", "2023年")
+        punkts = [
+            [",", "，"],
+            ["!", "！"],
+            [":", "："],
+            [";", "；"],
+            ["\?", "？"],
+        ]
+        for item in punkts:
+            response = re.sub(r"([\u4e00-\u9fff])%s" % item[0], r"\1%s" % item[1], response)
+            response = re.sub(r"%s([\u4e00-\u9fff])" % item[0], r"%s\1" % item[1], response)
+        return response
+
     @torch.no_grad()
     def chat(self, tokenizer, query: str, history: List[Tuple[str, str]] = None, max_length: int = 2048, num_beams=1,
              do_sample=True, top_p=0.7, temperature=0.95, logits_processor=None, **kwargs):
@@ -1110,65 +1231,153 @@ class ChatGLMForConditionalGeneration(ChatGLMPreTrainedModel):
         input_ids = tokenizer([prompt], return_tensors="pt", padding=True)
         input_ids = input_ids.to(self.device)
         outputs = self.generate(**input_ids, **gen_kwargs)
-        outputs = outputs.tolist()[0][len(input_ids["input_ids"][0]) - 2:]
+        outputs = outputs.tolist()[0][len(input_ids["input_ids"][0]):]
         response = tokenizer.decode(outputs)
-        response = response.strip()
-        response = response.replace("[[训练时间]]", "2023年")
+        response = self.process_response(response)
         history = history + [(query, response)]
         return response, history
 
     @torch.no_grad()
-    def generate(
+    def stream_chat(self, tokenizer, query: str, history: List[Tuple[str, str]] = None, max_length: int = 2048,
+                    do_sample=True, top_p=0.7, temperature=0.95, logits_processor=None, **kwargs):
+        if history is None:
+            history = []
+        if logits_processor is None:
+            logits_processor = LogitsProcessorList()
+        logits_processor.append(InvalidScoreLogitsProcessor())
+        gen_kwargs = {"max_length": max_length, "do_sample": do_sample, "top_p": top_p,
+                      "temperature": temperature, "logits_processor": logits_processor, **kwargs}
+        if not history:
+            prompt = query
+        else:
+            prompt = ""
+            for i, (old_query, response) in enumerate(history):
+                prompt += "[Round {}]\n问：{}\n答：{}\n".format(i, old_query, response)
+            prompt += "[Round {}]\n问：{}\n答：".format(len(history), query)
+        input_ids = tokenizer([prompt], return_tensors="pt", padding=True)
+        input_ids = input_ids.to(self.device)
+        for outputs in self.stream_generate(**input_ids, **gen_kwargs):
+            outputs = outputs.tolist()[0][len(input_ids["input_ids"][0]):]
+            response = tokenizer.decode(outputs)
+            response = self.process_response(response)
+            new_history = history + [(query, response)]
+            yield response, new_history
+
+    @torch.no_grad()
+    def stream_generate(
             self,
+            input_ids,
+            generation_config: Optional[GenerationConfig] = None,
+            logits_processor: Optional[LogitsProcessorList] = None,
+            stopping_criteria: Optional[StoppingCriteriaList] = None,
+            prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
             **kwargs,
     ):
-        MASK, gMASK = 150000, 150001
-        bos, eos = 150004, 150005
+        batch_size, input_ids_seq_length = input_ids.shape[0], input_ids.shape[-1]
 
-        if "eos_token_id" not in kwargs:
-            kwargs["eos_token_id"] = eos
+        if generation_config is None:
+            generation_config = self.generation_config
+        generation_config = copy.deepcopy(generation_config)
+        model_kwargs = generation_config.update(**kwargs)
+        bos_token_id, eos_token_id = generation_config.bos_token_id, generation_config.eos_token_id
 
-        stop = False
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
 
-        return_seqs = []
+        has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
+        if has_default_max_length and generation_config.max_new_tokens is None:
+            warnings.warn(
+                f"Using `max_length`'s default ({generation_config.max_length}) to control the generation length. "
+                "This behaviour is deprecated and will be removed from the config in v5 of Transformers -- we"
+                " recommend using `max_new_tokens` to control the maximum length of the generation.",
+                UserWarning,
+            )
+        elif generation_config.max_new_tokens is not None:
+            generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
+            if not has_default_max_length:
+                logger.warn(
+                    f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
+                    f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
+                    "Please refer to the documentation for more information. "
+                    "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)",
+                    UserWarning,
+                )
 
+        if input_ids_seq_length >= generation_config.max_length:
+            input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
+            logger.warning(
+                f"Input length of {input_ids_string} is {input_ids_seq_length}, but `max_length` is set to"
+                f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
+                " increasing `max_new_tokens`."
+            )
+
+        # 2. Set generation parameters if not already defined
+        logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
+        stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
+
+        logits_processor = self._get_logits_processor(
+            generation_config=generation_config,
+            input_ids_seq_length=input_ids_seq_length,
+            encoder_input_ids=input_ids,
+            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+            logits_processor=logits_processor,
+        )
+
+        stopping_criteria = self._get_stopping_criteria(
+            generation_config=generation_config, stopping_criteria=stopping_criteria
+        )
+        logits_warper = self._get_logits_warper(generation_config)
+
+        unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
+        scores = None
         while True:
-            output_ids = super().generate(**kwargs)
+            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+            # forward pass to get next token
+            outputs = self(
+                **model_inputs,
+                return_dict=True,
+                output_attentions=False,
+                output_hidden_states=False,
+            )
 
-            return_seqs = []
-            max_length = 0
+            next_token_logits = outputs.logits[:, -1, :]
 
-            for i in range(output_ids.shape[0]):
-                output_seq = output_ids[i].tolist()
-                mask_token = MASK if MASK in output_seq else gMASK
-                mask_position = output_seq.index(mask_token)
-                bos_position = output_seq.index(bos)
-                if eos in output_seq:
-                    eos_position = output_seq.index(eos)
-                else:
-                    eos_position = len(output_seq)
+            # pre-process distribution
+            next_token_scores = logits_processor(input_ids, next_token_logits)
+            next_token_scores = logits_warper(input_ids, next_token_scores)
 
-                return_seq = output_seq[:mask_position] + output_seq[bos_position + 1:eos_position] + output_seq[
-                                                                                                      mask_position + 1:bos_position]
-                max_length = max(max_length, len(return_seq))
-                return_seqs.append(return_seq)
+            # sample
+            probs = nn.functional.softmax(next_token_scores, dim=-1)
+            if generation_config.do_sample:
+                next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+            else:
+                next_tokens = torch.argmax(probs, dim=-1)
 
-            for i in range(output_ids.shape[0]):
-                return_seqs[i] = [0] * (max_length - len(return_seqs[i])) + return_seqs[i]  # padding
-                if mask_token not in return_seqs[i]:
-                    stop = True
+            # update generated ids, model inputs, and length for next step
+            input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+            model_kwargs = self._update_model_kwargs_for_generation(
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+            )
+            unfinished_sequences = unfinished_sequences.mul((sum(next_tokens != i for i in eos_token_id)).long())
 
-            if stop:
+            # stop when each sentence is finished, or if we exceed the maximum length
+            if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
                 break
+            yield input_ids
 
-            for return_seq in return_seqs:
-                return_seq += [bos]
+    def quantize(self, bits: int, empty_init=False, **kwargs):
+        if bits == 0:
+            return
 
-            kwargs['input_ids'] = torch.tensor(return_seqs, dtype=torch.long, device=kwargs['input_ids'].device)
-
-        return torch.tensor(return_seqs, dtype=torch.long, device=kwargs['input_ids'].device)
-
-    def quantize(self, bits: int):
         from .quantization import quantize
-        self.transformer = quantize(self.transformer, bits)
+
+        if self.quantized:
+            logger.info("Already quantized.")
+            return self
+
+        self.quantized = True
+
+        self.config.quantization_bit = bits
+
+        self.transformer = quantize(self.transformer, bits, empty_init=empty_init, **kwargs)
         return self

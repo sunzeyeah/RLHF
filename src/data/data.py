@@ -40,7 +40,31 @@ class PairwiseDataset(Dataset):
         chosen_answer = pair["chosen_answer"]
         rejected_answer = pair["rejected_answer"]
         prefix = pair['prefix']
-        if "glm" in self.args.model_name_or_path:
+        if "pangu" in self.args.model_name_or_path:
+            chosen_encodings_dict = self.tokenizer(prompt, prefix+chosen_answer, max_length=self.args.max_length,
+                                                   truncation="longest_first", padding="max_length", return_tensors="pt",
+                                                   return_token_type_ids=False)
+            rejected_encodings_dict = self.tokenizer(prompt, prefix+rejected_answer, max_length=self.args.max_length,
+                                                     truncation="longest_first", padding="max_length", return_tensors="pt",
+                                                     return_token_type_ids=False)
+            return {
+                "chosen_input_ids": chosen_encodings_dict["input_ids"],
+                "chosen_attention_mask": chosen_encodings_dict["attention_mask"],
+                "rejected_input_ids": rejected_encodings_dict["input_ids"],
+                "rejected_attention_mask": rejected_encodings_dict["attention_mask"],
+                "labels": rejected_encodings_dict["input_ids"],
+            }
+        elif "chatglm" in self.args.model_name_or_path:
+            chosen_encodings_dict = self.tokenizer(prompt, chosen_answer, max_length=self.args.max_length,
+                                                   truncation="longest_first", padding="max_length", return_tensors="pt")
+            rejected_encodings_dict = self.tokenizer(prompt, prefix+rejected_answer, max_length=self.args.max_length,
+                                                     truncation="longest_first", padding="max_length", return_tensors="pt")
+            return {
+                "chosen_input_ids": chosen_encodings_dict["input_ids"][0],
+                "rejected_input_ids": rejected_encodings_dict["input_ids"][0],
+                "labels": rejected_encodings_dict["input_ids"][0],
+            }
+        elif "glm" in self.args.model_name_or_path:
             chosen_prompt_length = len(self.tokenizer.tokenize(prompt+prefix)) + 4
             rejected_prompt_length = chosen_prompt_length
             chosen_answer_length = len(self.tokenizer.tokenize(chosen_answer)) + 1
@@ -84,24 +108,7 @@ class PairwiseDataset(Dataset):
                 "labels": rejected_encodings_dict["input_ids"][0],
             }
         else:
-            # encoded_dict = self.tokenizer(prompt, prefix+label, max_length=self.args.max_length, return_tensors="pt",
-            #                               truncation="longest_first", padding="max_length", return_token_type_ids=False,
-            #                               return_position_ids=False)
-            chosen_encodings_dict = self.tokenizer(prompt, prefix+chosen_answer, max_length=self.args.max_length,
-                                                   truncation="longest_first", padding="max_length", return_tensors="pt",
-                                                   return_token_type_ids=False)
-            rejected_encodings_dict = self.tokenizer(prompt, prefix+rejected_answer, max_length=self.args.max_length,
-                                                     truncation="longest_first", padding="max_length", return_tensors="pt",
-                                                     return_token_type_ids=False)
-
-            return {
-                "chosen_input_ids": chosen_encodings_dict["input_ids"],
-                "chosen_attention_mask": chosen_encodings_dict["attention_mask"],
-                # "chosen_position_ids": chosen_encodings_dict["position_ids"],
-                "rejected_input_ids": rejected_encodings_dict["input_ids"],
-                "rejected_attention_mask": rejected_encodings_dict["attention_mask"],
-                "labels": rejected_encodings_dict["input_ids"],
-            }
+            raise ValueError(f"Unsupported model name: {self.args.model_name_or_path}")
 
     @staticmethod
     def load_dataset(filename):
@@ -165,10 +172,18 @@ class SFTDataset(Dataset):
                 "attention_mask": encoded_dict['attention_mask'],
                 "labels": encoded_dict['input_ids'],
             }
+        elif "chatglm" in self.args.model_name_or_path:
+            encoded_dict = self.tokenizer(prompt, label, max_length=self.args.max_length, return_tensors="pt",
+                                          truncation="longest_first", padding="max_length")
+
+            return {
+                "input_ids": encoded_dict['input_ids'][0],
+                "labels": encoded_dict['input_ids'][0],
+            }
         elif "glm" in self.args.model_name_or_path:
             encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
             prompt_length = len(encoded_prompt['input_ids'])
-            label_length = len(self.tokenizer.tokenize(label)) + (1 if "chatglm" not in self.args.model_name_or_path else 0)
+            label_length = len(self.tokenizer.tokenize(label)) + 1
             if prompt_length + label_length > self.args.max_length:
                 num_tokens_to_remove = prompt_length + label_length - self.args.max_length
                 for _ in range(num_tokens_to_remove):
