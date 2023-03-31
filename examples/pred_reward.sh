@@ -27,7 +27,7 @@ CUDA_LAUNCH_BLOCKING=1 deepspeed --num_gpus 1 $MAIN \
   --checkpoint $CHECKPOINT \
   --max_length 512 \
   --logging_steps 100 \
-  --deepspeed_config "reward_stage-1_${MODEL}_v100.json" \
+  --deepspeed_config "stage-1.json" \
   --do_pred \
   --test_filename $TEST_FILENAME \
   --eval_batch_size 256 \

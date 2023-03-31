@@ -31,7 +31,7 @@ CUDA_LAUNCH_BLOCKING=1 deepspeed --num_gpus 1 $MAIN \
   --train_batch_size 32 \
   --gradient_accumulation_steps 4 \
   --num_epochs 1 \
-  --deepspeed_config "reward_stage-2_${MODEL}_v100.json" \
+  --deepspeed_config "stage-2.json" \
   --do_eval \
   --eval_filename $EVAL_FILENAME \
   --eval_batch_size 96 \

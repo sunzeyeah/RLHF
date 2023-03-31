@@ -369,6 +369,7 @@ class ChatGLMTokenizer(PreTrainedTokenizer):
         gmask_id = self.sp_tokenizer[self.gmask_token]
         eos_id = self.sp_tokenizer[self.eos_token]
         bos_id = self.sp_tokenizer[self.bos_token]
+        eop_id = self.sp_tokenizer[self.eop_token]
 
         if mask_id not in token_ids_0 and gmask_id not in token_ids_0:
             token_ids_0 += [gmask_id]
@@ -379,6 +380,6 @@ class ChatGLMTokenizer(PreTrainedTokenizer):
         token_ids_0 += [bos_id]
 
         if token_ids_1 is not None:
-            token_ids_0 += token_ids_1
+            token_ids_0 += token_ids_1 + [eop_id]
 
         return token_ids_0

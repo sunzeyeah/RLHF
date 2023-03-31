@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MODEL="pangu-2.6B"
+MODEL="chatglm-6B"
 
 #ROOT="/mnt/sfevol775196/sunzeye273"
 #ROOT="/mnt/pa002-28359-vol543625-private"
@@ -25,11 +25,11 @@ CUDA_LAUNCH_BLOCKING=1 deepspeed --num_gpus 1 $MAIN \
   --max_length 512 \
   --do_train \
   --train_filename $TRAIN_FILENAME \
-  --train_batch_size 8 \
+  --train_batch_size 4 \
   --gradient_accumulation_steps 16 \
   --num_epochs 1 \
-  --deepspeed_config "sft_stage-2_${MODEL}_v100.json" \
+  --deepspeed_config "stage-2.json" \
   --do_eval \
   --eval_filename $EVAL_FILENAME \
-  --eval_batch_size 48 \
+  --eval_batch_size 16 \
   > out/train_sft_${MODEL}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1 &
