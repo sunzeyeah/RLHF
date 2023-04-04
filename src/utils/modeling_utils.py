@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import transformers
 
+from pynvml import *
 from dataclasses import is_dataclass
 from enum import Enum
 from accelerate import Accelerator
@@ -28,6 +29,8 @@ try:
     HAS_OPENDELTA = True
 except ModuleNotFoundError:
     HAS_OPENDELTA = False
+
+from src.utils.logger import logger
 
 
 def get_distributed_config(accelerator: Accelerator):
@@ -707,3 +710,10 @@ def regex_for_range(min_: int, max_: int) -> str:  # noqa
     intersected_subpatterns = ["-?" + val for val in negative_subpatterns if val in positive_subpatterns]
     subpatterns = negative_only_subpatterns + intersected_subpatterns + positive_only_subpatterns
     return "|".join(subpatterns)
+
+
+def print_gpu_utilization(prefix: str = "", index: int = 0):
+    nvmlInit()
+    handle = nvmlDeviceGetHandleByIndex(index)
+    info = nvmlDeviceGetMemoryInfo(handle)
+    logger.info(f"[{prefix}] GPU memory occupied: {info.used // 1024**2} MB")

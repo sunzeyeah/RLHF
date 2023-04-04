@@ -21,3 +21,4 @@ xgboost>=1.7.4
 icetk
 cpm_kernels
 protobuf==3.20.0
+pynvml

@@ -66,7 +66,7 @@ def get_parser():
     parser.add_argument("--save_steps", type=int, default=1000)
     parser.add_argument("--save_total_limit", type=int, default=2)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
-    parser.add_argument("--gradient_checkpointing", type=bool, default=False,
+    parser.add_argument("--gradient_checkpointing", action="store_true",
                         help="If True, use gradient checkpointing to save memory at the expense of slower backward pass.")
     parser.add_argument("--deepspeed_config", type=str, default=None)
     parser.add_argument("--lora_rank", type=int, default=0)
