@@ -115,7 +115,9 @@ bash train_rlhf.sh
 ## Results
 
 ### 1. LLM模型评测
-以下为验证集(dev.json)结果：
+
+<details>
+<summary><b>验证集(dev.json)结果</b></summary>
 
 <table>
     <tr>  <td rowspan="2">Dataset</td>  <td rowspan="2">Method</td>  <td rowspan="2">Metrics</td>  <td rowspan="2">Task Type</td>  <td colspan="5" style="text-align:center">Zero-shot</td>  <td colspan="5" style="text-align:center">Few-shot</td> </tr>
@@ -131,7 +133,7 @@ bash train_rlhf.sh
     <tr>  <td>IFLYTEK</td>  <td>PPL</td>  <td>acc</td>  <td>Text classification</td>  <td>0.1292</td>  <td style="color:red"><b>0.3058</b></td>  <td>0.265</td>  <td>0.2620</td>  <td>0.2408</td>  <td>0.2539</td>  <td>0.2535</td>  <td>0.2524</td>  <td></td>  <td></td> </tr>
     <tr>  <td>TNEWS</td>  <td>PPL</td>  <td>acc</td>  <td>Text classification</td>  <td>0.1582</td>  <td>0.2022</td>  <td>0.2449</td>  <td>0.2489</td>  <td style="color:red"><b>0.2527</b></td>  <td>0.2555</td>  <td>0.2466</td>  <td>0.2494</td>  <td></td>  <td></td> </tr>
 </table>
-
+</details>
 
 ### 2. SFT
 
@@ -150,7 +152,10 @@ SFT模型下载：
 | Pangu-350M |  SFT & Reward Data | 1.3GB | [sunzeyeah/pangu-350M-sft](https://huggingface.co/sunzeyeah/pangu-350M-sft) | [Pangu-350M-SFT](https://pan.baidu.com/s/14nF63nAQz38jmplUC0EQ-g) | 0f8j |
 | Pangu-2.6B |  SFT & Reward Data | 9.8GB | [sunzeyeah/pangu-2.6B-sft](https://huggingface.co/sunzeyeah/pangu-2.6B-sft) | [Pangu-2.6B-SFT](https://pan.baidu.com/s/1Q2PKf0MnFsiFlNhU-6WIrg) | r13w |
 
-Pangu-2.6B-SFT部分生成示例：
+
+<details>
+<summary><b>Pangu-2.6B-SFT生成示例</b></summary>
+
 ```
 # 生成参数
 max_length = 512
@@ -194,6 +199,8 @@ do_sample=True
 [Input] 问题:银行贷款50万,30年!年利率是4.41怎么算一个月还多少钱<sep>回答:
 [Generated] 若申请的是招行贷款,要计算贷款利息或者每月还款金额,需要知道贷款本金,贷款期限,还款方式,贷款年利率。若上述信息都确认到,可以通过我行贷款计算器尝试计算,登录招行官网右下方找到“理财计算器”--“个人贷款计算器”可以计算。
 ```
+</details>
+
 
 ### 3. Reward Model
 
@@ -211,3 +218,91 @@ Reward模型下载：
 | ----------- | --- | ----------- | ----------- |  ----------- | ----------- |
 | Pangu-350M |  SFT & Reward Data | 1.3GB | [sunzeyeah/pangu-350M-reward](https://huggingface.co/sunzeyeah/pangu-350M-reward) | [Pangu-350M-Reward](https://pan.baidu.com/s/1wC3w78t7pVn0Xn5tJHy06A) | 4gju |
 
+
+### 4. RLHF
+
+To be updated
+
+### 5. DeepSpeed实验
+
+为验证不同预训练模型使用deepspeed的训练效率是否能达到官方宣称的效果（加速、节省GPU等），进行了benchmarking
+- 实验场景：SFT阶段训练
+- 实验参数：```max_sequence_length=512```
+
+<details>
+<summary><b>DeepSpeed实验结果</b></summary>
+<table>
+   <tr> <td>模型</td> <td>数据</td>  <td>整体耗时/epoch</td>  <td>单条样本耗时</td>  <td>内存使用量</td>  <td>显存使用量</td>  <td>GPU型号和数量</td> <td>fp16</td> <td>bf16</td> <td>deepspeed stage</td> <td>offload optimizer</td> <td>pin memory</td> <td>offloard param</td> <td>overlap comm</td> <td>allgather bucket size</td> <td>stage3 max live parameters</td> <td>batch size</td> <td>gradient accumulation steps</td> <td>gradient checkpointing</td> <td>model half</td> </tr>
+   <tr> <td rowspan="11">T5-large</td> <td rowspan="11">wmt16-en-ro, 共计61万条样本</td> <td>43h</td>  <td>0.5s/it</td>  <td>7.1G</td>  <td>1*14529MB</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>-</td>  <td>-</td> <td>-</td> <td>-</td> <td>-</td> <td>-</td> <td>-</td> <td>2</td> <td>8</td> <td>false</td> <td>false</td> </tr>
+   <tr> <td>152h</td>  <td>1.78s/it</td>  <td>38.26G</td>  <td>1*11663MB</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>2</td>  <td>true</td> <td>true</td> <td>-</td> <td>false</td> <td>2e8</td> <td>-</td> <td>2</td> <td>8</td> <td>false</td> <td>false</td> </tr>
+   <tr> <td>250h</td>  <td>2.95s/it</td>  <td>38.74G</td>  <td>1*7255MB</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>2</td>  <td>true</td> <td>true</td> <td>-</td> <td>false</td> <td>1e5</td> <td>-</td> <td>2</td> <td>8</td> <td>false</td> <td>false</td> </tr>
+   <tr> <td>62h</td>  <td>5.8s/it</td>  <td>86.81G</td>  <td>8*7811MB</td>  <td>8*V100 16G</td>  <td>true</td>  <td>-</td>  <td>2</td>  <td>true</td> <td>true</td> <td>-</td> <td>false</td> <td>1e5</td> <td>-</td> <td>2</td> <td>8</td> <td>false</td> <td>false</td> </tr>
+   <tr> <td>-</td>  <td>-</td>  <td>-</td>  <td>OOM</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>2</td>  <td>true</td> <td>true</td> <td>-</td> <td>false</td> <td>2e8</td> <td>-</td> <td>16</td> <td>8</td> <td>false</td> <td>false</td> </tr>
+   <tr> <td>-</td>  <td>-</td>  <td>-</td>  <td>OOM</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>2</td>  <td>true</td> <td>true</td> <td>-</td> <td>false</td> <td>1e5</td> <td>-</td> <td>16</td> <td>8</td> <td>false</td> <td>false</td> </tr>
+   <tr> <td>290h</td>  <td>3.48s/it</td>  <td>46.53G</td>  <td>1*6655MB</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>2e8</td> <td>2e8</td> <td>2</td> <td>8</td> <td>false</td> <td>false</td> </tr>
+   <tr> <td>380h</td>  <td>4.5s/it</td>  <td>43.48G</td>  <td>1*5263MB</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e5</td> <td>1e5</td> <td>2</td> <td>8</td> <td>false</td> <td>false</td> </tr>
+   <tr> <td>215h</td>  <td>4.9s/it</td>  <td>47.31G</td>  <td>2*5019MB</td>  <td>2*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e5</td> <td>1e5</td> <td>2</td> <td>8</td> <td>false</td> <td>false</td> </tr>
+   <tr> <td>1370h</td>  <td>64s/it</td>  <td>57.55G</td>  <td>4*4701MB</td>  <td>4*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e5</td> <td>1e5</td> <td>2</td> <td>8</td> <td>false</td> <td>false</td> </tr>
+   <tr> <td>948h</td>  <td>90s/it</td>  <td>72.54G</td>  <td>8*4585MB</td>  <td>8*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e5</td> <td>1e5</td> <td>2</td> <td>8</td> <td>false</td> <td>false</td> </tr>
+   <tr> <td rowspan="7">Pangu-2.6B</td> <td rowspan="7">SFT & Reward Data的验证集，共1万条样本</td> <td>2h</td>  <td>5.76s/it</td>  <td>67.86G</td>  <td>1*15631MB</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>2</td>  <td>true</td> <td>true</td> <td>-</td> <td>false</td> <td>2e8</td> <td>-</td> <td>2</td> <td>8</td> <td>false</td> <td>false</td> </tr>
+   <tr> <td>2.1h</td>  <td>6.15s/it</td>  <td>67.88G</td>  <td>1*15705MB</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>2</td>  <td>true</td> <td>true</td> <td>-</td> <td>false</td> <td>1e5</td> <td>-</td> <td>2</td> <td>8</td> <td>false</td> <td>false</td> </tr>
+   <tr> <td>4.5h</td>  <td>13.3s/it</td>  <td>81.02G</td>  <td>1*15449MB</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>2e8</td> <td>2e8</td> <td>2</td> <td>8</td> <td>false</td> <td>false</td> </tr>
+   <tr> <td>11.5h</td>  <td>8.2s/it</td>  <td>75.89G</td>  <td>1*15299MB</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e5</td> <td>1e5</td> <td>2</td> <td>8</td> <td>false</td> <td>false</td> </tr>
+   <tr> <td>5.5h</td>  <td>7.8s/it</td>  <td>81.16G</td>  <td>2*14851MB</td>  <td>2*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e5</td> <td>1e5</td> <td>2</td> <td>8</td> <td>false</td> <td>false</td> </tr>
+   <tr> <td>6.2h</td>  <td>18.3s/it</td>  <td>97.31G</td>  <td>4*14389MB</td>  <td>4*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e5</td> <td>1e5</td> <td>2</td> <td>8</td> <td>false</td> <td>false</td> </tr>
+   <tr> <td>6.6h</td>  <td>38s/it</td>  <td>118.82G</td>  <td>8*14335MB</td>  <td>8*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e5</td> <td>1e5</td> <td>2</td> <td>8</td> <td>false</td> <td>false</td> </tr>
+   <tr> <td rowspan="14">ChatGLM-6B</td> <td rowspan="14">SFT & Reward Data的验证集，共1万条样本</td> <td>-</td>  <td>-</td>  <td>120.45G</td>  <td>OOM</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>2</td>  <td>true</td> <td>true</td> <td>-</td> <td>false</td> <td>1e5</td> <td>-</td> <td>1</td> <td>8</td> <td>true</td> <td>true</td> </tr>
+   <tr> <td>-</td>  <td>-</td>  <td>120.48G</td>  <td>OOM</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>2</td>  <td>true</td> <td>true</td> <td>-</td> <td>false</td> <td>1e3</td> <td>-</td> <td>1</td> <td>8</td> <td>false</td> <td>true</td> </tr>
+   <tr> <td>-</td>  <td>-</td>  <td>153.02G</td>  <td>OOM</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e2</td> <td>1e2</td> <td>1</td> <td>8</td> <td>false</td> <td>true</td> </tr>
+   <tr> <td>-</td>  <td>-</td>  <td>154G</td>  <td>OOM</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>2e8</td> <td>2e8</td> <td>1</td> <td>8</td> <td>true</td> <td>true</td> </tr>
+   <tr> <td>21.2h</td>  <td>60s/it</td>  <td>154G</td>  <td>1*10443MB</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>2e8</td> <td>auto</td> <td>1</td> <td>8</td> <td>true</td> <td>true</td> </tr>
+   <tr> <td>21.5h</td>  <td>60s/it</td>  <td>152.81G</td>  <td>1*10409MB</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e5</td> <td>1e5</td> <td>1</td> <td>8</td> <td>true</td> <td>true</td> </tr>
+   <tr> <td>23.5h</td>  <td>65s/it</td>  <td>153.36G</td>  <td>1*9229MB</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e3</td> <td>1e3</td> <td>1</td> <td>8</td> <td>true</td> <td>true</td> </tr>
+   <tr> <td>14h</td>  <td>80s/it</td>  <td>158.21G</td>  <td>2*8631MB</td>  <td>2*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e3</td> <td>1e3</td> <td>1</td> <td>8</td> <td>true</td> <td>true</td> </tr>
+   <tr> <td>7.8h</td>  <td>90s/it</td>  <td>168.38G</td>  <td>4*6743MB</td>  <td>4*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e3</td> <td>1e3</td> <td>1</td> <td>8</td> <td>true</td> <td>true</td> </tr>
+   <tr> <td>4h</td>  <td>90s/it</td>  <td>189.34G</td>  <td>8*6729MB</td>  <td>8*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e3</td> <td>1e3</td> <td>1</td> <td>8</td> <td>true</td> <td>true</td> </tr>
+   <tr> <td>1h</td>  <td>100s/it</td>  <td>189.38G</td>  <td>8*10047MB</td>  <td>8*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e3</td> <td>1e3</td> <td>4</td> <td>8</td> <td>true</td> <td>true</td> </tr>
+   <tr> <td>50min</td>  <td>40s/it</td>  <td>189.39G</td>  <td>8*14763MB</td>  <td>8*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e3</td> <td>1e3</td> <td>8</td> <td>2</td> <td>true</td> <td>true</td> </tr>
+   <tr> <td>35min</td>  <td>113s/it</td>  <td>189.39G</td>  <td>8*14763MB</td>  <td>8*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e3</td> <td>1e3</td> <td>8</td> <td>8</td> <td>true</td> <td>true</td> </tr>
+   <tr> <td>-</td>  <td>-</td>  <td>189.34G</td>  <td>OOM</td>  <td>8*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e3</td> <td>1e3</td> <td>10</td> <td>8</td> <td>true</td> <td>true</td> </tr>
+   <tr> <td rowspan="11">GLM-10B-Chinese</td> <td rowspan="11">SFT & Reward Data的验证集，共1万条样本</td> <td>-</td>  <td>-</td>  <td>-</td>  <td>OOM</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>2e8</td> <td>2e8</td> <td>1</td> <td>8</td> <td>true</td> <td>false</td> </tr>
+   <tr> <td>-</td>  <td>-</td>  <td>-</td>  <td>OOM</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>2e8</td> <td>auto</td> <td>1</td> <td>8</td> <td>true</td> <td>false</td> </tr>
+   <tr> <td>-</td>  <td>-</td>  <td>-</td>  <td>OOM</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e5</td> <td>1e5</td> <td>1</td> <td>8</td> <td>true</td> <td>false</td> </tr>
+   <tr> <td>-</td>  <td>-</td>  <td>-</td>  <td>OOM</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e3</td> <td>1e3</td> <td>1</td> <td>8</td> <td>true</td> <td>false</td> </tr>
+   <tr> <td>-</td>  <td>-</td>  <td>-</td>  <td>OOM</td>  <td>1*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e2</td> <td>1e2</td> <td>1</td> <td>8</td> <td>true</td> <td>false</td> </tr>
+   <tr> <td>-</td>  <td>-</td>  <td>-</td>  <td>OOM</td>  <td>2*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e2</td> <td>1e2</td> <td>1</td> <td>8</td> <td>true</td> <td>false</td> </tr>
+   <tr> <td>-</td>  <td>-</td>  <td>-</td>  <td>OOM</td>  <td>4*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e2</td> <td>1e2</td> <td>1</td> <td>8</td> <td>true</td> <td>false</td> </tr>
+   <tr> <td>-</td>  <td>-</td>  <td>OOM</td>  <td>-</td>  <td>8*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e2</td> <td>1e2</td> <td>1</td> <td>8</td> <td>true</td> <td>false</td> </tr>
+   <tr> <td>-</td>  <td>-</td>  <td>-</td>  <td>OOM</td>  <td>4*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e2</td> <td>1e2</td> <td>1</td> <td>8</td> <td>true</td> <td>true</td> </tr>
+   <tr> <td>-</td>  <td>-</td>  <td>-</td>  <td>OOM</td>  <td>6*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e2</td> <td>1e2</td> <td>1</td> <td>8</td> <td>true</td> <td>true</td> </tr>
+   <tr> <td>-</td>  <td>-</td>  <td>OOM</td>  <td>-</td>  <td>8*V100 16G</td>  <td>true</td>  <td>-</td>  <td>3</td>  <td>true</td> <td>true</td> <td>true</td> <td>false</td> <td>1e2</td> <td>1e2</td> <td>1</td> <td>8</td> <td>true</td> <td>true</td> </tr>
+</table>
+</details>
+
+**PS**: deepspeed的参数介绍和调优经验，可参见[DeepSpeed Configuration](src/resources/config/deepspeed/README.md)
+
+### 6. LoRA实验
+
+为验证LoRA的训练效率提升，进行了benchmarking
+
+- 实验场景：SFT阶段训练
+- 实验数据：SFT & Reward Data的验证集，共1万条样本
+- 实验参数：```max_sequence_length=512, lora_alpha=1, lora_train_bias='none'```
+
+<details>
+<summary><b>LoRA实验结果</b></summary>
+<table>
+   <tr> <td>模型</td> <td>LoRA rank</td> <td>可训练参数量</td> <td>deepspeed</td> <td>batch size</td> <td>GPU型号和数量</td> <td>显存使用量</td> <td>单条样本耗时</td> <td>整体耗时/epoch</td> </tr>
+   <tr> <td rowspan="8">Pangu-2.6B</td>  <td>-</td>  <td>2.6B</td>  <td>-</td>  <td>8</td>  <td>1*A100 80G</td>  <td>1*79421MB</td>  <td>9.66s/it</td>  <td>12.5min</td> </tr>
+   <tr> <td>1000</td>  <td>1.5B</td>  <td>-</td>  <td>8</td>  <td>1*A100 80G</td>  <td>1*76129MB</td>  <td>11.61s/it</td>  <td>15min</td> </tr>
+   <tr> <td>500</td>  <td>758MB</td>  <td>-</td>  <td>12</td>  <td>1*A100 80G</td>  <td>1*77179MB</td>  <td>16.2s/it</td>  <td>14min</td> </tr>
+   <tr> <td>100</td>  <td>151MB</td>  <td>-</td>  <td>16</td>  <td>1*A100 80G</td>  <td>1*81103MB</td>  <td>18.6s/it</td>  <td>12min</td> </tr>
+   <tr> <td>50</td>  <td>75MB</td>  <td>-</td>  <td>16</td>  <td>1*A100 80G</td>  <td>1*80809MB</td>  <td>17.8s/it</td>  <td>11.5min</td> </tr>
+   <tr> <td>10</td>  <td>15MB</td>  <td>-</td>  <td>16</td>  <td>1*A100 80G</td>  <td>1*78735MB</td>  <td>17.6s/it</td>  <td>11.5min</td> </tr>
+   <tr> <td>100</td>  <td>151MB</td>  <td>stage=2, w offloading</td>  <td>24</td>  <td>1*A100 80G</td>  <td>1*76933MB</td>  <td>25.5s/it</td>  <td>11min</td> </tr>
+   <tr> <td>100</td>  <td>151MB</td>  <td>stage=3, w offloading</td>  <td>24</td>  <td>1*A100 80G</td>  <td>1*77259MB</td>  <td>46.5s/it</td>  <td>20min</td> </tr>
+   <tr> <td rowspan="3">ChatGLM-6B</td>  <td>-</td>  <td>6.2B</td>  <td>-</td>  <td>3</td>  <td>1*A100 80G</td>  <td>1*79206MB</td>  <td>6.7s/it</td>  <td>23.5min</td> </tr>
+   <tr> <td>1000</td>  <td>1.9B</td>  <td>-</td>  <td>6</td>  <td>1*A100 80G</td>  <td>1*78840MB</td>  <td>12.8s/it</td>  <td>22.5min</td> </tr>
+   <tr> <td>500</td>  <td>994MB</td>  <td>-</td>  <td>6</td>  <td>1*A100 80G</td>  <td>1*68832MB</td>  <td>12.4s/it</td>  <td>21.5min</td> </tr>
+</table>
+</details>
