@@ -2,10 +2,13 @@
 import math
 import os
 import random
-from numbers import Number
-
 import numpy as np
 import torch
+
+from numbers import Number
+from pynvml import *
+
+from src.utils.logger import logger
 
 
 def set_seed(seed_val=42):
@@ -47,3 +50,8 @@ def significant(x: Number, ndigits=2) -> Number:
 #     torch.cuda.manual_seed(seed)
 
 
+def print_gpu_utilization(prefix: str = "", index: int = 0):
+    nvmlInit()
+    handle = nvmlDeviceGetHandleByIndex(index)
+    info = nvmlDeviceGetMemoryInfo(handle)
+    logger.info(f"[{prefix}] GPU memory occupied: {info.used // 1024**2} MB")

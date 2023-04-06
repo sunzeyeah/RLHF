@@ -57,7 +57,7 @@ def get_parser():
                              "linear, cosine, cosine_with_restarts, polynomial, constant,"
                              "constant_with_warmup")
     parser.add_argument("--train_batch_size", type=int, default=4)
-    parser.add_argument("--weight_decay", type=float, default=0.01)
+    parser.add_argument("--weight_decay", type=float, default=0.1)
     parser.add_argument("--warmup_ratio", type=int, default=0.1)
     parser.add_argument("--logging_steps", type=int, default=100)
     parser.add_argument("--save_strategy", type=str, default="steps",
@@ -153,7 +153,7 @@ def main():
 
     # training arguments
     deepspeed_config = os.path.join(RESOURCE_PATH, "config", "deepspeed", args.deepspeed_config) if args.deepspeed_config is not None else None
-    if torch.cuda.is_available() and "chatglm" not in args.model_name_or_path:
+    if torch.cuda.is_available():
         bf16 = torch.cuda.get_device_capability()[0] >= 8
         fp16 = False if bf16 else True
     else:
