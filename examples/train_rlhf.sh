@@ -3,10 +3,12 @@
 REWARD_MODEL="pangu-350M"
 SFT_MODEL="pangu-2.6B"
 
-#ROOT="/mnt/sfevol775196/sunzeye273"
+ROOT="/mnt/sfevol775196/sunzeye273"
+#ROOT="/mnt/share-pa002-vol682688-prd/sunzeye273"
 #ROOT="/mnt/pa002-28359-vol543625-private"
-ROOT="/root/autodl-tmp/"
+#ROOT="/root/autodl-tmp/"
 DATR_DIR=$ROOT/Data/chatgpt/processed
+#MAIN=$ROOT/Code/chatgpt/src/train_rlhf.py
 MAIN=$ROOT/Code/RLHF/src/train_rlhf.py
 #ACCELERATE_CONFIG=$ROOT/Code/RLHF/src/resources/ppo_model/default_accelerate_config.yaml
 TOKENIZER_PATH=$ROOT/Data/models/$REWARD_MODEL
@@ -18,6 +20,7 @@ OUTPUT_DIR=$ROOT/Data/chatgpt/output/rlhf/$SFT_MODEL
 TRAIN_FILENAME="train_data_external_v1.jsonl"
 EVAL_FILENAME="dev_data_external_v1.jsonl"
 
+#cd $ROOT/Code/chatgpt || exit
 cd $ROOT/Code/RLHF || exit
 mkdir -p $OUTPUT_DIR
 

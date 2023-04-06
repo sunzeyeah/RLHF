@@ -3,9 +3,11 @@
 MODEL="pangu-350M"
 
 ROOT="/mnt/sfevol775196/sunzeye273"
+#ROOT="/mnt/share-pa002-vol682688-prd/sunzeye273"
 #ROOT="/mnt/pa002-28359-vol543625-private"
 #ROOT="/root/autodl-tmp"
 DATR_DIR=$ROOT/Data/chatgpt/processed
+#MAIN=$ROOT/Code/chatgpt/src/train_reward.py
 MAIN=$ROOT/Code/RLHF/src/train_reward.py
 TOKENIZER_PATH=$ROOT/Data/models/$MODEL
 #TOKENIZER_PATH=/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/$MODEL
@@ -14,6 +16,7 @@ OUTPUT_DIR=$ROOT/Data/chatgpt/output/reward/$MODEL
 EVAL_FILENAME="dev_data_external_v1.jsonl"
 CHECKPOINT="${ROOT}/Data/chatgpt/output/reward/${MODEL}/pytorch_modelstar.bin"
 
+#cd $ROOT/Code/chatgpt || exit
 cd $ROOT/Code/RLHF || exit
 mkdir -p $OUTPUT_DIR
 
