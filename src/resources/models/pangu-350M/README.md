@@ -1,3 +1,11 @@
+---
+language:
+- zh
+tags:
+- pangu
+- chatgpt
+---
+
 Link to github: [here](https://github.com/sunzeyeah/RLHF)
 
 ---
