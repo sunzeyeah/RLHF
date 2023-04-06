@@ -281,7 +281,7 @@ def main():
                                                                    max_gen_length=max_gen_length, padding=True)
                     inputs = inputs.to(device)
                     outputs = model.generate(**inputs,
-                                             max_new_tokens=args.max_length_generation,
+                                             max_new_tokens=min(args.max_length_generation, max_gen_length),
                                              eos_token_id=tokenizer.eop_token_id,
                                              pad_token_id=tokenizer.pad_token_id,
                                              do_sample=False,

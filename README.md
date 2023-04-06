@@ -6,7 +6,49 @@
 
 ## Setup
 
-### 1. Install apex
+### 1. Install deepspeed
+```bash
+git clone https://github.com/microsoft/DeepSpeed.git
+cd deepspeed
+rm -rf build
+TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_OPS=1 pip install -e . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check 2>&1 | tee build.log
+```
+如果想创建binary wheel，方便在其他机器上安装，可使用如下命令，会在```dist```目录生成类似可安装文件```deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl```
+```bash
+git clone https://github.com/microsoft/DeepSpeed.git
+cd deepspeed
+rm -rf build
+TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_OPS=1 python setup.py build_ext -j8 bdist_wheel 2>&1 | tee build.log
+```
+**PS**：需要根据下图，调整```TORCH_CUDA_ARCH_LIST="7.0"```为自己对应的NVIDIA GPU架构
+![image info](./images/torch_cuda_list.png "torch_cuda_list")
+
+或运行```torch.cuda.get_device_capability()```获取自己GPU的架构
+
+### 2. Install jieba
+在使用Pangu类模型的时候，其special_token格式为```<sep>```、```<pad>```等，而[tokenization_gptpangu.py](src/resources/models/pangu-350M/tokenization_gptpangu.py)中```tokenize()```函数会使用```jieba```进行分词。但直接```pip install jieba```，默认会将```<```和```>```直接切分开，使用```jieba.add_word("<sep>")```也没有作用，因为```jieba```直接hardcode了会自动切分的token，其中就包括了```<```和```>```。 
+
+因此需要执行：
+```bash
+git clone https://github.com/fxsjy/jieba.git
+cd jieba
+```
+将代码clone到本地，修改```jieba/__init__.py```中```re_han_default```的取值，具体改动如下：
+
+- 改动前：
+```python
+re_han_default = re.compile("([\u4E00-\u9FD5a-zA-Z0-9+#&\._%\-]+)", re.U)
+```
+
+- 改动后：
+```python
+re_han_default = re.compile("([\u4E00-\u9FD5a-zA-Z0-9+#&\._%\-<>]+)", re.U)
+```
+
+修改完成后使用```pip install .```进行本地编译安装，替换原有```jieba```。安装完成后，在代码中加入```jieba.add_word("<sep>")```（该代码已加入[tokenization_gptpangu.py](src/resources/models/pangu-350M/tokenization_gptpangu.py)），即可解决将```<sep>```一类的special token切分为多个id的情况
+
+
+### 3. Install apex (Optional)
 ```bash
 git clone https://github.com/NVIDIA/apex
 cd apex
@@ -19,25 +61,6 @@ cd apex
 python setup.py --cpp_ext --cuda_ext bdist_wheel 2>&1 | tee build.log
 ```
 
-### 2. Install deepspeed
-```bash
-git clone https://github.com/microsoft/deepspeed
-cd deepspeed
-rm -rf build
-TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_OPS=1 pip install -e . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check 2>&1 | tee build.log
-```
-同上，如果想创建binary wheel，可使用如下命令，会在```dist```目录生成类似可安装文件```deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl```
-```bash
-git clone https://github.com/microsoft/deepspeed
-cd deepspeed
-rm -rf build
-TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_OPS=1 python setup.py build_ext -j8 bdist_wheel 2>&1 | tee build.log
-```
-**PS**：需要根据下图，调整```TORCH_CUDA_ARCH_LIST="7.0"```为自己对应的NVIDIA GPU架构
-![image info](./images/torch_cuda_list.png "torch_cuda_list")
-
-或运行```torch.cuda.get_device_capability()```获取自己GPU的架构
-
 
 ## Data & Model Download
 
@@ -45,12 +68,12 @@ TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_OPS=1 python setup.py build_ext -j8 bdist_wh
 
 | 模型      | size | huggingface地址 | 百度网盘地址  |  提取码      | 
 | ----------- | ----------- | ----------- |  ----------- |  ----------- |
-| [Pangu-350M](https://openi.pcl.ac.cn/PCL-Platform.Intelligence/PanGu-Alpha)   | 659MB | | [Pangu-350M](https://pan.baidu.com/s/1IzgtW48S2PKyjxPPMe1rAQ) |  c5jj |
-| [Pangu-2.6B](https://openi.pcl.ac.cn/PCL-Platform.Intelligence/PanGu-Alpha)   | 9.8GB | | [Pangu-2.6B](https://pan.baidu.com/s/1Tzvja4q_LgQOwkWPQ4jShw)    | 2rad |
-| [Pangu-13B](https://openi.pcl.ac.cn/PCL-Platform.Intelligence/PanGu-Alpha)   | 23.6GB | | [Pangu-13B](https://pan.baidu.com/s/11fWAeYYKqI7pH0UiuJ5jEQ)    | u3dx |
-| [GLM-350M-chinese](https://github.com/THUDM/GLM) | 679MB | | [GLM-350M-chinese](https://pan.baidu.com/s/11Lef-E7Tsz5OGOueCpiqaA) | ii8e |
-| [GLM-10B-chinese](https://github.com/THUDM/GLM)   | 18.4G |  | [GLM-10B-chinese](https://pan.baidu.com/s/1GuOefx42n_GzFfwnjoBltw) | fynj  |
-| [ChatGLM-6B](https://github.com/THUDM/ChatGLM-6B)   | 25.6G |  |  |  |
+| [Pangu-350M](https://openi.pcl.ac.cn/PCL-Platform.Intelligence/PanGu-Alpha)   | 659MB | [sunzeyeah/pangu-350M](https://huggingface.co/sunzeyeah/pangu-350M) | [Pangu-350M](https://pan.baidu.com/s/1IzgtW48S2PKyjxPPMe1rAQ) |  c5jj |
+| [Pangu-2.6B](https://openi.pcl.ac.cn/PCL-Platform.Intelligence/PanGu-Alpha)   | 9.8GB | [sunzeyeah/pangu-2.6B](https://huggingface.co/sunzeyeah/pangu-2.6B) | [Pangu-2.6B](https://pan.baidu.com/s/1Tzvja4q_LgQOwkWPQ4jShw)    | 2rad |
+| [Pangu-13B](https://openi.pcl.ac.cn/PCL-Platform.Intelligence/PanGu-Alpha)   | 23.6GB | [sunzeyeah/pangu-13B](https://huggingface.co/sunzeyeah/pangu-13B) | [Pangu-13B](https://pan.baidu.com/s/11fWAeYYKqI7pH0UiuJ5jEQ)    | u3dx |
+| [GLM-350M-chinese](https://github.com/THUDM/GLM) | 679MB | [sunzeyeah/glm-350M-chinese](https://huggingface.co/sunzeyeah/glm-350M-chinese) | [GLM-350M-chinese](https://pan.baidu.com/s/11Lef-E7Tsz5OGOueCpiqaA) | ii8e |
+| [GLM-10B-chinese](https://github.com/THUDM/GLM)   | 18.4G | [sunzeyeah/glm-10B-chinese](https://huggingface.co/sunzeyeah/glm-10B-chinese) | [GLM-10B-chinese](https://pan.baidu.com/s/1GuOefx42n_GzFfwnjoBltw) | fynj  |
+| [ChatGLM-6B](https://github.com/THUDM/ChatGLM-6B)   | 25.6G | [sunzeyeah/chatglm-6B](https://huggingface.co/sunzeyeah/chatglm-6B) | [ChatGLM-6B](https://pan.baidu.com/s/1OlpkMeQD6-LEpNFWx5E-mg) | uq1k |
 
 **PS**: 本repo提供的预训练模型下载中，
 - 对于pytorch_model\*.bin
