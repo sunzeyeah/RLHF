@@ -188,10 +188,16 @@ def main():
         # Initialize the reward model from the (supervised) fine-tuned SFT model
         reward_model = RewardModel(model.config, model.transformer, tokenizer)
         # reward_model = RewardModelWithLoRA(model.config, model.transformer, tokenizer)
+    elif "chatglm" in args.reward_model_path:
+        model = AutoModelForSeq2SeqLM.from_pretrained(args.reward_model_path, trust_remote_code=True).half()
+        model.config.lora_rank = args.lora_rank
+        model.config.lora_alpha = args.lora_alpha
+        model.config.lora_train_bias = args.lora_train_bias
+        # Initialize the reward model from the (supervised) fine-tuned SFT model
+        reward_model = RewardModel(model.config, model, tokenizer)
+        # reward_model = RewardModelWithLoRA(model.config, model.glm, tokenizer)
     elif "glm" in args.reward_model_path:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.reward_model_path, trust_remote_code=True)
-        if "chatglm" in args.reward_model_path:
-            model = model.half()
         model.config.lora_rank = args.lora_rank
         model.config.lora_alpha = args.lora_alpha
         model.config.lora_train_bias = args.lora_train_bias
