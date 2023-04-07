@@ -26,13 +26,17 @@ CUDA_LAUNCH_BLOCKING=1 deepspeed --num_gpus 1 $MAIN \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_PATH \
   --max_length 512 \
+  --logging_steps 10 \
+  --save_steps 100 \
+  --learning_rate 1e-5 \
   --do_train \
   --train_filename $TRAIN_FILENAME \
-  --train_batch_size 4 \
-  --gradient_accumulation_steps 16 \
-  --num_epochs 1 \
-  --deepspeed_config "stage-2.json" \
+  --train_batch_size 8 \
+  --gradient_accumulation_steps 8 \
+  --num_epochs 5 \
+  --gradient_checkpointing \
+  --deepspeed_config "stage-3.json" \
   --do_eval \
   --eval_filename $EVAL_FILENAME \
-  --eval_batch_size 16 \
+  --eval_batch_size 32 \
   > out/train_sft_${MODEL}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1 &

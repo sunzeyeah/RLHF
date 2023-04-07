@@ -2,7 +2,7 @@
 import sys
 sys.path.insert(0, "/root/autodl-tmp/Code/RLHF")
 sys.path.insert(0, "/mnt/sfevol775196/sunzeye273/Code/chatgpt")
-sys.path.insert(0, "/mnt/share-pa002-vol682688-prd/sunzeye273/Code/chatgpt")
+# sys.path.insert(0, "/mnt/share-pa002-vol682688-prd/sunzeye273/Code/chatgpt")
 sys.path.insert(0, "/mnt/pa002-28359-vol543625-private/Code/chatgpt")
 import os
 import argparse
@@ -100,7 +100,8 @@ def get_parser():
 
 def main():
     args = get_parser()
-    logger.info(f"Parameters: {args}")
+    if args.local_rank <= 0:
+        logger.info(f"Parameters: {args}")
 
     set_seed(args.seed)
 
@@ -193,7 +194,8 @@ def main():
         do_predict=args.do_pred,
         use_legacy_prediction_loop=args.do_pred,
     )
-    logger.info(f"Training Arguments: {training_args}")
+    if args.local_rank <= 0:
+        logger.info(f"Training Arguments: {training_args}")
 
     # Set up the metric
     rouge = evaluate.load("rouge")

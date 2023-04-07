@@ -2,7 +2,7 @@
 import sys
 sys.path.insert(0, "/root/autodl-tmp/Code/RLHF")
 sys.path.insert(0, "/mnt/sfevol775196/sunzeye273/Code/chatgpt")
-sys.path.insert(0, "/mnt/share-pa002-vol682688-prd/sunzeye273/Code/chatgpt")
+# sys.path.insert(0, "/mnt/share-pa002-vol682688-prd/sunzeye273/Code/chatgpt")
 sys.path.insert(0, "/mnt/pa002-28359-vol543625-private/Code/chatgpt")
 import glob
 import os
@@ -81,7 +81,8 @@ def get_parser():
 
 def main():
     args = get_parser()
-    logger.info(f"Parameters: {args}")
+    if args.local_rank <= 0:
+        logger.info(f"Parameters: {args}")
 
     set_seed(args.seed)
 
@@ -108,9 +109,9 @@ def main():
         model.config.lora_alpha = args.lora_alpha
         model.config.lora_train_bias = args.lora_train_bias
         # Initialize the reward model from the (supervised) fine-tuned SFT model
-        reward_model = RewardModel(model.config, model, tokenizer)
+        reward_model = RewardModel(model.config, model.transformer, tokenizer)
         # reward_model = RewardModelWithLoRA(model.config, model.glm, tokenizer)
-        layers = reward_model.transformer.transformer.layers
+        layers = reward_model.transformer.layers
     elif "glm" in args.model_name_or_path:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
         model.config.lora_rank = args.lora_rank
@@ -186,6 +187,7 @@ def main():
         logging_steps=args.logging_steps,
         report_to=["tensorboard"],
         deepspeed=deepspeed_config,
+        gradient_checkpointing=args.gradient_checkpointing,
         do_eval=args.do_eval,
         evaluation_strategy=args.evaluation_strategy,
         eval_steps=args.eval_steps,
@@ -194,7 +196,8 @@ def main():
         do_predict=args.do_pred,
         use_legacy_prediction_loop=args.do_pred,
     )
-    logger.info(f"Training Arguments: {training_args}")
+    if args.local_rank <= 0:
+        logger.info(f"Training Arguments: {training_args}")
 
     # Create the collator to gather batches of pairwise comparisons
     data_collator = DataCollatorReward()

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MODEL="pangu-350M"
+MODEL="chatglm-6B"
 
 ROOT="/mnt/sfevol775196/sunzeye273"
 #ROOT="/mnt/share-pa002-vol682688-prd/sunzeye273"
@@ -28,14 +28,17 @@ CUDA_LAUNCH_BLOCKING=1 deepspeed --num_gpus 1 $MAIN \
   --model_name_or_path $MODEL_PATH \
   --tokenizer_path $TOKENIZER_PATH \
   --max_length 512 \
-  --logging_steps 100 \
+  --logging_steps 10 \
+  --save_steps 100 \
+  --learning_rate 1e-5 \
   --do_train \
   --train_filename $TRAIN_FILENAME \
-  --train_batch_size 32 \
-  --gradient_accumulation_steps 4 \
-  --num_epochs 1 \
-  --deepspeed_config "stage-2.json" \
+  --train_batch_size 24 \
+  --gradient_accumulation_steps 8 \
+  --num_epochs 5 \
+  --gradient_checkpointing \
+  --deepspeed_config "stage-3.json" \
   --do_eval \
   --eval_filename $EVAL_FILENAME \
-  --eval_batch_size 96 \
+  --eval_batch_size 32 \
   > out/train_reward_${MODEL}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1 &

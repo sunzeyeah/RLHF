@@ -2,7 +2,7 @@
 import sys
 sys.path.insert(0, "/root/autodl-tmp/Code/RLHF")
 sys.path.insert(0, "/mnt/sfevol775196/sunzeye273/Code/chatgpt")
-sys.path.insert(0, "/mnt/share-pa002-vol682688-prd/sunzeye273/Code/chatgpt")
+# sys.path.insert(0, "/mnt/share-pa002-vol682688-prd/sunzeye273/Code/chatgpt")
 sys.path.insert(0, "/mnt/pa002-28359-vol543625-private/Code/chatgpt")
 import os
 import argparse

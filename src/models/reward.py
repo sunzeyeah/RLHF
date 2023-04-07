@@ -3,6 +3,7 @@ import torch
 import loralib as lora
 
 from torch import nn
+from transformers.modeling_utils import PreTrainedModel
 from transformers.configuration_utils import PretrainedConfig
 from transformers.tokenization_utils import PreTrainedTokenizer
 
@@ -10,18 +11,24 @@ from src.models.loss import PairWiseLoss
 from src.models.lora import convert_to_lora_recursively
 
 
-class RewardModel(nn.Module):
+class RewardModel(PreTrainedModel):
+    supports_gradient_checkpointing = True
+
     def __init__(self, config, model, tokenizer):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.model_type = config.model_type
         self.pad_id = tokenizer.pad_token_id
-        self.transformer = model#.transformer
+        self.transformer = model
         self.v_head = nn.Linear(config.hidden_size, 1, bias=False)
         self.loss_fn = PairWiseLoss()
         if config.lora_rank > 0:
             convert_to_lora_recursively(model, config.lora_rank, config.lora_alpha)
             lora.mark_only_lora_as_trainable(model, config.lora_train_bias)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, PreTrainedModel):
+            module.gradient_checkpointing = value
 
     def reward(
             self,
@@ -65,7 +72,7 @@ class RewardModel(nn.Module):
             output_hidden_states=False,
     ):
         chosen_reward = self.reward(chosen_input_ids, attention_mask=chosen_attention_mask, position_ids=chosen_position_ids)
-        if rejected_input_ids is not None and rejected_attention_mask is not None:
+        if rejected_input_ids is not None:
             reject_reward = self.reward(rejected_input_ids, attention_mask=rejected_attention_mask, position_ids=rejected_position_ids)
             loss = self.loss_fn(chosen_reward, reject_reward)
         else:
