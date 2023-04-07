@@ -126,8 +126,8 @@ def main():
 
     # Freeze the first 70% of the hidden layers of the reward model backbone
     num_layers = len(layers)
-    num_unfrozen = int(args.freeze_ratio * num_layers)
-    for layer in layers[:-num_unfrozen]:
+    num_frozen = int(args.freeze_ratio * num_layers)
+    for layer in layers[:num_frozen]:
         layer.requires_grad_(False)
 
     if args.checkpoint is not None:
