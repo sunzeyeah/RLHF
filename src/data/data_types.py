@@ -96,6 +96,8 @@ class PPORLElement:
 
     query_tensor: TensorType["query_size"]
     response_tensor: TensorType["response_size"]
+    attention_mask: TensorType["query_size"]
+    position_ids: TensorType["query_size"]
     logprobs: TensorType["response_size"]
     values: TensorType["response_size"]
     rewards: TensorType["response_size"]
@@ -124,6 +126,8 @@ class PPORLBatch:
 
     query_tensors: TensorType["batch_size", "query_size"]
     response_tensors: TensorType["batch_size", "response_size"]
+    attention_mask: TensorType["batch_size", "query_size"]
+    position_ids: TensorType["batch_size", "query_size"]
     logprobs: TensorType["batch_size", "response_size"]
     values: TensorType["batch_size", "response_size"]
     rewards: TensorType["batch_size", "response_size"]

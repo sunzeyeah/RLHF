@@ -289,7 +289,7 @@ class AccelerateRLTrainer(BaseRLTrainer):
             prompts: List[torch.LongTensor],
             samples: List[torch.LongTensor],
             prompt_sizes: torch.LongTensor = None,
-    ) -> Tuple[List[str], List[str], List[str]]:
+    ) -> Tuple[List[str], List[str], List[str], List[str], List[List[torch.Tensor]]]:
         """
         Decode tensor generations into lists of strings (`samples`: List[str], `prompts`: List[str], `outputs`: List[str])
         """
@@ -312,7 +312,7 @@ class AccelerateRLTrainer(BaseRLTrainer):
                         pass
             prefix_indices.append(prefix_idx)
 
-        str_samples, str_prompts, str_outputs, str_prefixes = [], [], [], []
+        str_samples, str_prompts, str_outputs, str_prefixes, sample_outputs = [], [], [], [], []
         for prompt, sample, prompt_size, prefix_idx in zip(prompts, samples, prompt_sizes, prefix_indices):
             # if self.config.model.model_arch_type == "seq2seq":
             #     output_start_ix = 0
@@ -322,10 +322,12 @@ class AccelerateRLTrainer(BaseRLTrainer):
             str_prompt = self.tokenizer.decode(prompt[:prompt_size], skip_special_tokens=True)
             if prefix_idx is not None:
                 str_prefix = self.tokenizer.decode(sample[output_start_ix:prefix_idx], skip_special_tokens=True)
-                str_output = self.tokenizer.decode(sample[prefix_idx:], skip_special_tokens=True)
+                sample_output = sample[prefix_idx:]
+                str_output = self.tokenizer.decode(sample_output, skip_special_tokens=True)
             else:
                 str_prefix = None
-                str_output = self.tokenizer.decode(sample[output_start_ix:], skip_special_tokens=True)
+                sample_output = sample[output_start_ix:]
+                str_output = self.tokenizer.decode(sample_output, skip_special_tokens=True)
 
             # Trim outputs up to `self.stop_sequences` if any are present
             if self.stop_sequences:
@@ -337,6 +339,7 @@ class AccelerateRLTrainer(BaseRLTrainer):
             str_prompts.append(str_prompt)
             str_outputs.append(str_output)
             str_prefixes.append(str_prefix)
+            sample_outputs.append(sample_output)
 
             if "chatglm" in self.config.model.model_path:
                 sample = str_prompt + str_output
@@ -345,7 +348,7 @@ class AccelerateRLTrainer(BaseRLTrainer):
 
             str_samples.append(sample)
 
-        return str_samples, str_prompts, str_outputs, str_prefixes
+        return str_samples, str_prompts, str_outputs, str_prefixes, sample_outputs
 
     def generate(self, input_ids, attention_mask=None, **kwargs):
         """Wraps hf's `generate` adding some specific method's defaults"""
@@ -475,7 +478,7 @@ class AccelerateRLTrainer(BaseRLTrainer):
             stats["time/generate"] = time() - generate_time
 
             if self.accelerator.is_main_process:
-                str_samples, str_prompts, str_outputs, str_prefixes = self.decode(all_prompts, all_samples, all_prompt_sizes)
+                str_samples, str_prompts, str_outputs, str_prefixes, _ = self.decode(all_prompts, all_samples, all_prompt_sizes)
 
                 columns = ["prompt", "output"]
                 columns_data = [str_prompts, str_outputs]
@@ -811,8 +814,9 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
             batch: Previous batch of episodes
         """
         # Move `batch` data to `accelerator` device
-        query_tensors = batch.query_tensors.to(self.accelerator.device)
+        input_ids = batch.query_tensors.to(self.accelerator.device)
         response_tensors = batch.response_tensors.to(self.accelerator.device)
+        attention_mask = batch.attention_mask.to(self.accelerator.device)
         old_logprobs = batch.logprobs.to(self.accelerator.device)
         old_values = batch.values.to(self.accelerator.device)
         old_rewards = batch.rewards.to(self.accelerator.device)
@@ -822,20 +826,22 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
 
         if self.config.model.model_arch_type == "seq2seq":
             # TODO: To be modified for glm and chatglm
-            input_ids = query_tensors
+            # input_ids = query_tensors
             decoder_input_ids = response_tensors
-            attention_mask = input_ids.ne(self.tokenizer.pad_token_id).long().to(self.accelerator.device)
-            decoder_attention_mask = (
-                decoder_input_ids.ne(self.tokenizer.pad_token_id).long().to(self.accelerator.device)
-            )
-            decoder_attention_mask[:, 0] = 1
+            # attention_mask = input_ids.ne(self.tokenizer.pad_token_id).long().to(self.accelerator.device)
+            position_ids = torch.stack(batch.position_ids).to(self.accelerator.device)
+            # decoder_attention_mask = (
+            #     decoder_input_ids.ne(self.tokenizer.pad_token_id).long().to(self.accelerator.device)
+            # )
+            # decoder_attention_mask[:, 0] = 1
 
             # Forward pass
             outputs = self.model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                decoder_input_ids=decoder_input_ids,
-                decoder_attention_mask=decoder_attention_mask,
+                position_ids=position_ids
+                # decoder_input_ids=decoder_input_ids,
+                # decoder_attention_mask=decoder_attention_mask,
             )
 
             logits = outputs.logits
@@ -850,15 +856,15 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
                 mask[:, start:end],
             )
         else:
-            tokens = torch.cat((query_tensors, response_tensors), dim=1)
-            attention_mask = tokens.not_equal(self.tokenizer.pad_token_id).long().to(tokens.device)
-            outputs = self.model(tokens, attention_mask, return_dict=True)
+            # tokens = torch.cat((query_tensors, response_tensors), dim=1)
+            # attention_mask = tokens.not_equal(self.tokenizer.pad_token_id).long().to(tokens.device)
+            outputs = self.model(input_ids, attention_mask, return_dict=True)
             logits = outputs.logits
             values_pred = outputs.value
             values_pred = values_pred[:, :-1]
-            logprobs = logprobs_of_labels(logits[:, :-1, :], tokens[:, 1:])
+            logprobs = logprobs_of_labels(logits[:, :-1, :], input_ids[:, 1:])
 
-            start = query_tensors.shape[1] - 1
+            start = input_ids.shape[1] - 1
             end = start + response_length
             logprobs, values_pred, mask = (
                 logprobs[:, start:end],
@@ -866,6 +872,7 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
                 attention_mask[:, start:end],
             )
 
+        # TODO: need debugging here
         loss, stats = self.config.method.loss(
             logprobs=logprobs,
             values=values_pred,
@@ -983,7 +990,7 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
             gathered_prompt_sizes = self.accelerator.gather(prompt_sizes)
 
             if self.accelerator.is_main_process:
-                all_str_samples, all_str_prompts, all_str_outputs, all_str_prefixes = self.decode(
+                all_str_samples, all_str_prompts, all_str_outputs, all_str_prefixes, _ = self.decode(
                     gathered_prompts, gathered_samples, gathered_prompt_sizes
                 )
 
@@ -1009,16 +1016,15 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
             else:
                 scores = torch.tensor(all_scores[0])
 
-            str_samples, str_prompts, str_outputs, str_prefixes = self.decode(prompt_tensors, samples)
+            str_samples, str_prompts, str_outputs, str_prefixes, outputs = self.decode(prompt_tensors, samples)
 
             # Pad the sample outputs
-            outputs = self.tokenizer(str_outputs).input_ids
+            # outputs = self.tokenizer(str_outputs).input_ids
             # if self.config.model.model_arch_type == "seq2seq":
             #     # add <pad> to the start of the output
             #     for i in range(len(outputs)):
             #         outputs[i] = [self.tokenizer.pad_token_id] + outputs[i]
-
-            outputs = list(map(torch.LongTensor, outputs))
+            # outputs = list(map(torch.LongTensor, outputs))
             maxsize = max(map(len, outputs))
             outputs = [
                 F.pad(
@@ -1052,9 +1058,9 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
             logger.debug(f"sample_outputs shape: {sample_outputs.shape}")
             logger.debug(f"str_prompts[0]: {str_prompts[0]}, str_outputs[0]: {str_outputs[0]}, input_ids[0]: {batch['input_ids'][0]}, sample_outputs[0]: {sample_outputs[0]}")
             logger.debug(f"str_prompts[1]: {str_prompts[1]}, str_outputs[1]: {str_outputs[1]}, input_ids[1]: {batch['input_ids'][1]}, sample_outputs[1]: {sample_outputs[1]}")
+            self.tokenizer.padding_side = "right"
             if self.config.model.model_arch_type == "seq2seq":
-                self.tokenizer.padding_side = "right"
-                prompt_tensors, attention_mask, position_ids = [], [], []
+                input_ids, attention_mask, position_ids = [], [], []
                 for str_prompt, str_output, str_prefix in zip(str_prompts, str_outputs, str_prefixes):
                     encoded_prompt = self.tokenizer(str_prompt, str_prefix + self.tokenizer.mask_token)
                     prompt_length = len(encoded_prompt['input_ids'])
@@ -1079,15 +1085,15 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
                                                   return_token_type_ids=False)
                     encoded_dict = self.tokenizer.build_inputs_for_generation(encoded_dict, targets=str_output,
                                                                               max_gen_length=label_length, padding=True)
-                    prompt_tensors.append(encoded_dict['input_ids'])
+                    input_ids.append(encoded_dict['input_ids'])
                     attention_mask.append(encoded_dict['attention_mask'])
                     position_ids.append(encoded_dict['position_ids'])
-                prompt_tensors = torch.cat(prompt_tensors).to(device)
+                input_ids = torch.cat(input_ids).to(device)
                 attention_mask = torch.cat(attention_mask).to(device)
                 position_ids = torch.cat(position_ids).to(device)
                 with torch.no_grad():
                     outputs = self.model(
-                        input_ids=prompt_tensors,
+                        input_ids=input_ids,
                         attention_mask=attention_mask,
                         position_ids=position_ids
                     )
@@ -1095,7 +1101,7 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
                     values = outputs.value
                     if hasattr(self.model, "frozen_head"):
                         ref_logits = self.model.forward_hydra(
-                            input_ids=prompt_tensors,
+                            input_ids=input_ids,
                             attention_mask=attention_mask,
                             position_ids=position_ids,
                             # decoder_input_ids=sample_outputs,
@@ -1104,50 +1110,59 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
                         ).logits
                     else:
                         ref_logits = self.ref_model(
-                            input_ids=prompt_tensors,
+                            input_ids=input_ids,
                             attention_mask=attention_mask,
                             position_ids=position_ids,
                             # decoder_input_ids=sample_outputs,
                             # decoder_attention_mask=decoder_attention_mask,
                             return_dict=True,
                         ).logits
-                self.tokenizer.padding_side = self.padding_side
+
             else:
-                all_tokens = torch.cat((prompt_tensors.to(device), sample_outputs), dim=1)
-                attention_mask = all_tokens.not_equal(self.tokenizer.pad_token_id).long().to(device)
+                # all_tokens = torch.cat((prompt_tensors.to(device), sample_outputs), dim=1)
+                # attention_mask = all_tokens.not_equal(self.tokenizer.pad_token_id).long().to(device)
+                encoded_dict = self.tokenizer(str_prompts, str_outputs, max_length=self.max_length, return_tensors="pt",
+                                              truncation="longest_first", padding="max_length", return_token_type_ids=False)
+                input_ids = encoded_dict['input_ids'].to(device)
+                attention_mask = encoded_dict['attention_mask'].to(device)
+                position_ids = None
                 with torch.no_grad():
                     logits, *_, values = self.model(
-                        all_tokens,
+                        input_ids,
                         attention_mask=attention_mask,
                     )
                     # TODO(dahoas): When hydra model works need to also support generation on hydra head
                     if hasattr(self.model, "frozen_head"):
                         ref_logits = self.model.forward_hydra(
-                            all_tokens,
+                            input_ids,
                             attention_mask=attention_mask,
                             return_dict=True,
                         ).logits
                     else:
                         ref_logits = self.ref_model(
-                            all_tokens,
+                            input_ids,
                             attention_mask=attention_mask,
                             return_dict=True,
                         ).logits
                         ref_logits = ref_logits.to(device)
+            self.tokenizer.padding_side = self.padding_side
 
             if self.config.model.model_arch_type == "seq2seq":
                 # TODO: to be tested against glm and chatglm
                 logprobs = logprobs_of_labels(logits[:, :-1, :], sample_outputs[:, 1:])
                 ref_logprobs = logprobs_of_labels(ref_logits[:, :-1, :], sample_outputs[:, 1:])
             else:
-                logprobs = logprobs_of_labels(logits[:, :-1, :], all_tokens[:, 1:])
-                ref_logprobs = logprobs_of_labels(ref_logits[:, :-1, :], all_tokens[:, 1:])
+                logprobs = logprobs_of_labels(logits[:, :-1, :], input_ids[:, 1:])
+                ref_logprobs = logprobs_of_labels(ref_logits[:, :-1, :], input_ids[:, 1:])
 
             n_samples: int = samples.shape[0]
             logprobs = logprobs.cpu()
             ref_logprobs = ref_logprobs.cpu()
-            prompt_tensors = prompt_tensors.cpu()
+            # prompt_tensors = prompt_tensors.cpu()
             sample_outputs = sample_outputs.cpu()
+            input_ids = input_ids.cpu()
+            attention_mask = attention_mask.cpu()
+            position_ids = position_ids.cpu() if position_ids is not None else None
             values = values.cpu()[:, :-1]
 
             # Estimate the KL divergence between the model and reference model
@@ -1181,8 +1196,11 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
 
                 ppo_rl_elements.append(
                     PPORLElement(
-                        query_tensor=prompt_tensors[sample_idx],
+                        query_tensor=input_ids[sample_idx],
+                        # query_tensor=prompt_tensors[sample_idx],
                         response_tensor=sample_outputs[sample_idx],
+                        attention_mask=attention_mask[sample_idx],
+                        position_ids=position_ids[sample_idx] if position_ids is not None else None,
                         logprobs=all_logprobs[sample_idx],
                         values=all_values[sample_idx],
                         rewards=rewards,

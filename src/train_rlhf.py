@@ -221,8 +221,7 @@ def main():
     reward_model.to(device)
     logger.info(f"Finish loading reward model from {args.reward_checkpoint}")
 
-    # define reward functions in ppo training
-    def get_scores(samples):
+    def reward_fn(samples, **kwargs):
         scores_list = []
         for i in range(0, len(samples), ppo_config.train.batch_size):
             input_ids_list = []
@@ -282,21 +281,17 @@ def main():
             with torch.no_grad():
                 sub_scores = reward_model(input_ids, attention_mask, position_ids)
             scores_list.append(sub_scores["chosen_reward"])
+
         scores = torch.cat(scores_list, dim=0)
 
         return scores
-
-    def reward_fn(samples, **kwargs):
-        original_scores = get_scores(samples)
-        scores = get_scores(samples)
-        norms_scores = scores - original_scores
-        return norms_scores
 
     # load ppo config
     ppo_config = TRLConfig.load_yaml(os.path.join(RESOURCE_PATH, "config", "ppo_model", args.ppo_config))
     ppo_config.train.epochs = args.num_epochs
     ppo_config.train.seq_length = args.max_length
     ppo_config.train.batch_size = args.train_batch_size
+    ppo_config.train.checkpoint_dir = args.output_dir
     ppo_config.train.checkpoint_interval = args.save_steps
     ppo_config.train.eval_interval = args.eval_steps
     ppo_config.model.num_layers_unfrozen = args.num_layers_unfrozen

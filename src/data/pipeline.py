@@ -324,18 +324,21 @@ class PPORolloutStorage(BaseRolloutStore):
     ) -> DataLoader:
         def collate_fn(elems: Iterable[PPORLElement]):
             return PPORLBatch(
-                # Left padding of already left-padded queries
-                pad_sequence(
-                    [elem.query_tensor.flip(0) for elem in elems],
-                    padding_value=self.pad_token_id,
-                    batch_first=True,
-                ).flip(1),
+                torch.stack([elem.query_tensor for elem in elems]),
+                # # Left padding of already left-padded queries
+                # pad_sequence(
+                #     [elem.query_tensor.flip(0) for elem in elems],
+                #     padding_value=self.pad_token_id,
+                #     batch_first=True,
+                # ).flip(1),
                 # Right pad the rest, to have a single horizontal query/response split
                 pad_sequence(
                     [elem.response_tensor for elem in elems],
                     padding_value=self.pad_token_id,
                     batch_first=True,
                 ),
+                torch.stack([elem.attention_mask for elem in elems]),
+                [elem.position_ids for elem in elems],
                 pad_sequence(
                     [elem.logprobs for elem in elems],
                     padding_value=0.0,
