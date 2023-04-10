@@ -171,9 +171,10 @@ class AccelerateRLTrainer(BaseRLTrainer):
         self.tokenizer = AutoTokenizer.from_pretrained(config.tokenizer.tokenizer_path, trust_remote_code=True)
         self.tokenizer.padding_side = config.tokenizer.padding_side
         self.tokenizer.truncation_side = config.tokenizer.truncation_side
+        self.padding_side = config.tokenizer.padding_side
         # self.tokenizer.sep_token = "<sep>"
-        if config.model.model_arch_type != "seq2seq":
-            self.tokenizer.pad_token = self.tokenizer.eos_token
+        # if config.model.model_arch_type != "seq2seq":
+        #     self.tokenizer.pad_token = self.tokenizer.eos_token
 
         script_name = os.path.basename(sys.argv[0]).rsplit(".", 1)[0]
         if not isinstance(config.model.model_path, str):
@@ -235,10 +236,10 @@ class AccelerateRLTrainer(BaseRLTrainer):
 
         # Retrieves model equipped for ppo, ilql, etc
         model = self.get_arch(self.config)
-        if self.config.model.model_arch_type == "seq2seq":
-            freeze_bottom_seq2seq_layers(model.base_model, self.config.model.num_layers_unfrozen)
-        else:
-            freeze_bottom_causal_layers(model.base_model, self.config.model.num_layers_unfrozen)
+        # if self.config.model.model_arch_type == "seq2seq":
+        #     freeze_bottom_seq2seq_layers(model.base_model, self.config.model.num_layers_unfrozen)
+        # else:
+        freeze_bottom_causal_layers(model.base_model, self.config.model.num_layers_unfrozen)
         # Set the delta tuning strategies
         if self.config.model.delta_kwargs is not None:
             delta_type, delta_kwargs = parse_delta_kwargs(
@@ -292,24 +293,39 @@ class AccelerateRLTrainer(BaseRLTrainer):
         """
         Decode tensor generations into lists of strings (`samples`: List[str], `prompts`: List[str], `outputs`: List[str])
         """
-        # if prompt_sizes is None:
         # Assuming prompts were left-padded
         prompt_sizes = []
+        prefix_indices = []
         for prompt in prompts:
+            prefix_idx = None
             if "chatglm" in self.config.model.model_path:
                 prompt_sizes.append(len(prompt))
             else:
-                prompt_sizes.append(prompt.cpu().detach().tolist().index(self.tokenizer.sep_token_id))
+                logger.debug(f"[decode] prompt: {prompt}")
+                if isinstance(prompt, torch.Tensor):
+                    prompt = prompt.cpu().detach().tolist()
+                prompt_sizes.append(prompt.index(self.tokenizer.sep_token_id))
+                if "glm" in self.config.model.model_path:
+                    try:
+                        prefix_idx = prompt.index(self.tokenizer.mask_token_id)
+                    except IndexError:
+                        pass
+            prefix_indices.append(prefix_idx)
 
-        str_samples, str_prompts, str_outputs = [], [], []
-        for prompt, sample, prompt_size in zip(prompts, samples, prompt_sizes):
-            if self.config.model.model_arch_type == "seq2seq":
-                output_start_ix = 0
-            else:
-                output_start_ix = prompt_size
+        str_samples, str_prompts, str_outputs, str_prefixes = [], [], [], []
+        for prompt, sample, prompt_size, prefix_idx in zip(prompts, samples, prompt_sizes, prefix_indices):
+            # if self.config.model.model_arch_type == "seq2seq":
+            #     output_start_ix = 0
+            # else:
+            output_start_ix = prompt_size
 
             str_prompt = self.tokenizer.decode(prompt[:prompt_size], skip_special_tokens=True)
-            str_output = self.tokenizer.decode(sample[output_start_ix:], skip_special_tokens=True)
+            if prefix_idx is not None:
+                str_prefix = self.tokenizer.decode(sample[output_start_ix:prefix_idx], skip_special_tokens=True)
+                str_output = self.tokenizer.decode(sample[prefix_idx:], skip_special_tokens=True)
+            else:
+                str_prefix = None
+                str_output = self.tokenizer.decode(sample[output_start_ix:], skip_special_tokens=True)
 
             # Trim outputs up to `self.stop_sequences` if any are present
             if self.stop_sequences:
@@ -320,6 +336,7 @@ class AccelerateRLTrainer(BaseRLTrainer):
 
             str_prompts.append(str_prompt)
             str_outputs.append(str_output)
+            str_prefixes.append(str_prefix)
 
             if "chatglm" in self.config.model.model_path:
                 sample = str_prompt + str_output
@@ -328,7 +345,7 @@ class AccelerateRLTrainer(BaseRLTrainer):
 
             str_samples.append(sample)
 
-        return str_samples, str_prompts, str_outputs
+        return str_samples, str_prompts, str_outputs, str_prefixes
 
     def generate(self, input_ids, attention_mask=None, **kwargs):
         """Wraps hf's `generate` adding some specific method's defaults"""
@@ -430,15 +447,15 @@ class AccelerateRLTrainer(BaseRLTrainer):
                 else:
                     samples = self.generate_eval(**prompts)
 
-                # TODO(reciprocated): this should be moved into `decode`
-                # but that needs to be synced with indexing in `make_experience`
-                if self.config.model.model_arch_type == "seq2seq":
-                    samples = samples[:, 1:].contiguous()
+                # if self.config.model.model_arch_type == "seq2seq":
+                #     samples = samples[:, 1:].contiguous()
 
-                prompt_sizes = torch.tensor(prompts.input_ids.shape[1]).repeat(len(prompts.input_ids))
+                logger.debug(f"prompts keys: {prompts.keys()}, input_ids: {prompts['input_ids'].shape}")
+
+                prompt_sizes = torch.tensor(prompts['input_ids'].shape[1]).repeat(len(prompts['input_ids']))
                 prompts, samples, prompt_sizes = self.accelerator.gather_for_metrics(
                     self.accelerator.pad_across_processes(
-                        [prompts.input_ids, samples, prompt_sizes.to(samples.device)],
+                        [prompts['input_ids'], samples, prompt_sizes.to(samples.device)],
                         dim=1,
                         pad_index=self.tokenizer.pad_token_id,
                     )
@@ -458,7 +475,7 @@ class AccelerateRLTrainer(BaseRLTrainer):
             stats["time/generate"] = time() - generate_time
 
             if self.accelerator.is_main_process:
-                str_samples, str_prompts, str_outputs = self.decode(all_prompts, all_samples, all_prompt_sizes)
+                str_samples, str_prompts, str_outputs, str_prefixes = self.decode(all_prompts, all_samples, all_prompt_sizes)
 
                 columns = ["prompt", "output"]
                 columns_data = [str_prompts, str_outputs]
@@ -568,13 +585,13 @@ class AccelerateRLTrainer(BaseRLTrainer):
             results = self.evaluate()
             self.accelerator.log(results, step=self.iter_count)
 
-        tbar = logging.tqdm(
-            initial=self.iter_count,
-            total=self.total_steps,
-            disable=not self.accelerator.is_local_main_process,
-            position=0,
-            leave=True,
-        )
+        # tbar = logging.tqdm(
+        #     initial=self.iter_count,
+        #     total=self.total_steps,
+        #     disable=not self.accelerator.is_local_main_process,
+        #     position=0,
+        #     leave=True,
+        # )
 
         best_reward = -float("inf")
 
@@ -645,8 +662,8 @@ class AccelerateRLTrainer(BaseRLTrainer):
                         self.accelerator.log(stats, step=self.iter_count)
 
                     desc = " | ".join(f"{k}: {v:.2f}" for k, v in stats.items() if k.startswith("loss"))
-                    tbar.set_description(f"[{desc}]")
-                    tbar.update()
+                    # tbar.set_description(f"[{desc}]")
+                    # tbar.update()
 
                     if self.iter_count >= self.total_steps:
                         subfolder = f"checkpoint_{self.iter_count:0{len(str(self.total_steps))}d}"
@@ -657,7 +674,7 @@ class AccelerateRLTrainer(BaseRLTrainer):
                 self.post_backward_callback()
 
             self.post_epoch_callback()
-        tbar.close()
+        # tbar.close()
 
     @abstractmethod
     def get_arch(self, config: TRLConfig):
@@ -736,13 +753,13 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
         if config.model.model_arch_type == "seq2seq":
             self.generate_kwargs = dict(
                 config.method.gen_kwargs,
-                eos_token_id=self.tokenizer.eos_token_id,
+                eos_token_id=self.tokenizer.eop_token_id,
                 pad_token_id=self.tokenizer.pad_token_id,
             )
             if config.method.gen_experience_kwargs is not None:
                 self.generate_experience_kwargs = dict(
                     config.method.gen_experience_kwargs,
-                    eos_token_id=self.tokenizer.eos_token_id,
+                    eos_token_id=self.tokenizer.eop_token_id,
                     pad_token_id=self.tokenizer.pad_token_id,
                 )
             else:
@@ -751,13 +768,13 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
             self.generate_kwargs = dict(
                 config.method.gen_kwargs,
                 eos_token_id=self.tokenizer.eos_token_id,
-                pad_token_id=self.tokenizer.eos_token_id,
+                pad_token_id=self.tokenizer.pad_token_id,
             )
             if config.method.gen_experience_kwargs is not None:
                 self.generate_experience_kwargs = dict(
                     config.method.gen_experience_kwargs,
                     eos_token_id=self.tokenizer.eos_token_id,
-                    pad_token_id=self.tokenizer.eos_token_id,
+                    pad_token_id=self.tokenizer.pad_token_id,
                 )
             else:
                 self.generate_experience_kwargs = None
@@ -804,6 +821,7 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
         advantages, returns = self.config.method.get_advantages_and_returns(old_values, old_rewards, response_length)
 
         if self.config.model.model_arch_type == "seq2seq":
+            # TODO: To be modified for glm and chatglm
             input_ids = query_tensors
             decoder_input_ids = response_tensors
             attention_mask = input_ids.ne(self.tokenizer.pad_token_id).long().to(self.accelerator.device)
@@ -942,10 +960,12 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
             exp_generate_time = time()
 
             # Generate samples from the language model (similar to using HuggingFace `generate` method)
+            logger.debug(f"generate() input `batch` keys: {batch.keys()}")
             samples = self.generate(**batch)
-            # generated_texts = self.tokenizer.batch_decode(samples, skip_special_tokens=True)
-            # for generated_text in generated_texts:
-            #     logger.info(generated_text)
+            # for i in range(len(batch['input_ids'])):
+            #     p = self.tokenizer.decode(batch['input_ids'][i], skip_special_tokens=True)
+            #     gt = self.tokenizer.decode(samples[i], skip_special_tokens=True)
+            #     logger.debug(f"prompt: {p}, generated result: {gt}, samples: {samples[i]}")
             stats["time/exp_generate"] = time() - exp_generate_time
 
             prompt_tensors = batch['input_ids']
@@ -953,17 +973,17 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
 
             prompt_sizes = torch.tensor([prompt_tensors.shape[1]] * len(prompt_tensors), device=device)
             padded_samples = self.accelerator.pad_across_processes(
-                samples, dim=1, pad_index=self.tokenizer.eos_token_id, pad_first=False
+                samples, dim=1, pad_index=self.tokenizer.pad_token_id, pad_first=False
             )
             padded_prompts = self.accelerator.pad_across_processes(
-                prompt_tensors, dim=1, pad_index=self.tokenizer.eos_token_id, pad_first=False
+                prompt_tensors, dim=1, pad_index=self.tokenizer.pad_token_id, pad_first=False
             )
             gathered_samples = self.accelerator.gather(padded_samples)
             gathered_prompts = self.accelerator.gather(padded_prompts)
             gathered_prompt_sizes = self.accelerator.gather(prompt_sizes)
 
             if self.accelerator.is_main_process:
-                all_str_samples, all_str_prompts, all_str_outputs = self.decode(
+                all_str_samples, all_str_prompts, all_str_outputs, all_str_prefixes = self.decode(
                     gathered_prompts, gathered_samples, gathered_prompt_sizes
                 )
 
@@ -989,14 +1009,14 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
             else:
                 scores = torch.tensor(all_scores[0])
 
-            str_samples, str_prompts, str_outputs = self.decode(prompt_tensors, samples)
+            str_samples, str_prompts, str_outputs, str_prefixes = self.decode(prompt_tensors, samples)
 
             # Pad the sample outputs
             outputs = self.tokenizer(str_outputs).input_ids
-            if self.config.model.model_arch_type == "seq2seq":
-                # add <pad> to the start of the output
-                for i in range(len(outputs)):
-                    outputs[i] = [self.tokenizer.pad_token_id] + outputs[i]
+            # if self.config.model.model_arch_type == "seq2seq":
+            #     # add <pad> to the start of the output
+            #     for i in range(len(outputs)):
+            #         outputs[i] = [self.tokenizer.pad_token_id] + outputs[i]
 
             outputs = list(map(torch.LongTensor, outputs))
             maxsize = max(map(len, outputs))
@@ -1029,17 +1049,47 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
                 scores = torch.clip(scores, -clip_reward, clip_reward)
 
             # Precompute logprobs, values
+            logger.debug(f"sample_outputs shape: {sample_outputs.shape}")
+            logger.debug(f"str_prompts[0]: {str_prompts[0]}, str_outputs[0]: {str_outputs[0]}, input_ids[0]: {batch['input_ids'][0]}, sample_outputs[0]: {sample_outputs[0]}")
+            logger.debug(f"str_prompts[1]: {str_prompts[1]}, str_outputs[1]: {str_outputs[1]}, input_ids[1]: {batch['input_ids'][1]}, sample_outputs[1]: {sample_outputs[1]}")
             if self.config.model.model_arch_type == "seq2seq":
-                attention_mask = batch['attention_mask'].to(device)
-                prompt_tensors = batch['input_ids'].to(device)
-                decoder_attention_mask = sample_outputs.not_equal(self.tokenizer.pad_token_id)
-                decoder_attention_mask[:, 0] = 1
+                self.tokenizer.padding_side = "right"
+                prompt_tensors, attention_mask, position_ids = [], [], []
+                for str_prompt, str_output, str_prefix in zip(str_prompts, str_outputs, str_prefixes):
+                    encoded_prompt = self.tokenizer(str_prompt, str_prefix + self.tokenizer.mask_token)
+                    prompt_length = len(encoded_prompt['input_ids'])
+                    label_length = len(self.tokenizer.tokenize(str_output)) + 1
+                    if prompt_length + label_length > self.max_length:
+                        num_tokens_to_remove = prompt_length + label_length - self.max_length
+                        for _ in range(num_tokens_to_remove):
+                            if prompt_length > label_length:
+                                prompt_length -= 1
+                            else:
+                                label_length -= 1
+                    else:
+                        label_length = self.max_length - prompt_length
+                    assert prompt_length > 0
+                    assert label_length > 0
+                    assert prompt_length + label_length <= self.max_length
+                    encoded_dict = self.tokenizer(str_prompt, str_prefix + self.tokenizer.mask_token,
+                                                  max_length=prompt_length,
+                                                  truncation="only_first",
+                                                  return_tensors="pt",
+                                                  return_attention_mask=True,
+                                                  return_token_type_ids=False)
+                    encoded_dict = self.tokenizer.build_inputs_for_generation(encoded_dict, targets=str_output,
+                                                                              max_gen_length=label_length, padding=True)
+                    prompt_tensors.append(encoded_dict['input_ids'])
+                    attention_mask.append(encoded_dict['attention_mask'])
+                    position_ids.append(encoded_dict['position_ids'])
+                prompt_tensors = torch.cat(prompt_tensors).to(device)
+                attention_mask = torch.cat(attention_mask).to(device)
+                position_ids = torch.cat(position_ids).to(device)
                 with torch.no_grad():
                     outputs = self.model(
                         input_ids=prompt_tensors,
                         attention_mask=attention_mask,
-                        decoder_input_ids=sample_outputs,
-                        decoder_attention_mask=decoder_attention_mask,
+                        position_ids=position_ids
                     )
                     logits = outputs.logits
                     values = outputs.value
@@ -1047,18 +1097,21 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
                         ref_logits = self.model.forward_hydra(
                             input_ids=prompt_tensors,
                             attention_mask=attention_mask,
-                            decoder_input_ids=sample_outputs,
-                            decoder_attention_mask=decoder_attention_mask,
+                            position_ids=position_ids,
+                            # decoder_input_ids=sample_outputs,
+                            # decoder_attention_mask=decoder_attention_mask,
                             return_dict=True,
                         ).logits
                     else:
                         ref_logits = self.ref_model(
                             input_ids=prompt_tensors,
                             attention_mask=attention_mask,
-                            decoder_input_ids=sample_outputs,
-                            decoder_attention_mask=decoder_attention_mask,
+                            position_ids=position_ids,
+                            # decoder_input_ids=sample_outputs,
+                            # decoder_attention_mask=decoder_attention_mask,
                             return_dict=True,
                         ).logits
+                self.tokenizer.padding_side = self.padding_side
             else:
                 all_tokens = torch.cat((prompt_tensors.to(device), sample_outputs), dim=1)
                 attention_mask = all_tokens.not_equal(self.tokenizer.pad_token_id).long().to(device)
@@ -1083,6 +1136,7 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
                         ref_logits = ref_logits.to(device)
 
             if self.config.model.model_arch_type == "seq2seq":
+                # TODO: to be tested against glm and chatglm
                 logprobs = logprobs_of_labels(logits[:, :-1, :], sample_outputs[:, 1:])
                 ref_logprobs = logprobs_of_labels(ref_logits[:, :-1, :], sample_outputs[:, 1:])
             else:
@@ -1098,6 +1152,7 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
 
             # Estimate the KL divergence between the model and reference model
             if self.config.model.model_arch_type == "seq2seq":
+                # TODO: to be modified for glm and chatglm
                 attention_mask = sample_outputs != self.tokenizer.pad_token_id
                 start = 0
             else:

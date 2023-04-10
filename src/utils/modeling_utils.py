@@ -334,6 +334,7 @@ def hf_get_decoder_blocks(model: nn.Module) -> Tuple[nn.Module]:
         "model.decoder.layers",
         "gpt_neox.layers",
         "decoder.block",
+        "glm.transformer.layers"
     )
     return findattr(model, hidden_layers_attrs)
 

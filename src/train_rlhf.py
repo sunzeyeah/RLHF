@@ -237,11 +237,15 @@ def main():
                                                return_token_type_ids=False)
                     input_ids_list.append(encodings_dict["input_ids"])
                     attention_mask_list.append(encodings_dict["attention_mask"])
+                elif "chatglm" in ppo_config.model.model_path:
+                    encoded_dict = tokenizer(prompt, pred, max_length=ppo_config.train.seq_length, return_tensors="pt",
+                                             truncation="longest_first", padding="max_length")
+                    input_ids_list.append(encoded_dict["input_ids"][0])
                 elif "glm" in ppo_config.model.model_path:
                     # TODO: to be modified for and tested against glm
                     encoded_prompt = tokenizer(prompt, tokenizer.mask_token)
                     prompt_length = len(encoded_prompt['input_ids'])
-                    label_length = len(tokenizer.tokenize(pred)) + (1 if "chatglm" not in ppo_config.model.model_path else 0)
+                    label_length = len(tokenizer.tokenize(pred))
                     if prompt_length + label_length > ppo_config.train.seq_length:
                         num_tokens_to_remove = prompt_length + label_length - ppo_config.train.seq_length
                         for _ in range(num_tokens_to_remove):
@@ -273,7 +277,7 @@ def main():
             #     return_tensors="pt",
             # )
             input_ids = torch.stack(input_ids_list, dim=0).to(device)
-            attention_mask = torch.stack(attention_mask_list, dim=0).to(device)
+            attention_mask = torch.stack(attention_mask_list, dim=0).to(device) if len(attention_mask_list) > 0 else None
             position_ids = torch.stack(position_ids_list, dim=0).to(device) if len(position_ids_list) > 0 else None
             with torch.no_grad():
                 sub_scores = reward_model(input_ids, attention_mask, position_ids)

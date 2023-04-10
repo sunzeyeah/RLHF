@@ -991,6 +991,7 @@ class AutoModelForSeq2SeqLMWithValueHead(PreTrainedModelWrapper):
             self,
             input_ids: Optional[torch.LongTensor] = None,
             attention_mask: Optional[torch.FloatTensor] = None,
+            position_ids: Optional[torch.FloatTensor] = None,
             decoder_input_ids: Optional[torch.LongTensor] = None,
             decoder_attention_mask: Optional[torch.FloatTensor] = None,
             encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
@@ -1008,6 +1009,7 @@ class AutoModelForSeq2SeqLMWithValueHead(PreTrainedModelWrapper):
         forward_kwargs = self.get_compatible_forward_kwargs(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
@@ -1025,11 +1027,17 @@ class AutoModelForSeq2SeqLMWithValueHead(PreTrainedModelWrapper):
         forward_kwargs["output_hidden_states"] = True
         forward_kwargs["return_dict"] = True
 
+        # print(f"forward_kwargs: {forward_kwargs.keys()}, input_ids shape: {forward_kwargs['input_ids'].shape}, attention_mask shape: {forward_kwargs['attention_mask'].shape}")
         outputs = self.base_model(**forward_kwargs)
-        last_hidden_state = outputs.decoder_hidden_states[-1]
+        # print(f"outputs: {outputs.keys()}")
+        try:
+            hidden_states = outputs.mems
+        except KeyError:
+            hidden_states = outputs.hidden_states
+        last_hidden_state = hidden_states[-1]
         value = self.v_head(last_hidden_state).squeeze(-1)
 
-        return Seq2SeqLMOutputWithValue(**outputs, value=value)
+        return Seq2SeqLMOutputWithValue(loss=outputs.loss, logits=outputs.logits, decoder_hidden_states=hidden_states, value=value)
 
     def generate(self, *args, **kwargs) -> Union[ModelOutput, torch.LongTensor]:
         return self.base_model.generate(*args, **kwargs)
