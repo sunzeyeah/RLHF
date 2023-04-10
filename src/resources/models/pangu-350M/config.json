@@ -1,4 +1,5 @@
 {
+  "model_name_or_path": "sunzeyeah/pangu-350M",
   "activation_function": "gelu",
   "architectures": [
     "GPTPanguForCausalLM"
@@ -10,7 +11,7 @@
   "intermediate_size": null,
   "layer_norm_epsilon": 1e-05,
   "max_position_embeddings": 1024,
-  "model_type": "gpt_pangu",
+  "model_type": "pangu",
   "num_heads": 16,
   "num_layers": 24,
   "resid_pdrop": 0.1,

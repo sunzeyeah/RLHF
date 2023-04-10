@@ -36,11 +36,22 @@ class RewardModel(PreTrainedModel):
             attention_mask=None,
             position_ids=None
     ):
+        batch_size = input_ids.shape[0]
         transformer_outputs = self.transformer(input_ids, attention_mask=attention_mask, position_ids=position_ids)
         if self.model_type == "glm":
             hidden_states = transformer_outputs.mems[-1]
-        else:
+        elif self.model_type == "chatglm":
             hidden_states = transformer_outputs[0]
+            seq_len, batch_size, hidden_size = hidden_states.shape
+            hidden_states = hidden_states.view(batch_size, seq_len, hidden_size)
+        elif self.model_type == "pangu":
+            hidden_states = transformer_outputs[0]
+            hidden_states = hidden_states.squeeze(1)
+        else:
+            raise ValueError(f"Unsupported model type: {self.model_type}")
+
+        assert len(hidden_states.shape) == 3
+
         rewards = self.v_head(hidden_states).squeeze(-1)
 
         # outputs = self.body(sequences, attention_mask=attention_mask)
@@ -50,6 +61,8 @@ class RewardModel(PreTrainedModel):
         rewards = rewards.mean(dim=-1)
         if len(rewards.shape) == 2:
             rewards = rewards.squeeze(1)    # ensure shape is (B)
+
+        assert len(rewards.shape) == 1 and rewards.shape[0] == batch_size
 
         return rewards
 

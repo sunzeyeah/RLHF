@@ -1,5 +1,5 @@
 {
-  "model_name_or_path": "BAAI/glm-large-chinese",
+  "model_name_or_path": "sunzeyeah/glm-350M-chinese",
   "architectures": [
     "GLMModel"
   ],

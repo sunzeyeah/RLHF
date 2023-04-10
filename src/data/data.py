@@ -57,7 +57,7 @@ class PairwiseDataset(Dataset):
         elif "chatglm" in self.args.model_name_or_path:
             chosen_encodings_dict = self.tokenizer(prompt, chosen_answer, max_length=self.args.max_length,
                                                    truncation="longest_first", padding="max_length", return_tensors="pt")
-            rejected_encodings_dict = self.tokenizer(prompt, prefix+rejected_answer, max_length=self.args.max_length,
+            rejected_encodings_dict = self.tokenizer(prompt, rejected_answer, max_length=self.args.max_length,
                                                      truncation="longest_first", padding="max_length", return_tensors="pt")
             return {
                 "chosen_input_ids": chosen_encodings_dict["input_ids"][0],

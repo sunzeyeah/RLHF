@@ -1,5 +1,5 @@
 {
-  "model_name_or_path": "THUDM/glm-10b-chinese",
+  "model_name_or_path": "sunzeyeah/glm-10B-chinese",
   "architectures": [
     "GLMModel"
   ],

@@ -40,5 +40,5 @@ CUDA_LAUNCH_BLOCKING=1 deepspeed --num_gpus 1 $MAIN \
   --deepspeed_config "stage-3.json" \
   --do_eval \
   --eval_filename $EVAL_FILENAME \
-  --eval_batch_size 32 \
+  --eval_batch_size 24 \
   > out/train_reward_${MODEL}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1 &
