@@ -216,7 +216,7 @@ def main():
         res = reward_model.load_state_dict(st, strict=False)
 
     device = torch.device(f"cuda:{args.local_rank}") if torch.cuda.is_available() else torch.device("cpu")
-    reward_model.half()
+    # reward_model.half()
     reward_model.eval()
     reward_model.to(device)
     logger.info(f"Finish loading reward model from {args.reward_checkpoint}")
@@ -299,7 +299,7 @@ def main():
     ppo_config.tokenizer.tokenizer_path = args.tokenizer_path
     ppo_config.optimizer.kwargs['lr'] = args.learning_rate
     ppo_config.optimizer.kwargs['weight_decay'] = args.weight_decay
-    ppo_config.method.chunk_size = args.train_batch_size
+    ppo_config.method.chunk_size = args.eval_batch_size
     ppo_config.train.lora_rank = args.lora_rank
     ppo_config.train.lora_alpha = args.lora_alpha
     ppo_config.train.lora_train_bias = args.lora_train_bias

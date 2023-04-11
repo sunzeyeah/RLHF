@@ -150,13 +150,13 @@ class GLMTokenizerMixin:
         inputs = self._collate(samples)
         return GLMBatchEncoding(inputs)
 
-    def build_inputs_for_generation(self, model_input: BatchEncoding, max_gen_length=512, targets=None, padding=False):
+    def build_inputs_for_generation(self, model_input: BatchEncoding, max_gen_length=512, targets=None,
+                                    padding=False):
         mask_ids = self.mask_token_ids
         input_ids = model_input.input_ids
         batch_size, seq_length = input_ids.shape[:2]
-        position_id, block_position_id = list(range(seq_length)), [0 for _ in range(seq_length)]
-        position_ids, block_position_ids = [], []
         labels = None
+        # create labels
         if targets is not None:
             is_batched = isinstance(targets, (list, tuple))
             targets = self(targets, add_special_tokens=False, padding=False).input_ids
@@ -173,6 +173,9 @@ class GLMTokenizerMixin:
             targets = torch.tensor(targets, dtype=input_ids.dtype, device=input_ids.device)
             labels = torch.tensor(labels, dtype=input_ids.dtype, device=input_ids.device)
             labels = torch.cat((input_ids.new_full((batch_size, seq_length), self.pad_token_id), labels), dim=1)
+        # create position ids
+        position_id, block_position_id = list(range(seq_length)), [0 for _ in range(seq_length)]
+        position_ids, block_position_ids = [], []
         for i in range(batch_size):
             mask_positions = []
             for mask_id in mask_ids:
@@ -186,6 +189,7 @@ class GLMTokenizerMixin:
         position_ids = torch.tensor(position_ids, dtype=input_ids.dtype, device=input_ids.device)
         block_position_ids = torch.tensor(block_position_ids, dtype=input_ids.dtype, device=input_ids.device)
         position_ids = torch.stack((position_ids, block_position_ids), dim=1)
+        # create attention mask
         attention_mask = model_input.attention_mask
         attention_mask = attention_mask.unsqueeze(1).expand(-1, seq_length + max_gen_length, -1)
         generation_attention_mask = torch.cat([attention_mask.new_zeros((seq_length, max_gen_length)),
@@ -193,16 +197,19 @@ class GLMTokenizerMixin:
                                               dim=0).unsqueeze(0).expand(batch_size, -1, -1)
         attention_mask = torch.cat((attention_mask, generation_attention_mask), dim=2)
         attention_mask = attention_mask.unsqueeze(1)
+        # create input ids
         if targets is None:
             input_ids = torch.cat((input_ids, input_ids.new_full((batch_size, 1), self.sop_token_id)), dim=-1)
         else:
             input_ids = torch.cat((input_ids, targets[:, :-1]), dim=1)
+
         batch = {"input_ids": input_ids, "position_ids": position_ids}
         if labels is None:
             batch["generation_attention_mask"] = attention_mask
         else:
             batch["attention_mask"] = attention_mask
             batch["labels"] = labels
+
         return BatchEncoding(batch)
 
 

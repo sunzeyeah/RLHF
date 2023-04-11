@@ -445,6 +445,7 @@ class AccelerateRLTrainer(BaseRLTrainer):
             all_prompt_sizes = []
             generate_time = time()
             for i_prompt, prompts in enumerate(self.eval_dataloader):
+                logger.debug(f"evaluate() - prompts keys: {prompts.keys()}, input_ids: {prompts['input_ids'].shape}")
                 if self.generate_sweep_kwarg:
                     samples = self.generate_eval(**prompts, **{gen_sweep_arg: gen_sweep_value})
                 else:
@@ -452,8 +453,6 @@ class AccelerateRLTrainer(BaseRLTrainer):
 
                 # if self.config.model.model_arch_type == "seq2seq":
                 #     samples = samples[:, 1:].contiguous()
-
-                logger.debug(f"prompts keys: {prompts.keys()}, input_ids: {prompts['input_ids'].shape}")
 
                 prompt_sizes = torch.tensor(prompts['input_ids'].shape[1]).repeat(len(prompts['input_ids']))
                 prompts, samples, prompt_sizes = self.accelerator.gather_for_metrics(
@@ -588,13 +587,13 @@ class AccelerateRLTrainer(BaseRLTrainer):
             results = self.evaluate()
             self.accelerator.log(results, step=self.iter_count)
 
-        # tbar = logging.tqdm(
-        #     initial=self.iter_count,
-        #     total=self.total_steps,
-        #     disable=not self.accelerator.is_local_main_process,
-        #     position=0,
-        #     leave=True,
-        # )
+        tbar = tqdm(
+            initial=self.iter_count,
+            total=self.total_steps,
+            disable=not self.accelerator.is_local_main_process,
+            position=0,
+            leave=True,
+        )
 
         best_reward = -float("inf")
 
@@ -665,8 +664,8 @@ class AccelerateRLTrainer(BaseRLTrainer):
                         self.accelerator.log(stats, step=self.iter_count)
 
                     desc = " | ".join(f"{k}: {v:.2f}" for k, v in stats.items() if k.startswith("loss"))
-                    # tbar.set_description(f"[{desc}]")
-                    # tbar.update()
+                    tbar.set_description(f"[{desc}]")
+                    tbar.update()
 
                     if self.iter_count >= self.total_steps:
                         subfolder = f"checkpoint_{self.iter_count:0{len(str(self.total_steps))}d}"
@@ -677,7 +676,7 @@ class AccelerateRLTrainer(BaseRLTrainer):
                 self.post_backward_callback()
 
             self.post_epoch_callback()
-        # tbar.close()
+        tbar.close()
 
     @abstractmethod
     def get_arch(self, config: TRLConfig):
@@ -821,6 +820,7 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
         old_values = batch.values.to(self.accelerator.device)
         old_rewards = batch.rewards.to(self.accelerator.device)
         response_length = old_rewards.shape[1]
+        logger.debug(f"loss() - input ids shape: {input_ids.shape}, attention mask shape: {attention_mask.shape}")
 
         advantages, returns = self.config.method.get_advantages_and_returns(old_values, old_rewards, response_length)
 
@@ -834,6 +834,7 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
             #     decoder_input_ids.ne(self.tokenizer.pad_token_id).long().to(self.accelerator.device)
             # )
             # decoder_attention_mask[:, 0] = 1
+            logger.debug(f"loss() - position ids shape: {position_ids.shape}")
 
             # Forward pass
             outputs = self.model(
@@ -861,7 +862,9 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
             outputs = self.model(input_ids, attention_mask, return_dict=True)
             logits = outputs.logits
             values_pred = outputs.value
+            logger.info(f"loss() - s1 values_pred shape: {values_pred.shape}")
             values_pred = values_pred[:, :-1]
+            logger.info(f"loss() - s2 values_pred shape: {values_pred.shape}")
             logprobs = logprobs_of_labels(logits[:, :-1, :], input_ids[:, 1:])
 
             start = input_ids.shape[1] - 1
@@ -871,6 +874,7 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
                 values_pred[:, start:end],
                 attention_mask[:, start:end],
             )
+            logger.info(f"loss() - s3 values_pred shape: {values_pred.shape}")
 
         # TODO: need debugging here
         loss, stats = self.config.method.loss(
@@ -913,7 +917,7 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
         self.kl_ctl.update(self.mean_kl.item(), n_steps=self.config.train.batch_size)
 
     def prepare_learning(self):
-        eval_dataloader = self.eval_pipeline.create_loader(self.config.train.batch_size)
+        eval_dataloader = self.eval_pipeline.create_loader(self.config.method.chunk_size)
         self.eval_dataloader = self.accelerator.prepare_data_loader(eval_dataloader)
         self.train_dataloader = self.store.create_loader(self.config.train.batch_size, shuffle=True)
 
@@ -969,10 +973,11 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
             # Generate samples from the language model (similar to using HuggingFace `generate` method)
             logger.debug(f"generate() input `batch` keys: {batch.keys()}")
             samples = self.generate(**batch)
-            # for i in range(len(batch['input_ids'])):
-            #     p = self.tokenizer.decode(batch['input_ids'][i], skip_special_tokens=True)
-            #     gt = self.tokenizer.decode(samples[i], skip_special_tokens=True)
-            #     logger.debug(f"prompt: {p}, generated result: {gt}, samples: {samples[i]}")
+            for i in range(len(batch['input_ids'])):
+                p = self.tokenizer.decode(batch['input_ids'][i], skip_special_tokens=True)
+                gt = self.tokenizer.decode(samples[i], skip_special_tokens=True)
+                logger.debug(f"prompt: {p}, generated result: {gt}, samples: {samples[i]}")
+            logger.debug(f"make_experience() - input ids shape: {batch['input_ids'].shape}, samples shape: {samples.shape}")
             stats["time/exp_generate"] = time() - exp_generate_time
 
             prompt_tensors = batch['input_ids']
@@ -1057,7 +1062,7 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
             # Precompute logprobs, values
             logger.debug(f"sample_outputs shape: {sample_outputs.shape}")
             logger.debug(f"str_prompts[0]: {str_prompts[0]}, str_outputs[0]: {str_outputs[0]}, input_ids[0]: {batch['input_ids'][0]}, sample_outputs[0]: {sample_outputs[0]}")
-            logger.debug(f"str_prompts[1]: {str_prompts[1]}, str_outputs[1]: {str_outputs[1]}, input_ids[1]: {batch['input_ids'][1]}, sample_outputs[1]: {sample_outputs[1]}")
+            # logger.debug(f"str_prompts[1]: {str_prompts[1]}, str_outputs[1]: {str_outputs[1]}, input_ids[1]: {batch['input_ids'][1]}, sample_outputs[1]: {sample_outputs[1]}")
             self.tokenizer.padding_side = "right"
             if self.config.model.model_arch_type == "seq2seq":
                 input_ids, attention_mask, position_ids = [], [], []
@@ -1168,19 +1173,20 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
             # Estimate the KL divergence between the model and reference model
             if self.config.model.model_arch_type == "seq2seq":
                 # TODO: to be modified for glm and chatglm
-                attention_mask = sample_outputs != self.tokenizer.pad_token_id
+                attention_mask_tmp = sample_outputs != self.tokenizer.pad_token_id
                 start = 0
             else:
+                attention_mask_tmp = attention_mask
                 start = prompt_tensors.shape[1] - 1
 
-            ends = start + attention_mask[:, start:].sum(1)
+            ends = start + attention_mask_tmp[:, start:].sum(1)
 
             # Get the logprobs and values, for tokens that are not padding
             # or beginning of sequences tokens. These are from the model (not the reference model)
             all_values = [values[ix, start : ends[ix]] for ix in range(n_samples)]
             all_logprobs = [logprobs[ix, start : ends[ix]] for ix in range(n_samples)]
 
-            log_ratio = (logprobs - ref_logprobs) * attention_mask[:, :-1].cpu()
+            log_ratio = (logprobs - ref_logprobs) * attention_mask_tmp[:, :-1].cpu()
             self.mean_kl = (log_ratio.exp() - 1 - log_ratio).mean().to(device)
             kl_penalty = self.kl_ctl.value * -log_ratio
             kl_penalty = [xs[start : ends[ix]] for ix, xs in enumerate(kl_penalty)]
@@ -1193,6 +1199,8 @@ class AcceleratePPOTrainer(AccelerateRLTrainer):
 
                 rewards = kl_penalty[sample_idx]
                 rewards[-1] += scores[sample_idx].cpu()
+
+                logger.debug(f"make_experience() - attention mask shape: {attention_mask[sample_idx].shape}")
 
                 ppo_rl_elements.append(
                     PPORLElement(

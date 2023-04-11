@@ -204,9 +204,12 @@ class PanguPipeline(BasePipeline):
         prompt = data['prompt']
         prefix = data['prefix']
         encoded_dict = self.tokenizer(prompt, self.tokenizer.sep_token + prefix,
-                                      max_length=self.max_prompt_length, return_tensors="pt",
-                                      truncation="only_first", padding="max_length",
-                                      add_special_tokens=False, return_token_type_ids=False)
+                                      max_length=self.max_prompt_length,
+                                      return_tensors="pt",
+                                      truncation="only_first",
+                                      # padding="max_length",
+                                      add_special_tokens=False,
+                                      return_token_type_ids=False)
 
         return {
             "input_ids": encoded_dict['input_ids'][0],
@@ -237,9 +240,12 @@ class GLMPipeline(BasePipeline):
         prompt = data['prompt']
         prefix = data['prefix']
 
-        inputs = self.tokenizer(prompt, prefix + self.tokenizer.mask_token, max_length=self.max_prompt_length,
-                                truncation="only_first", padding="max_length",
-                                return_tensors="pt", return_token_type_ids=False)
+        inputs = self.tokenizer(prompt, prefix + self.tokenizer.mask_token,
+                                max_length=self.max_prompt_length,
+                                truncation="only_first",
+                                # padding="max_length",
+                                return_tensors="pt",
+                                return_token_type_ids=False)
         inputs_glm = self.tokenizer.build_inputs_for_generation(inputs, max_gen_length=self.max_generation_length,
                                                                 padding=True)
         return {
