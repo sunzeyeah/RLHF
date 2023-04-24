@@ -232,14 +232,14 @@ def main():
     if args.do_pred:
         model.eval()
         device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
-        reward_model = reward_model.to(device)
+        reward_model = reward_model.half().to(device)
         sampler = SequentialSampler(test_dataset)
         test_loader = DataLoader(test_dataset, batch_size=args.eval_batch_size, sampler=sampler)
         rewards = []
         with torch.no_grad():
             for batch in tqdm(test_loader, desc="Prediction"):
                 chosen_input_ids = batch['input_ids'].to(device)
-                chosen_attention_mask = batch['attention_mask'].to(device)
+                chosen_attention_mask = batch['attention_mask'].to(device) if 'attention_mask' in batch else None
                 chosen_position_ids = batch['position_ids'].to(device) if 'position_ids' in batch else None
                 output = reward_model(chosen_input_ids, chosen_attention_mask, chosen_position_ids)
                 rewards.extend(output['chosen_reward'].cpu().detach().tolist())

@@ -26,6 +26,12 @@ class RewardModel(PreTrainedModel):
             convert_to_lora_recursively(model, config.lora_rank, config.lora_alpha)
             lora.mark_only_lora_as_trainable(model, config.lora_train_bias)
 
+    def gradient_checkpointing_enable(self):
+        self.transformer.gradient_checkpointing_enable()
+
+    def gradient_checkpointing_disable(self):
+        self.transformer.gradient_checkpointing_disable()
+
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, PreTrainedModel):
             module.gradient_checkpointing = value

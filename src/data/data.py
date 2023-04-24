@@ -8,6 +8,8 @@ import torch
 
 from tqdm import tqdm
 from torch.utils.data import Dataset
+from torch.nn.utils.rnn import pad_sequence
+import torch.nn.functional as F
 
 from src.utils import logger
 from src.utils.nlp_utils import clean_text
@@ -18,6 +20,43 @@ class DataCollatorReward:
         batch = {"input_ids": torch.cat([f[0] for f in data] + [f[2] for f in data]),
                  "attention_mask": torch.cat([f[1] for f in data] + [f[3] for f in data]),
                  "labels": torch.tensor([0] * len(data) + [1] * len(data))}
+        return batch
+
+
+class DataCollatorRLHF:
+
+    def __init__(self, max_token_len, inference_tp_size):
+        self.max_token_len = max_token_len
+        self.inference_tp_size = inference_tp_size
+
+    def __call__(self, data):
+        batch = {}
+        pad_token_id = data[-1][-1]
+
+        prompt = pad_sequence([f[0] for f in data],
+                              padding_value=pad_token_id,
+                              batch_first=True)
+        prompt_mask = pad_sequence([f[1] for f in data],
+                                   padding_value=0,
+                                   batch_first=True)
+
+        ### make sure the final ouput is a seqence of 2**?
+        length = prompt.size()[-1]
+        pad_length = self.max_token_len - length
+        if pad_length > 0:
+            batch["prompt"] = F.pad(prompt,
+                                    pad=(pad_length, 0),
+                                    mode='constant',
+                                    value=pad_token_id)
+            batch["prompt_att_mask"] = F.pad(prompt_mask,
+                                             pad=(pad_length, 0),
+                                             mode='constant',
+                                             value=0)
+        else:
+            batch["prompt"] = prompt
+            batch["prompt_att_mask"] = prompt_mask
+        batch["prompt"] = batch["prompt"].flip(1)
+        batch["prompt_att_mask"] = batch["prompt_att_mask"].flip(1)
         return batch
 
 
@@ -233,77 +272,51 @@ class SFTDataset(Dataset):
         return datasets
 
 
-class RLHFDataset(Dataset):
-    def __init__(self, args, filename, tokenizer):
-        self.args = args
-        self.tokenizer = tokenizer
+class RLHFDataset:
+    def __init__(self, max_size, small_batch_size):
+        self.dataset = []
+        self.max_size = max_size
+        self.small_batch_size = small_batch_size
 
-        self.post_list = self.load_dataset(filename)
-
-        for k in range(5):
-            logger.info(f"RLHFDataset sample-{k}\n: {self.post_list[k]}")
-
-    def __len__(self):
-        return len(self.post_list)
-
-    def __getitem__(self, idx):
-        # sample = self.post_list[idx]
-        # encodings_dict = self.tokenizer(sample["prompt"], "模型回答:" + sample["label"], max_length=self.max_length,
-        #                                 truncation="longest_first", return_tensors="pt")
-        # text = self.tokenizer.decode(encodings_dict['input_ids'], skip_special_tokens=True).strip()
-        # return text
-        data = self.post_list[idx]
-        prompt = data['prompt']
-        label = data['label']
-        prefix = data['prefix']
-        if "glm" in self.args.model_name_or_path:
-            prompt_length = len(self.tokenizer.tokenize(prompt+prefix)) + 4
-            label_length = len(self.tokenizer.tokenize(label)) + 1
-            if prompt_length + label_length > self.args.max_length:
-                if prompt_length >= label_length:
-                    prompt_length -= prompt_length + label_length - self.args.max_length
-                else:
-                    label_length -= prompt_length + label_length - self.args.max_length
+    def seperate(self):
+        small_dataset = []
+        for large_batch in self.dataset:
+            if type(large_batch) == list or type(large_batch) == tuple:
+                large_size = len(large_batch[0])
+            elif type(large_batch) == dict:
+                large_size = len(large_batch[list(large_batch.keys())[0]])
             else:
-                label_length = self.args.max_length - prompt_length
-            encoded_dict = self.tokenizer(prompt, prefix + self.tokenizer.mask_token,
-                                          max_length=prompt_length,
-                                          truncation="only_first",
-                                          return_tensors="pt",
-                                          return_token_type_ids=False)
-            encoded_dict = self.tokenizer.build_inputs_for_generation(encoded_dict, targets=label,
-                                                                      max_gen_length=label_length, padding=True)
-            return {
-                "input_ids": encoded_dict['input_ids'][0],
-                "position_ids": encoded_dict['position_ids'][0],
-                "attention_mask": encoded_dict['attention_mask'][0],
-                "labels": encoded_dict['labels'][0],
-            }
+                large_size = len(large_batch)
+            for i in range(0, large_size, self.small_batch_size):
+                if type(large_batch) == list or type(large_batch) == tuple:
+                    small_dataset.append(
+                        [x[i:i + self.small_batch_size] for x in large_batch])
+                elif type(large_batch) == dict:
+                    small_dataset.append({
+                        k: v[i:i + self.small_batch_size]
+                        for k, v in large_batch.items()
+                    })
+                else:
+                    small_dataset.append(large_batch[i:i +
+                                                       self.small_batch_size])
+        self.free()
+
+        return small_dataset
+
+    def add(self, data):
+        if len(self.dataset) < self.max_size:
+            self.dataset.append(data)
+            if len(self.dataset) == self.max_size:
+                return self.seperate()
+            else:
+                return None
         else:
-            encoded_dict = self.tokenizer(prompt, prefix+label, max_length=self.args.max_length, return_tensors="pt",
-                                          truncation="longest_first", padding="max_length", return_token_type_ids=False)
+            raise ValueError(
+                "The dataset is full but we did not stop it. There is a bug in the code."
+            )
 
-            return encoded_dict
-
-    @staticmethod
-    def load_dataset(filename):
-        discard = 0
-        datasets = []
-        with open(filename, "r", encoding="utf-8") as f:
-            for i, line in tqdm(enumerate(f), desc="Load Dataset"):
-                item = json.loads(line)
-                prompt = clean_text(item['prompt'])
-                label = clean_text(item['answers'][0]['answer'])
-                prefix = item['prefix']
-
-                if len(prompt) <= 0 or len(label) <= 0:
-                    discard += 1
-                    continue
-                datasets.append({"prompt": prompt, "label": label, "prefix": prefix})
-
-        logger.info(f"Finish loading {os.path.basename(filename)}, # discarded: {discard}")
-
-        return datasets
+    def free(self):
+        self.dataset = []
 
 
 class OCNLIDataset(Dataset):
