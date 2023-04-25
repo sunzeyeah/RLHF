@@ -58,35 +58,43 @@ def get_parser():
                         help="PPO training mini batch size (per device)")
     parser.add_argument("--ppo_batch_numbers", type=int, default=1,
                         help="number of batches for PPO training")
-    parser.add_argument("--actor_weight_decay", type=float, default=0.01)
-    parser.add_argument("--critic_weight_decay", type=float, default=0.01)
+    parser.add_argument("--actor_weight_decay", type=float, default=0.1)
+    parser.add_argument("--critic_weight_decay", type=float, default=0.1)
     parser.add_argument("--warmup_ratio", type=int, default=0.1)
     parser.add_argument("--logging_steps", type=int, default=100)
     parser.add_argument('--disable_actor_dropout', action='store_true',
                         help='Disable the dropout of the actor model.')
-    parser.add_argument('--disable_actor_dropout', action='store_true',
+    parser.add_argument('--disable_critic_dropout', action='store_true',
                         help='Disable the dropout of the critic model.')
     parser.add_argument("--pretrain_coef", type=float, default=10.0,
                         help="coefficient of pretraining loss in ppo-ptx objective function")
     parser.add_argument("--save_total_limit", type=int, default=2)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
+    # deepspeed
+    parser.add_argument('--enable_hybrid_engine', action='store_true',
+                        help="Enable hybrid engine for actor model to optimize both inference and training through DeepSpeed.")
     parser.add_argument('--actor_zero_stage', type=int, default=0,
                         help='ZeRO optimization stage for Actor model (and clones).')
     parser.add_argument('--critic_zero_stage', type=int, default=0,
                         help='ZeRO optimization stage for Critic model (and reward).')
+    parser.add_argument('--offload', action='store_true', help='Enable ZeRO Offload techniques.')
+    parser.add_argument('--offload_reference_model', action='store_true',
+                        help='Enable ZeRO Offload techniques for reference model')
     parser.add_argument("--actor_gradient_checkpointing", action="store_true",
                         help="whether to use gradient checkpointing for actor model")
     parser.add_argument("--critic_gradient_checkpointing", action="store_true",
                         help="whether to use gradient checkpointing for critic model")
-    # parser.add_argument("--train_deepspeed_config", type=str, default=None)
-    # parser.add_argument("--eval_deepspeed_config", type=str, default=None)
+    parser.add_argument("--unpin_actor_parameters", action='store_true',
+                        help="Unpin actor's parameters during generation. This makes generation slower but requires less memory.")
+    parser.add_argument("--release_inference_cache", action='store_true',
+                        help="Release the memory cache used for inference. This makes generation preparation slower but might increase e2e throughput by using larger batch size.")
     parser.add_argument("--inference_tp_size", type=int, default=1,
                         help="Tensor-parallelism degree used for the inference-optimization. Please note hybrid-engine need to be enabled when using this feature.")
-    parser.add_argument('--offload', action='store_true', help='Enable ZeRO Offload techniques.')
-    parser.add_argument('--offload_reference_model', action='store_true',
-                        help='Enable ZeRO Offload techniques for reference model')
-    parser.add_argument("--num_layers_unfrozen", type=int, default=-1, help="Number of layers to unfreeze for fine-tuning")
+    parser.add_argument("--tp_gather_partition_size", type=int, default=8,
+                        help="Granularity to bring in layers for TP sharding inside the hybrid engine. Please note hybrid-engine and tp_inference_size > 1 need to be true when using this feature.")
+    # parser.add_argument("--num_layers_unfrozen", type=int, default=-1, help="Number of layers to unfreeze for fine-tuning")
     parser.add_argument('--enable_ema', action='store_true', help='Enable EMA checkpoint for the model.')
+    # lora
     parser.add_argument("--actor_lora_rank", type=int, default=0)
     parser.add_argument("--critic_lora_rank", type=int, default=0)
     parser.add_argument("--lora_alpha", type=int, default=1)
