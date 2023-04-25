@@ -14,7 +14,7 @@ from transformers import AutoModelForCausalLM, get_scheduler
 from transformers import AutoConfig, AutoModel
 from transformers.deepspeed import HfDeepSpeedConfig
 
-# from utils.ds_utils import get_train_ds_config, get_eval_ds_config
+from src.utils.config import get_train_ds_config, get_eval_ds_config
 # from utils.module.lora import convert_linear_layer_to_lora, only_optimize_lora_parameters
 from src.models import RewardModel
 from src.utils.logger import logger, RESOURCE_PATH
@@ -124,22 +124,17 @@ class DeepSpeedRLHFEngine:
         stime = log_init("Actor")
 
         # DS Config
-        deepspeed_config = os.path.join(RESOURCE_PATH, "config", "deepspeed", self.args.train_deepspeed_config)
-        ds_config = json.load(open(deepspeed_config, "r", encoding="utf-8"))
-        # ds_config = get_train_ds_config(
-        #     offload=self.args.offload,
-        #     stage=self.args.actor_zero_stage,
-        #     enable_hybrid_engine=self.args.enable_hybrid_engine,
-        #     inference_tp_size=self.args.inference_tp_size,
-        #     release_inference_cache=self.args.release_inference_cache,
-        #     pin_parameters=(not self.args.unpin_actor_parameters),
-        #     tp_gather_partition_size=self.args.tp_gather_partition_size,
-        #     max_out_tokens=self.args.max_prompt_seq_len +
-        #     self.args.max_answer_seq_len)
-        ds_config['train_micro_batch_size_per_gpu'] = self.args.ppo_train_batch_size
-        #TODO(jeff): we should probably set grad accumlation steps here as well for clarity
-        ds_config['train_batch_size'] = self.args.ppo_train_batch_size * \
-                                        torch.distributed.get_world_size() * self.args.gradient_accumulation_steps_actor
+        ds_config = get_train_ds_config(
+            global_batch_size=self.args.global_train_batch_size_actor,
+            micro_batch_size=self.args.ppo_train_batch_size,
+            offload=self.args.offload,
+            stage=self.args.actor_zero_stage,
+            enable_hybrid_engine=self.args.enable_hybrid_engine,
+            inference_tp_size=self.args.inference_tp_size,
+            release_inference_cache=self.args.release_inference_cache,
+            pin_parameters=(not self.args.unpin_actor_parameters),
+            tp_gather_partition_size=self.args.tp_gather_partition_size,
+            max_out_tokens=self.args.max_length + self.args.max_gen_length)
 
         # Model
         actor_model = create_hf_model(
@@ -174,7 +169,6 @@ class DeepSpeedRLHFEngine:
         )
 
         # DeepSpeed Engine
-        #TODO: move enable_hybrid_engine and pin_parameters to ds_config
         actor_engine, *_ = deepspeed.initialize(model=actor_model,
                                                 optimizer=optim,
                                                 lr_scheduler=lr_scheduler,
@@ -191,14 +185,10 @@ class DeepSpeedRLHFEngine:
         if zero_stage != 3:
             # If actor is ZeRO-3 then we use it for everything, otherwise assume we have enough memory for ref model
             zero_stage = 0
-        deepspeed_config = os.path.join(RESOURCE_PATH, "config", "deepspeed", self.args.eval_deepspeed_config)
-        ds_config = json.load(open(deepspeed_config, "r", encoding="utf-8"))
-        # ds_config = get_eval_ds_config(self.args.offload_reference_model,
-        #                                zero_stage)
-        ds_config['train_micro_batch_size_per_gpu'] = self.args.ppo_train_batch_size
-        #TODO(jeff): we should probably set grad accumlation steps here as well for clarity
-        ds_config['train_batch_size'] = self.args.ppo_train_batch_size * \
-                                        torch.distributed.get_world_size() * self.args.gradient_accumulation_steps_actor
+        ds_config = get_eval_ds_config(global_batch_size=self.args.global_train_batch_size_actor,
+                                       micro_batch_size=self.args.ppo_train_batch_size,
+                                       offload=self.args.offload_reference_model,
+                                       stage=zero_stage)
 
         ref_model = create_hf_model(AutoModelForCausalLM,
                                     actor_model_name_or_path, self.tokenizer,
@@ -217,14 +207,10 @@ class DeepSpeedRLHFEngine:
         if zero_stage != 3:
             # If actor is ZeRO-3 then we use it for everything, otherwise assume we have enough memory
             zero_stage = 0
-        deepspeed_config = os.path.join(RESOURCE_PATH, "config", "deepspeed", self.args.eval_deepspeed_config)
-        ds_config = json.load(open(deepspeed_config, "r", encoding="utf-8"))
-        # ds_config = get_eval_ds_config(self.args.offload_reference_model,
-        #                                zero_stage)
-        ds_config['train_micro_batch_size_per_gpu'] = self.args.ppo_train_batch_size
-        #TODO(jeff): we should probably set grad accumlation steps here as well for clarity
-        ds_config['train_batch_size'] = self.args.ppo_train_batch_size * \
-                                        torch.distributed.get_world_size() * self.args.gradient_accumulation_steps_actor
+        ds_config = get_eval_ds_config(global_batch_size=self.args.global_train_batch_size_actor,
+                                       micro_batch_size=self.args.ppo_train_batch_size,
+                                       offload=self.args.offload_reference_model,
+                                       stage=zero_stage)
 
         actor_model_ema = create_hf_model(AutoModelForCausalLM,
                                           actor_model_name_or_path,
@@ -242,20 +228,17 @@ class DeepSpeedRLHFEngine:
 
     def _init_critic(self, critic_model_name_or_path):
         stime = log_init("Critic")
-        deepspeed_config = os.path.join(RESOURCE_PATH, "config", "deepspeed", self.args.train_deepspeed_config)
-        ds_config = json.load(open(deepspeed_config, "r", encoding="utf-8"))
-        # ds_config = get_train_ds_config(offload=self.args.offload,
-        #                                 stage=self.args.critic_zero_stage)
-        ds_config['train_micro_batch_size_per_gpu'] = self.args.ppo_train_batch_size
-        #TODO(jeff): we should probably set grad accumlation steps here as well for clarity
-        ds_config['train_batch_size'] = self.args.ppo_train_batch_size * \
-                                        torch.distributed.get_world_size() * self.args.gradient_accumulation_steps
+        ds_config = get_train_ds_config(global_batch_size=self.args.global_train_batch_size_critic,
+                                        micro_batch_size=self.args.ppo_train_batch_size,
+                                        offload=self.args.offload,
+                                        stage=self.args.critic_zero_stage)
 
         #TODO(jeff): should not be needed, we should be able to use ds_config above
         #TODO(jeff): it means we never create the critic w. zero.init context if we are using ZeRO-3
-        deepspeed_config = os.path.join(RESOURCE_PATH, "config", "deepspeed", self.args.eval_deepspeed_config)
-        ds_eval_config = json.load(open(deepspeed_config, "r", encoding="utf-8"))
-        # ds_eval_config = get_eval_ds_config(offload=False, stage=0)
+        ds_eval_config = get_eval_ds_config(global_batch_size=self.args.global_train_batch_size_critic,
+                                            micro_batch_size=self.args.ppo_train_batch_size,
+                                            offload=False,
+                                            stage=0)
 
         # Model
         critic_model = create_critic_model(
@@ -307,19 +290,17 @@ class DeepSpeedRLHFEngine:
         if zero_stage != 3:
             # If critic is ZeRO-3 then we use it for everything, otherwise assume we have enough memory
             zero_stage = 0
-        deepspeed_config = os.path.join(RESOURCE_PATH, "config", "deepspeed", self.args.eval_deepspeed_config)
-        ds_config = json.load(open(deepspeed_config, "r", encoding="utf-8"))
-        # ds_config = get_eval_ds_config(offload=self.args.offload,
-        #                                stage=zero_stage)
-        ds_config['train_micro_batch_size_per_gpu'] = self.args.ppo_train_batch_size
-        ds_config['train_batch_size'] = self.args.ppo_train_batch_size * \
-                                        torch.distributed.get_world_size() * self.args.gradient_accumulation_steps
+        ds_config = get_eval_ds_config(global_batch_size=self.args.global_train_batch_size_critic,
+                                       micro_batch_size=self.args.ppo_train_batch_size,
+                                       offload=self.args.offload,
+                                       stage=zero_stage)
 
         #TODO(jeff): should not be needed, we should be able to use ds_config above
         #TODO(jeff): it means we never create the critic w. zero.init context if we are using ZeRO-3
-        deepspeed_config = os.path.join(RESOURCE_PATH, "config", "deepspeed", self.args.eval_deepspeed_config)
-        ds_eval_config = json.load(open(deepspeed_config, "r", encoding="utf-8"))
-        # ds_eval_config = get_eval_ds_config(offload=False, stage=0)
+        ds_eval_config = get_eval_ds_config(global_batch_size=self.args.global_train_batch_size_critic,
+                                            micro_batch_size=self.args.ppo_train_batch_size,
+                                            offload=False,
+                                            stage=0)
 
         # Model
         reward_model = create_critic_model(

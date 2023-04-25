@@ -78,8 +78,8 @@ def get_parser():
                         help="whether to use gradient checkpointing for actor model")
     parser.add_argument("--critic_gradient_checkpointing", action="store_true",
                         help="whether to use gradient checkpointing for critic model")
-    parser.add_argument("--train_deepspeed_config", type=str, default=None)
-    parser.add_argument("--eval_deepspeed_config", type=str, default=None)
+    # parser.add_argument("--train_deepspeed_config", type=str, default=None)
+    # parser.add_argument("--eval_deepspeed_config", type=str, default=None)
     parser.add_argument("--inference_tp_size", type=int, default=1,
                         help="Tensor-parallelism degree used for the inference-optimization. Please note hybrid-engine need to be enabled when using this feature.")
     parser.add_argument('--offload', action='store_true', help='Enable ZeRO Offload techniques.')
@@ -175,6 +175,9 @@ def main():
         args.gradient_accumulation_steps_actor = args.gradient_accumulation_steps * 2
     else:
         args.gradient_accumulation_steps_actor = args.gradient_accumulation_steps
+    n_gpus = torch.distributed.get_world_size()
+    args.global_train_batch_size_actor = args.ppo_train_batch_size * args.gradient_accumulation_steps_actor * n_gpus
+    args.global_train_batch_size_critic = args.ppo_train_batch_size * args.gradient_accumulation_steps * n_gpus
 
     # load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path, use_cache=False, trust_remote_code=True)
@@ -345,14 +348,14 @@ def main():
                 logger.info(f"Beginning of Epoch {epoch+1}/{args.num_epochs}, "
                             f"Total Generation Batches {min(len(prompt_train_dataloader), len(pretrain_dataloader))}")
             for step, (batch_prompt, batch_pretrain) in enumerate(zip(prompt_train_dataloader, pretrain_dataloader)):
-                batch_prompt = {k:v.to(device) for k, v in batch_prompt.items()}
+                batch_prompt = {k: v.to(device) for k, v in batch_prompt.items()}
                 # for k, v in batch_prompt.items():
                 #     try:
                 #         batch_prompt[k] = v.to(device)
                 #     except:
                 #         batch_prompt[k] = v
                 if batch_pretrain is not None:
-                    batch_pretrain = {k:v.to(device) for k, v in batch_pretrain.items()}
+                    batch_pretrain = {k: v.to(device) for k, v in batch_pretrain.items()}
                     pretrain_dataset = pretraib_mini_dataset.add(batch_pretrain)
                 else:
                     pretrain_dataset = pretraib_mini_dataset.add([[None] * args.train_batch_size])
