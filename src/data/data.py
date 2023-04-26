@@ -293,6 +293,7 @@ class RLHFDataset(Dataset):
         if "pangu" in self.args.model_name_or_path:
             encoded_dict = self.tokenizer(prompt, self.tokenizer.sep_token + prefix,
                                           max_length=self.args.max_prompt_length,
+                                          padding="max_length",
                                           truncation="longest_first", add_special_tokens=False,
                                           return_tensors="pt", return_token_type_ids=False)
             return {
@@ -302,6 +303,7 @@ class RLHFDataset(Dataset):
             }
         elif "chatglm" in self.args.model_name_or_path:
             encoded_dict = self.tokenizer(prompt, max_length=self.args.max_prompt_length, return_tensors="pt",
+                                          padding="max_length",
                                           truncation="longest_first")
 
             return {
@@ -313,6 +315,7 @@ class RLHFDataset(Dataset):
             prompt_length = len(encoded_prompt['input_ids'])
             encoded_dict = self.tokenizer(prompt, prefix + self.tokenizer.mask_token,
                                           max_length=min(prompt_length, self.args.max_prompt_length),
+                                          padding="max_length",
                                           truncation="only_first",
                                           return_tensors="pt",
                                           return_token_type_ids=False)

@@ -46,6 +46,7 @@ from src.models.ppo import (
 )
 from src.data.pipeline import BasePipeline, PPORolloutStorage
 from src.utils.modeling_utils import Clock, RunningMoments, logprobs_of_labels
+from src.utils.logger import logger
 
 # specifies a dictionary of architectures
 _TRAINERS: Dict[str, Any] = {}  # registry
@@ -1283,9 +1284,11 @@ class DeepSpeedPPOTrainer():
         max_min_length = self.max_answer_seq_len + prompts.shape[1]
 
         with torch.no_grad():
+            logger.debug(f"[_generate_sequence] prompts: {prompts}")
             seq = self.actor_model.module.generate(prompts,
                                                    max_length=max_min_length,
                                                    min_length=max_min_length)
+            logger.debug(f"[_generate_sequence] seq: {seq}")
 
         # Filter out seq with no asnwers (or very short). This happens when users directly use the pre-training ckpt without supervised finetuning
         # NOTE: this will causes each GPU has different number of examples
@@ -1296,12 +1299,13 @@ class DeepSpeedPPOTrainer():
         valid_ans_len = (ans != self.tokenizer.pad_token_id).sum(dim=-1)
         out_seq = []
         for i in range(batch_size):
-            if valid_ans_len[
-                i] <= 1:  # if the answer is shorter than 1 token, drop it
+            # if the answer is shorter than 1 token, drop it
+            if valid_ans_len[i] <= 1:
                 continue
             else:
                 out_seq.append(seq[i:i + 1])
-        out_seq = torch.cat(out_seq, dim=0)  # concate output in the batch dim
+        out_seq = torch.cat(out_seq, dim=0)  # concat output in the batch dim
+        logger.debug(f"[_generate_sequence] out_seq: {out_seq}")
 
         return out_seq
 
@@ -1311,17 +1315,20 @@ class DeepSpeedPPOTrainer():
         self.train()
 
         pad_token_id = self.tokenizer.pad_token_id
+        # TODO: need to modify fo GLM-based models
         attention_mask = seq.not_equal(pad_token_id).long()
 
         with torch.no_grad():
             output = self.actor_model(seq, attention_mask=attention_mask)
             output_ref = self.ref_model(seq, attention_mask=attention_mask)
-            reward_score = self.reward_model.forward_value(
-                seq, attention_mask,
-                prompt_length=self.prompt_length)['chosen_end_scores'].detach(
-            )
-            values = self.critic_model.forward_value(
-                seq, attention_mask, return_value_only=True).detach()[:, :-1]
+            reward_score = self.reward_model.reward(seq, attention_mask)[1].detach()
+            values = self.critic_model.reward(seq, attention_mask)[0].detach()
+            # reward_score = self.reward_model.forward_value(
+            #     seq, attention_mask,
+            #     prompt_length=self.prompt_length)['chosen_end_scores'].detach(
+            # )
+            # values = self.critic_model.forward_value(
+            #     seq, attention_mask, return_value_only=True).detach()[:, :-1]
 
         logits = output.logits
         logits_ref = output_ref.logits
@@ -1329,8 +1336,7 @@ class DeepSpeedPPOTrainer():
         return {
             'prompts': prompts,
             'logprobs': gather_log_probs(logits[:, :-1, :], seq[:, 1:]),
-            'ref_logprobs': gather_log_probs(logits_ref[:, :-1, :], seq[:,
-                                                                    1:]),
+            'ref_logprobs': gather_log_probs(logits_ref[:, :-1, :], seq[:, 1:]),
             'value': values,
             'rewards': reward_score,
             'input_ids': seq,

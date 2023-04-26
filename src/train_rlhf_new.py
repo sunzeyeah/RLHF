@@ -11,12 +11,10 @@ import torch
 import random
 import deepspeed
 
-from typing import Callable, Dict, Iterable, List, Optional, Tuple, Any
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM, default_data_collator
 from torch.utils.data import RandomSampler, DistributedSampler, DataLoader
 
 from src.utils import logger, RESOURCE_PATH
-from src.utils.config import TRLConfig, default_ilql_config, default_ppo_config, default_sft_config
 from src.models.rlhf_engine import DeepSpeedRLHFEngine
 from src.models.trainer import DeepSpeedPPOTrainer, DeepSpeedPPOPTXTrainer
 from src.utils.file_utils import set_seed
@@ -218,9 +216,9 @@ def main():
         trainer = ppo_trainer(rlhf_engine, args)
 
         exp_mini_dataset = PPODataset(args.ppo_batch_numbers,
-                                       args.ppo_train_batch_size)
-        pretraib_mini_dataset = PPODataset(args.ppo_batch_numbers,
-                                         args.ppo_train_batch_size)
+                                      args.ppo_train_batch_size)
+        pretrain_mini_dataset = PPODataset(args.ppo_batch_numbers,
+                                           args.ppo_train_batch_size)
 
         if args.global_rank <= 0:
             logger.info("Start training")
@@ -240,7 +238,7 @@ def main():
                     batch_pretrain = {k: v.to(device) for k, v in batch_pretrain.items()}
                     pretrain_dataset = pretraib_mini_dataset.add(batch_pretrain)
                 else:
-                    pretrain_dataset = pretraib_mini_dataset.add([[None] * args.train_batch_size])
+                    pretrain_dataset = pretrain_mini_dataset.add([[None] * args.train_batch_size])
                 prompts = batch_prompt['prompt']
                 # length = prompts.size(-1)
                 # if length > args.max_prompt_length:

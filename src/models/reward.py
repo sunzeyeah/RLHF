@@ -58,19 +58,19 @@ class RewardModel(PreTrainedModel):
 
         assert len(hidden_states.shape) == 3
 
-        rewards = self.v_head(hidden_states).squeeze(-1)
+        values = self.v_head(hidden_states).squeeze(-1)
 
         # outputs = self.body(sequences, attention_mask=attention_mask)
         # last_hidden_states = outputs['last_hidden_state']
         # values = self.value_head(last_hidden_states)[:, :-1]
 
-        rewards = rewards.mean(dim=-1)
+        rewards = values.mean(dim=-1)
         if len(rewards.shape) == 2:
             rewards = rewards.squeeze(1)    # ensure shape is (B)
 
         assert len(rewards.shape) == 1 and rewards.shape[0] == batch_size
 
-        return rewards
+        return values, rewards
 
     def forward(
             self,
@@ -90,11 +90,12 @@ class RewardModel(PreTrainedModel):
             output_attentions=False,
             output_hidden_states=False,
     ):
-        chosen_reward = self.reward(chosen_input_ids, attention_mask=chosen_attention_mask, position_ids=chosen_position_ids)
+        chosen_values, chosen_reward = self.reward(chosen_input_ids, attention_mask=chosen_attention_mask, position_ids=chosen_position_ids)
         if rejected_input_ids is not None:
-            reject_reward = self.reward(rejected_input_ids, attention_mask=rejected_attention_mask, position_ids=rejected_position_ids)
+            reject_values, reject_reward = self.reward(rejected_input_ids, attention_mask=rejected_attention_mask, position_ids=rejected_position_ids)
             loss = self.loss_fn(chosen_reward, reject_reward)
         else:
+            reject_values = None
             reject_reward = None
             loss = None
 
@@ -150,7 +151,9 @@ class RewardModel(PreTrainedModel):
 
         return {
             "loss": loss,
+            "chosen_values": chosen_values,
             "chosen_reward": torch.sigmoid(chosen_reward),
+            "reject_values": reject_values,
             "reject_reward": torch.sigmoid(reject_reward) if reject_reward is not None else reject_reward,
         }
 
