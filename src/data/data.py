@@ -3,7 +3,7 @@ import os
 import json
 import re
 import random
-import pandas as pd
+import copy
 import torch
 
 from tqdm import tqdm
@@ -272,7 +272,88 @@ class SFTDataset(Dataset):
         return datasets
 
 
-class RLHFDataset:
+class RLHFDataset(Dataset):
+    def __init__(self, args, filename, tokenizer, padding_side="left"):
+        self.args = args
+        self.tokenizer = copy.deepcopy(tokenizer)
+        self.tokenizer.padding_side = padding_side
+
+        self.post_list = self.load_dataset(filename)
+        for k in range(5):
+            logger.info(f"RLHFDataset sample-{k}\n: {self.post_list[k]}")
+
+    def __len__(self):
+        return len(self.post_list)
+
+    def __getitem__(self, idx):
+        data = self.post_list[idx]
+        prompt = data['prompt']
+        # label = data['label']
+        prefix = data['prefix']
+        if "pangu" in self.args.model_name_or_path:
+            encoded_dict = self.tokenizer(prompt, self.tokenizer.sep_token + prefix,
+                                          max_length=self.args.max_prompt_length,
+                                          truncation="longest_first", add_special_tokens=False,
+                                          return_tensors="pt", return_token_type_ids=False)
+            return {
+                "input_ids": encoded_dict['input_ids'],
+                "attention_mask": encoded_dict['attention_mask'],
+                # "labels": encoded_dict['input_ids'],
+            }
+        elif "chatglm" in self.args.model_name_or_path:
+            encoded_dict = self.tokenizer(prompt, max_length=self.args.max_prompt_length, return_tensors="pt",
+                                          truncation="longest_first")
+
+            return {
+                "input_ids": encoded_dict['input_ids'][0],
+                # "labels": encoded_dict['input_ids'][0],
+            }
+        elif "glm" in self.args.model_name_or_path:
+            encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
+            prompt_length = len(encoded_prompt['input_ids'])
+            encoded_dict = self.tokenizer(prompt, prefix + self.tokenizer.mask_token,
+                                          max_length=min(prompt_length, self.args.max_prompt_length),
+                                          truncation="only_first",
+                                          return_tensors="pt",
+                                          return_token_type_ids=False)
+            max_gen_length = self.args.max_length - prompt_length
+            # max_gen_length = self.args.max_gen_length
+            assert prompt_length > 0
+            assert max_gen_length > 0
+            assert prompt_length + max_gen_length <= self.args.max_length
+            encoded_dict = self.tokenizer.build_inputs_for_generation(encoded_dict,
+                                                                      max_gen_length=max_gen_length, padding=True)
+
+            return {
+                "input_ids": encoded_dict['input_ids'][0],
+                "position_ids": encoded_dict['position_ids'][0],
+                "attention_mask": encoded_dict['attention_mask'][0],
+                # "labels": encoded_dict['labels'][0],
+            }
+        else:
+            raise ValueError(f"Unsupported model name: {self.args.model_name_or_path}")
+
+    @staticmethod
+    def load_dataset(filename):
+        discard = 0
+        datasets = []
+        with open(filename, "r", encoding="utf-8") as f:
+            for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
+                item = json.loads(line)
+                prompt = clean_text(item['prompt'])
+                label = clean_text(item['answers'][0]['answer'])
+                prefix = item['prefix']
+
+                if len(prompt) <= 0 or len(label) <= 0:
+                    discard += 1
+                    continue
+                datasets.append({"prompt": prompt, "label": label, "prefix": prefix})
+        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+
+        return datasets
+
+
+class PPODataset:
     def __init__(self, max_size, small_batch_size):
         self.dataset = []
         self.max_size = max_size

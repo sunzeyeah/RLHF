@@ -20,7 +20,7 @@ from src.utils.config import TRLConfig, default_ilql_config, default_ppo_config,
 from src.models.rlhf_engine import DeepSpeedRLHFEngine
 from src.models.trainer import DeepSpeedPPOTrainer, DeepSpeedPPOPTXTrainer
 from src.utils.file_utils import set_seed
-from src.data.data import RLHFDataset, SFTDataset, DataCollatorRLHF
+from src.data.data import SFTDataset, RLHFDataset, PPODataset
 from src.utils.modeling_utils import get_all_reduce_mean, save_hf_format, moving_average, save_zero_three_model
 
 
@@ -36,8 +36,10 @@ def get_parser():
 
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--local_rank", type=int, default=0)
-    parser.add_argument("--max_length", type=int, default=512)
-    parser.add_argument("--max_gen_length", type=int, default=256)
+    parser.add_argument("--max_length", type=int, default=512,
+                        help="total max sequence length = max prompt length + mas generation/answer length")
+    parser.add_argument("--max_gen_length", type=int, default=256,
+                        help="max generation/answer length")
     # train
     parser.add_argument("--do_train", action="store_true")
     parser.add_argument("--train_filename", type=str, default=None)
@@ -120,13 +122,15 @@ def get_parser():
     return args
 
 
-def create_datasets(args, ppo_ptx_enabled):
-    train_dataset = SFTDataset.load_dataset(os.path.join(args.data_dir, args.train_filename))
+def create_datasets(args, tokenizer, ppo_ptx_enabled):
+    train_dataset = RLHFDataset(args, os.path.join(args.data_dir, args.train_filename),
+                                tokenizer, padding_side="left")
     if ppo_ptx_enabled:
-        pretrain_dataset = SFTDataset.load_dataset(os.path.join(args.data_dir, args.pretrain_filename))
+        pretrain_dataset = SFTDataset(args, os.path.join(args.data_dir, args.pretrain_filename),
+                                      tokenizer)
 
     # DataLoaders creation:
-    data_collator = DataCollatorRLHF(args.max_length, args.inference_tp_size)
+    # data_collator = DataCollatorRLHF(args.max_length, pad_token_id)
     if args.local_rank == -1:
         prompt_train_sampler = RandomSampler(train_dataset)
         if ppo_ptx_enabled:
@@ -138,18 +142,18 @@ def create_datasets(args, ppo_ptx_enabled):
 
     prompt_train_dataloader = DataLoader(
         train_dataset,
-        collate_fn=data_collator,
+        # collate_fn=data_collator,
         sampler=prompt_train_sampler,
         batch_size=args.train_batch_size)
     if ppo_ptx_enabled:
         pretrain_dataloader = DataLoader(
             pretrain_dataset,
-            collate_fn=default_data_collator,
+            # collate_fn=default_data_collator,
             sampler=pretrain_sampler,
             batch_size=args.train_batch_size)
     else:
         pretrain_dataloader = [None] * len(
-            prompt_train_dataloader)  # basically a dummy dataloader
+            prompt_train_dataloader)
 
     num_update_steps_per_epoch = min(len(prompt_train_dataloader), len(pretrain_dataloader)) * \
                                  (args.train_batch_size / args.ppo_train_batch_size) * \
@@ -191,141 +195,11 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path, use_cache=False, trust_remote_code=True)
     # tokenizer.pad_token = tokenizer.eos_token
     # tokenizer.padding_side = "left" # PS: padding side does affect output of reward model
-
-    # # load reward model
-    # if "pangu" in args.reward_model_path:
-    #     model = AutoModelForCausalLM.from_pretrained(args.reward_model_path, use_cache=False, trust_remote_code=True)
-    #     model.resize_token_embeddings(tokenizer.vocab_size)
-    #     # model.config.end_token_id = tokenizer.eos_token_id
-    #     # model.config.pad_token_id = tokenizer.pad_token_id
-    #     # model.config.bos_token_id = tokenizer.bos_token_id
-    #     # model.config.eos_token_id = tokenizer.eos_token_id
-    #     model.config.lora_rank = args.lora_rank
-    #     model.config.lora_alpha = args.lora_alpha
-    #     model.config.lora_train_bias = args.lora_train_bias
-    #     # Initialize the reward model from the (supervised) fine-tuned SFT model
-    #     reward_model = RewardModel(model.config, model.transformer, tokenizer)
-    #     # reward_model = RewardModelWithLoRA(model.config, model.transformer, tokenizer)
-    # elif "chatglm" in args.reward_model_path:
-    #     model = AutoModelForSeq2SeqLM.from_pretrained(args.reward_model_path, trust_remote_code=True).half()
-    #     model.config.lora_rank = args.lora_rank
-    #     model.config.lora_alpha = args.lora_alpha
-    #     model.config.lora_train_bias = args.lora_train_bias
-    #     # Initialize the reward model from the (supervised) fine-tuned SFT model
-    #     reward_model = RewardModel(model.config, model, tokenizer)
-    #     # reward_model = RewardModelWithLoRA(model.config, model.glm, tokenizer)
-    # elif "glm" in args.reward_model_path:
-    #     model = AutoModelForSeq2SeqLM.from_pretrained(args.reward_model_path, trust_remote_code=True)
-    #     model.config.lora_rank = args.lora_rank
-    #     model.config.lora_alpha = args.lora_alpha
-    #     model.config.lora_train_bias = args.lora_train_bias
-    #     # Initialize the reward model from the (supervised) fine-tuned SFT model
-    #     reward_model = RewardModel(model.config, model.glm, tokenizer)
-    #     # reward_model = RewardModelWithLoRA(model.config, model.glm, tokenizer)
-    # else:
-    #     raise ValueError(f"Unsupported model name: {args.reward_model_path}")
-    # assert model.config.pad_token_id == tokenizer.pad_token_id
-    #
-    # if args.reward_checkpoint is not None:
-    #     checkpoints = glob.glob(args.reward_checkpoint.replace("star", "*"))
-    #     st = dict()
-    #     for checkpoint in checkpoints:
-    #         st.update(torch.load(checkpoint, map_location="cpu"))
-    #     res = reward_model.load_state_dict(st, strict=False)
-    #
-    # device = torch.device(f"cuda:{args.local_rank}") if torch.cuda.is_available() else torch.device("cpu")
-    # # reward_model.half()
-    # reward_model.eval()
-    # reward_model.to(device)
-    # logger.info(f"Finish loading reward model from {args.reward_checkpoint}")
-    #
-    # def reward_fn(samples, **kwargs):
-    #     scores_list = []
-    #     for i in range(0, len(samples), ppo_config.train.batch_size):
-    #         input_ids_list = []
-    #         attention_mask_list = []
-    #         position_ids_list = []
-    #         for sample in samples[i: i + ppo_config.train.batch_size]:
-    #             prompt, pred = sample.split(tokenizer.sep_token, maxsplit=1)
-    #             logger.debug(f"prompt: {prompt}, pred: {pred}")
-    #             if "pangu" in ppo_config.model.model_path:
-    #                 encodings_dict = tokenizer(prompt, pred, max_length=ppo_config.train.seq_length,
-    #                                            truncation="longest_first", padding="max_length", return_tensors="pt",
-    #                                            return_token_type_ids=False)
-    #                 input_ids_list.append(encodings_dict["input_ids"])
-    #                 attention_mask_list.append(encodings_dict["attention_mask"])
-    #             elif "chatglm" in ppo_config.model.model_path:
-    #                 encoded_dict = tokenizer(prompt, pred, max_length=ppo_config.train.seq_length, return_tensors="pt",
-    #                                          truncation="longest_first", padding="max_length")
-    #                 input_ids_list.append(encoded_dict["input_ids"][0])
-    #             elif "glm" in ppo_config.model.model_path:
-    #                 # TODO: to be modified for and tested against glm
-    #                 encoded_prompt = tokenizer(prompt, tokenizer.mask_token)
-    #                 prompt_length = len(encoded_prompt['input_ids'])
-    #                 label_length = len(tokenizer.tokenize(pred))
-    #                 if prompt_length + label_length > ppo_config.train.seq_length:
-    #                     num_tokens_to_remove = prompt_length + label_length - ppo_config.train.seq_length
-    #                     for _ in range(num_tokens_to_remove):
-    #                         if prompt_length > label_length:
-    #                             prompt_length -= 1
-    #                         else:
-    #                             label_length -= 1
-    #                 else:
-    #                     label_length = ppo_config.train.seq_length - prompt_length
-    #                 assert prompt_length > 0
-    #                 assert label_length > 0
-    #                 assert prompt_length + label_length <= ppo_config.train.seq_length
-    #                 encoded_dict = tokenizer(prompt, tokenizer.mask_token,
-    #                                          max_length=prompt_length, truncation="only_first",
-    #                                          return_tensors="pt", return_attention_mask=True,
-    #                                          return_token_type_ids=False)
-    #                 encoded_dict = tokenizer.build_inputs_for_generation(encoded_dict, targets=pred,
-    #                                                                      max_gen_length=label_length, padding=True)
-    #                 input_ids_list.append(encoded_dict["input_ids"][0])
-    #                 attention_mask_list.append(encoded_dict["attention_mask"][0])
-    #                 position_ids_list.append(encoded_dict["position_ids"][0])
-    #             else:
-    #                 raise ValueError(f"Unsupported model type: {ppo_config.model.model_path}")
-    #         # encodings_dict = tokenizer(
-    #         #     sub_samples,
-    #         #     max_length=ppo_config.train.seq_length,
-    #         #     truncation="longest_first",
-    #         #     padding="max_length",
-    #         #     return_tensors="pt",
-    #         # )
-    #         input_ids = torch.stack(input_ids_list, dim=0).to(device)
-    #         attention_mask = torch.stack(attention_mask_list, dim=0).to(device) if len(attention_mask_list) > 0 else None
-    #         position_ids = torch.stack(position_ids_list, dim=0).to(device) if len(position_ids_list) > 0 else None
-    #         with torch.no_grad():
-    #             sub_scores = reward_model(input_ids, attention_mask, position_ids)
-    #         scores_list.append(sub_scores["chosen_reward"])
-    #
-    #     scores = torch.cat(scores_list, dim=0)
-    #
-    #     return scores
-    #
-    # # load ppo config
-    # ppo_config = TRLConfig.load_yaml(os.path.join(RESOURCE_PATH, "config", "ppo_model", args.ppo_config))
-    # ppo_config.train.epochs = args.num_epochs
-    # ppo_config.train.seq_length = args.max_length
-    # ppo_config.train.batch_size = args.train_batch_size
-    # ppo_config.train.checkpoint_dir = args.output_dir
-    # ppo_config.train.checkpoint_interval = args.save_steps
-    # ppo_config.train.eval_interval = args.eval_steps
-    # ppo_config.model.num_layers_unfrozen = args.num_layers_unfrozen
-    # ppo_config.model.model_path = args.sft_model_path
-    # ppo_config.tokenizer.tokenizer_path = args.tokenizer_path
-    # ppo_config.optimizer.kwargs['lr'] = args.learning_rate
-    # ppo_config.optimizer.kwargs['weight_decay'] = args.weight_decay
-    # ppo_config.method.chunk_size = args.eval_batch_size
-    # ppo_config.train.lora_rank = args.lora_rank
-    # ppo_config.train.lora_alpha = args.lora_alpha
-    # ppo_config.train.lora_train_bias = args.lora_train_bias
-    # logger.info(f"PPO config: {ppo_config}")
+    args.max_prompt_length = args.max_length - args.max_gen_length
 
     # load dataset
     if args.do_train:
-        prompt_train_dataloader, pretrain_dataloader, num_total_iters = create_datasets(args, ppo_ptx_enabled)
+        prompt_train_dataloader, pretrain_dataloader, num_total_iters = create_datasets(args, tokenizer, ppo_ptx_enabled)
         args.warmup_steps = int(num_total_iters * args.warmup_ratio)
     # if args.do_eval:
     #     dev_dataset = SFTDataset.load_dataset(os.path.join(args.data_dir, args.eval_filename))
@@ -343,9 +217,9 @@ def main():
         ppo_trainer = DeepSpeedPPOPTXTrainer if ppo_ptx_enabled else DeepSpeedPPOTrainer
         trainer = ppo_trainer(rlhf_engine, args)
 
-        exp_mini_dataset = RLHFDataset(args.ppo_batch_numbers,
+        exp_mini_dataset = PPODataset(args.ppo_batch_numbers,
                                        args.ppo_train_batch_size)
-        pretraib_mini_dataset = RLHFDataset(args.ppo_batch_numbers,
+        pretraib_mini_dataset = PPODataset(args.ppo_batch_numbers,
                                          args.ppo_train_batch_size)
 
         if args.global_rank <= 0:
@@ -368,10 +242,10 @@ def main():
                 else:
                     pretrain_dataset = pretraib_mini_dataset.add([[None] * args.train_batch_size])
                 prompts = batch_prompt['prompt']
-                length = prompts.size(-1)
-                if length > args.max_length:
-                    prompts = prompts[:, length - args.max_length:]
-                    raise ValueError("Prompt length is too long")
+                # length = prompts.size(-1)
+                # if length > args.max_prompt_length:
+                #     prompts = prompts[:, length - args.max_prompt_length:]
+                #     raise ValueError("Prompt length is too long")
 
                 out = trainer.generate_experience(prompts)
                 exp_dataset = exp_mini_dataset.add(out)

@@ -47,7 +47,7 @@ def create_hf_model(model_class,
                     ds_config=None,
                     rlhf_training=False,
                     disable_dropout=False):
-    model_config = AutoConfig.from_pretrained(model_name_or_path)
+    model_config = AutoConfig.from_pretrained(model_name_or_path, trust_remote_code=True)
     if disable_dropout:
         model_config.dropout = 0.0
     # Note: dschf is defined in function scope to avoid global effects
@@ -63,7 +63,7 @@ def create_hf_model(model_class,
         model = model_class.from_pretrained(
             model_name_or_path,
             from_tf=bool(".ckpt" in model_name_or_path),
-            config=model_config)
+            config=model_config, trust_remote_code=True)
 
     model.config.end_token_id = tokenizer.eos_token_id
     model.config.pad_token_id = model.config.eos_token_id
@@ -80,12 +80,18 @@ def create_critic_model(model_name_or_path,
                         num_padding_at_beginning=0,
                         rlhf_training=False,
                         disable_dropout=False,
-                        checkpoint=None):
+                        checkpoint=None,
+                        lora_rank=0,
+                        lora_alpha=1,
+                        lora_train_bias="none"):
     # OPT model family always put a padding token at the beginning of the sequence,
     # we did not see this in other models but not sure if it is a general rule
     critic_model = create_hf_model(AutoModel, model_name_or_path, tokenizer,
                                    ds_config, rlhf_training, disable_dropout)
-    critic_model = RewardModel(critic_model.config, critic_model, tokenizer,
+    critic_model.config.lora_rank = lora_rank
+    critic_model.config.lora_alpha = lora_alpha
+    critic_model.config.lora_train_bias = lora_train_bias
+    critic_model = RewardModel(critic_model.config, critic_model.transformer, tokenizer,
         # num_padding_at_beginning=num_padding_at_beginning
      )
 
@@ -134,7 +140,7 @@ class DeepSpeedRLHFEngine:
             release_inference_cache=self.args.release_inference_cache,
             pin_parameters=(not self.args.unpin_actor_parameters),
             tp_gather_partition_size=self.args.tp_gather_partition_size,
-            max_out_tokens=self.args.max_length + self.args.max_gen_length)
+            max_out_tokens=self.args.max_length)
 
         # Model
         actor_model = create_hf_model(
@@ -245,10 +251,13 @@ class DeepSpeedRLHFEngine:
             model_name_or_path=critic_model_name_or_path,
             tokenizer=self.tokenizer,
             ds_config=ds_eval_config,
-            num_padding_at_beginning=self.args.num_padding_at_beginning,
+            # num_padding_at_beginning=self.args.num_padding_at_beginning,
             rlhf_training=True,
             disable_dropout=self.args.disable_critic_dropout,
-            checkpoint=self.args.reward_checkpoint)
+            checkpoint=self.args.reward_checkpoint,
+            lora_rank=self.args.critic_lora_rank,
+            lora_alpha=self.args.lora_alpha,
+            lora_train_bias=self.args.lora_train_bias)
 
         # LoRA
         if self.args.critic_lora_rank > 0:
@@ -307,9 +316,12 @@ class DeepSpeedRLHFEngine:
             model_name_or_path=critic_model_name_or_path,
             tokenizer=self.tokenizer,
             ds_config=ds_eval_config,
-            num_padding_at_beginning=self.args.num_padding_at_beginning,
+            # num_padding_at_beginning=self.args.num_padding_at_beginning,
             rlhf_training=True,
-            checkpoint=self.args.reward_checkpoint)
+            checkpoint=self.args.reward_checkpoint,
+            lora_rank=self.args.critic_lora_rank,
+            lora_alpha=self.args.lora_alpha,
+            lora_train_bias=self.args.lora_train_bias)
 
         reward_engine, *_ = deepspeed.initialize(model=reward_model,
                                                  config=ds_config)

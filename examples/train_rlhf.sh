@@ -53,5 +53,5 @@ CUDA_LAUNCH_BLOCKING=1 deepspeed $MAIN \
   --offload_reference_model \
   --actor_gradient_checkpointing \
   --critic_gradient_checkpointing \
-  ----release_inference_cache \
+  --release_inference_cache \
   > out/train_rlhf_${SFT_MODEL}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1 &
