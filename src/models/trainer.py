@@ -1294,15 +1294,13 @@ class DeepSpeedPPOTrainer():
                                                        num_return_sequences=self.args.num_return_sequences,
                                                        top_p=self.args.top_p,
                                                        temperature=self.args.temperature,
-                                                       max_length=self.args.max_length,
-                                                       min_length=self.args.max_length
                                                        )
                 logger.info(f"[_generate_sequence] seq: {seq}")
                 prompts = []
                 for i in range(batch_size):
                     prompt_ids = seq[i, :prompt_length]
-                    prompt_start_index = (prompt_ids != self.tokenizer.pad_token_id).nonzero()[0].item()
-                    prompt_ids = seq[i, prompt_start_index:prompt_length]
+                    # prompt_start_index = (prompt_ids != self.tokenizer.pad_token_id).nonzero()[0].item()
+                    # prompt_ids = seq[i, prompt_start_index:prompt_length]
                     answer_ids = seq[i, prompt_length:]
                     prompt = self.tokenizer.decode(prompt_ids, skip_special_tokens=False)
                     answer = self.tokenizer.decode(answer_ids, skip_special_tokens=False)
@@ -1319,14 +1317,12 @@ class DeepSpeedPPOTrainer():
                                                        do_sample=self.args.do_sample,
                                                        num_return_sequences=self.args.num_return_sequences,
                                                        top_p=self.args.top_p,
-                                                       temperature=self.args.temperature,
-                                                       max_length=self.args.max_length,
-                                                       min_length=self.args.max_length)
+                                                       temperature=self.args.temperature)
                 prompts = []
                 for i in range(batch_size):
                     prompt_ids = seq[i, :prompt_length]
-                    prompt_start_index = (prompt_ids != self.tokenizer.pad_token_id).nonzero()[0].item()
-                    prompt_ids = seq[i, prompt_start_index:prompt_length]
+                    # prompt_start_index = (prompt_ids != self.tokenizer.pad_token_id).nonzero()[0].item()
+                    # prompt_ids = seq[i, prompt_start_index:prompt_length]
                     answer_ids = seq[i, prompt_length:]
                     prompt = self.tokenizer.decode(prompt_ids, skip_special_tokens=False)
                     answer = self.tokenizer.decode(answer_ids, skip_special_tokens=False)
@@ -1342,14 +1338,12 @@ class DeepSpeedPPOTrainer():
                                                        do_sample=self.args.do_sample,
                                                        num_return_sequences=self.args.num_return_sequences,
                                                        top_p=self.args.top_p,
-                                                       temperature=self.args.temperature,
-                                                       max_length=self.args.max_length,
-                                                       min_length=self.args.max_length)
+                                                       temperature=self.args.temperature)
                 outputs = dict()
                 for i in range(batch_size):
                     prompt_ids = seq[i, :prompt_length]
-                    prompt_start_index = (prompt_ids != self.tokenizer.pad_token_id).nonzero()[0].item()
-                    prompt_ids = seq[i, prompt_start_index:prompt_length]
+                    # prompt_start_index = (prompt_ids != self.tokenizer.pad_token_id).nonzero()[0].item()
+                    # prompt_ids = seq[i, prompt_start_index:prompt_length]
                     answer_ids = seq[i, prompt_length:]
                     prompt = self.tokenizer.decode(prompt_ids, skip_special_tokens=False)
                     answer = self.tokenizer.decode(answer_ids, skip_special_tokens=False)
@@ -1441,19 +1435,21 @@ class DeepSpeedPPOTrainer():
             'rewards': reward_score
         }
 
-    def compute_rewards(self, prompts, log_probs, ref_log_probs, reward_score,
-                        action_mask):
-
+    def compute_rewards(self, prompts, log_probs, ref_log_probs, reward_score, action_mask):
+        logger.info(f"[compute_rewards] prompts: {prompts.shape}, log_probs: {log_probs.shape}, ref_log_probs: {ref_log_probs.shape}, "
+                    f"reward_score: {reward_score.shape}, action_mask: {action_mask.shape}")
         kl_divergence_estimate = -self.kl_ctl * (log_probs - ref_log_probs)
         rewards = kl_divergence_estimate
+        logger.info(f"before rewards: {rewards.shape}")
         start = prompts.shape[1] - 1
         ends = start + action_mask[:, start:].sum(1)
         reward_clip = torch.clamp(reward_score, -self.clip_reward_value,
                                   self.clip_reward_value)
         batch_size = log_probs.shape[0]
         for j in range(batch_size):
+            logger.info(f"j={j}, ends[j]={ends[j]}, rewards[j, start:ends[j]]: {rewards[j, start:ends[j]].shape}")
             rewards[j, start:ends[j]][-1] += reward_clip[j]
-
+        logger.info(f"after rewards: {rewards.shape}")
         return rewards
 
     def train_rlhf(self, inputs):
@@ -1477,8 +1473,7 @@ class DeepSpeedPPOTrainer():
             old_rewards = self.compute_rewards(prompts, log_probs,
                                                ref_log_probs, reward_score,
                                                action_mask)
-            advantages, returns = self.get_advantages_and_returns(
-                old_values, old_rewards, start)
+            advantages, returns = self.get_advantages_and_returns(old_values, old_rewards, start)
 
         ### process the new outputs
         batch = {'input_ids': input_ids, "attention_mask": attention_mask, "position_ids": position_ids}
@@ -1522,6 +1517,7 @@ class DeepSpeedPPOTrainer():
 
     def get_advantages_and_returns(self, values, rewards, start):
         # Adopted from https://github.com/CarperAI/trlx/blob/main/trlx/models/modeling_ppo.py#L134
+        logger.info(f"[get_advantages_and_returns] values: {values.shape}, rewards: {rewards.shape}, start: {start}")
         lastgaelam = 0
         advantages_reversed = []
         length = rewards.size()[-1]
@@ -1531,6 +1527,7 @@ class DeepSpeedPPOTrainer():
             lastgaelam = delta + self.gamma * self.lam * lastgaelam
             advantages_reversed.append(lastgaelam)
         advantages = torch.stack(advantages_reversed[::-1], dim=1)
+        logger.info(f"advantages: {advantages.shape}, values[:, start:]: {values[:, start:].shape}")
         returns = advantages + values[:, start:]
         return advantages.detach(), returns
 

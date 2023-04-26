@@ -297,8 +297,8 @@ class RLHFDataset(Dataset):
                                           truncation="longest_first", add_special_tokens=False,
                                           return_tensors="pt", return_token_type_ids=False)
             return {
-                "input_ids": encoded_dict['input_ids'],
-                "attention_mask": encoded_dict['attention_mask'],
+                "input_ids": encoded_dict['input_ids'][0],
+                "attention_mask": encoded_dict['attention_mask'][0],
                 # "labels": encoded_dict['input_ids'],
             }
         elif "chatglm" in self.args.actor_model_path:
@@ -362,7 +362,7 @@ class PPODataset:
         self.max_size = max_size
         self.small_batch_size = small_batch_size
 
-    def seperate(self):
+    def separate(self):
         small_dataset = []
         for large_batch in self.dataset:
             if type(large_batch) == list or type(large_batch) == tuple:
@@ -377,12 +377,11 @@ class PPODataset:
                         [x[i:i + self.small_batch_size] for x in large_batch])
                 elif type(large_batch) == dict:
                     small_dataset.append({
-                        k: v[i:i + self.small_batch_size]
+                        k: v[i:i + self.small_batch_size] if v is not None else None
                         for k, v in large_batch.items()
                     })
                 else:
-                    small_dataset.append(large_batch[i:i +
-                                                       self.small_batch_size])
+                    small_dataset.append(large_batch[i:i + self.small_batch_size])
         self.free()
 
         return small_dataset
@@ -391,7 +390,7 @@ class PPODataset:
         if len(self.dataset) < self.max_size:
             self.dataset.append(data)
             if len(self.dataset) == self.max_size:
-                return self.seperate()
+                return self.separate()
             else:
                 return None
         else:

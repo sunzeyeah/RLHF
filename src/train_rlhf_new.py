@@ -126,14 +126,12 @@ def get_parser():
     return args
 
 
-def create_datasets(args, tokenizer, ppo_ptx_enabled, sft_tokenizer=None):
+def create_datasets(args, tokenizer_padding_from_left, ppo_ptx_enabled, tokenizer_padding_from_right):
     train_dataset = RLHFDataset(args, os.path.join(args.data_dir, args.train_filename),
-                                tokenizer)
+                                tokenizer_padding_from_left)
     if ppo_ptx_enabled:
-        sft_tokenizer = copy.deepcopy(tokenizer)
-        sft_tokenizer.padding_side = "right"
         pretrain_dataset = SFTDataset(args, os.path.join(args.data_dir, args.pretrain_filename),
-                                      sft_tokenizer)
+                                      tokenizer_padding_from_right)
 
     # DataLoaders creation:
     # data_collator = DataCollatorRLHF(args.max_length, pad_token_id)
@@ -198,14 +196,16 @@ def main():
     args.global_train_batch_size_critic = args.ppo_train_batch_size * args.gradient_accumulation_steps * n_gpus
 
     # load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path, use_cache=False, trust_remote_code=True)
+    tokenizer_padding_from_right = AutoTokenizer.from_pretrained(args.tokenizer_path, use_cache=False, trust_remote_code=True)
+    tokenizer_padding_from_left = copy.deepcopy(tokenizer_padding_from_right)
     # tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = "left" # PS: padding side slightly affect output of sft generation and reward model result
+    tokenizer_padding_from_left.padding_side = "left" # PS: padding side slightly affect output of sft generation and reward model result
     args.max_prompt_length = args.max_length - args.max_gen_length
 
     # load dataset
     if args.do_train:
-        prompt_train_dataloader, pretrain_dataloader, num_total_iters = create_datasets(args, tokenizer, ppo_ptx_enabled)
+        prompt_train_dataloader, pretrain_dataloader, num_total_iters = create_datasets(args, tokenizer_padding_from_left,
+                                                                                        ppo_ptx_enabled, tokenizer_padding_from_right)
         args.warmup_steps = int(num_total_iters * args.warmup_ratio)
     # if args.do_eval:
     #     dev_dataset = SFTDataset.load_dataset(os.path.join(args.data_dir, args.eval_filename))
@@ -216,7 +216,7 @@ def main():
         rlhf_engine = DeepSpeedRLHFEngine(
             actor_model_name_or_path=args.actor_model_path,
             critic_model_name_or_path=args.critic_model_path,
-            tokenizer=tokenizer,
+            tokenizer=tokenizer_padding_from_right,
             num_total_iters=num_total_iters,
             args=args)
 
@@ -307,10 +307,10 @@ def main():
             rlhf_engine.critic = convert_lora_to_linear_layer(rlhf_engine.critic)
 
         if torch.distributed.get_rank() == 0:
-            save_hf_format(rlhf_engine.actor, tokenizer, args, sub_folder='actor')
-            save_hf_format(rlhf_engine.critic, tokenizer, args, sub_folder='critic')
+            save_hf_format(rlhf_engine.actor, tokenizer_padding_from_right, args, sub_folder='actor')
+            save_hf_format(rlhf_engine.critic, tokenizer_padding_from_right, args, sub_folder='critic')
             if args.enable_ema:
-                save_hf_format(rlhf_engine.actor_ema, tokenizer, args, sub_folder='actor_ema')
+                save_hf_format(rlhf_engine.actor_ema, tokenizer_padding_from_right, args, sub_folder='actor_ema')
 
         if args.actor_zero_stage == 3:
             save_zero_three_model(rlhf_engine.actor, global_rank=args.global_rank,
