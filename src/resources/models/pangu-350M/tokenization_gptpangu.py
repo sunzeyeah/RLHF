@@ -1,4 +1,4 @@
-
+import os
 import torch
 import sentencepiece
 import jieba
@@ -123,3 +123,31 @@ class GPTPanguTokenizer(PreTrainedTokenizer):
         `int`: Size of the base vocabulary (without the added tokens).
         """
         return len(self.sp)
+
+    def save_vocabulary(self, save_directory, filename_prefix=None):
+        """
+        Save the vocabulary and special tokens file to a directory.
+
+        Args:
+            save_directory (`str`):
+                The directory in which to save the vocabulary.
+            filename_prefix (`str`, *optional*):
+                An optional prefix to add to the named of the saved files.
+
+        Returns:
+            `Tuple(str)`: Paths to the files saved.
+        """
+        if os.path.isdir(save_directory):
+            vocab_file = os.path.join(
+                save_directory, self.vocab_files_names["vocab_file"]
+            )
+        else:
+            vocab_file = save_directory
+
+        with open(self.vocab_file, 'rb') as fin:
+            proto_str = fin.read()
+
+        with open(vocab_file, "wb") as writer:
+            writer.write(proto_str)
+
+        return (vocab_file,)
