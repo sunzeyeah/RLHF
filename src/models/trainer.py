@@ -1279,50 +1279,142 @@ class DeepSpeedPPOTrainer():
         self.gamma = 1.0
         self.lam = 0.95
 
-    def _generate_sequence(self, prompts):
-
-        max_min_length = self.max_answer_seq_len + prompts.shape[1]
+    def _generate_sequence(self, inputs):
+        # max_min_length = self.max_answer_seq_len + prompts.shape[1]
+        batch_size, prompt_length = inputs['input_ids'].shape
 
         with torch.no_grad():
-            logger.debug(f"[_generate_sequence] prompts: {prompts}")
-            seq = self.actor_model.module.generate(prompts,
-                                                   max_length=max_min_length,
-                                                   min_length=max_min_length)
-            logger.debug(f"[_generate_sequence] seq: {seq}")
+            logger.debug(f"[_generate_sequence] inputs: {inputs}")
+            if "pangu" in self.args.actor_model_path:
+                seq = self.actor_model.module.generate(**inputs,
+                                                       max_new_tokens=self.max_answer_seq_len,
+                                                       pad_token_id=self.tokenizer.pad_token_id,
+                                                       do_sample=self.args.do_sample,
+                                                       num_return_sequences=self.args.num_return_sequences,
+                                                       top_p=self.args.top_p,
+                                                       temperature=self.args.temperature,
+                                                       # max_length=max_min_length,
+                                                       # min_length=max_min_length
+                                                       )
+                logger.debug(f"[_generate_sequence] seq: {seq}")
+                prompts = []
+                for i in range(batch_size):
+                    prompt_ids = seq[i, :prompt_length]
+                    prompt_start_index = (prompt_ids != self.tokenizer.pad_token_id).nonzero()[0].item()
+                    prompt_ids = seq[i, prompt_start_index:prompt_length]
+                    answer_ids = seq[i, prompt_length:]
+                    prompt = self.tokenizer.decode(prompt_ids, skip_special_tokens=False)
+                    answer = self.tokenizer.decode(answer_ids, skip_special_tokens=False)
+                    prompts.append(prompt + answer)
+                outputs = self.tokenizer(prompts, max_length=self.args.max_length,
+                                         truncation="longest_first", padding="max_length",
+                                         return_tensors="pt", return_token_type_ids=False)
+                logger.debug(f"[_generate_sequence] outputs: {outputs}")
+            elif "chatglm" in self.args.actor_model_path:
+                seq = self.actor_model.module.generate(**inputs,
+                                                       max_new_tokens=self.max_answer_seq_len,
+                                                       eos_token_id=self.tokenizer.eop_token_id,
+                                                       pad_token_id=self.tokenizer.pad_token_id,
+                                                       do_sample=self.args.do_sample,
+                                                       num_return_sequences=self.args.num_return_sequences,
+                                                       top_p=self.args.top_p,
+                                                       temperature=self.args.temperature)
+                prompts = []
+                for i in range(batch_size):
+                    prompt_ids = seq[i, :prompt_length]
+                    prompt_start_index = (prompt_ids != self.tokenizer.pad_token_id).nonzero()[0].item()
+                    prompt_ids = seq[i, prompt_start_index:prompt_length]
+                    answer_ids = seq[i, prompt_length:]
+                    prompt = self.tokenizer.decode(prompt_ids, skip_special_tokens=False)
+                    answer = self.tokenizer.decode(answer_ids, skip_special_tokens=False)
+                    prompts.append(prompt + answer)
+                outputs = self.tokenizer(prompts, max_length=self.args.max_length,
+                                         truncation="longest_first", padding="max_length",
+                                         return_tensors="pt")
+            elif "glm" in self.args.actor_model_path:
+                seq = self.actor_model.module.generate(**inputs,
+                                                       max_new_tokens=self.max_answer_seq_len,
+                                                       eos_token_id=self.tokenizer.eop_token_id,
+                                                       pad_token_id=self.tokenizer.pad_token_id,
+                                                       do_sample=self.args.do_sample,
+                                                       num_return_sequences=self.args.num_return_sequences,
+                                                       top_p=self.args.top_p,
+                                                       temperature=self.args.temperature)
+                outputs = dict()
+                for i in range(batch_size):
+                    prompt_ids = seq[i, :prompt_length]
+                    prompt_start_index = (prompt_ids != self.tokenizer.pad_token_id).nonzero()[0].item()
+                    prompt_ids = seq[i, prompt_start_index:prompt_length]
+                    answer_ids = seq[i, prompt_length:]
+                    prompt = self.tokenizer.decode(prompt_ids, skip_special_tokens=False)
+                    answer = self.tokenizer.decode(answer_ids, skip_special_tokens=False)
+                    # encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
+                    # prompt_length = len(encoded_prompt['input_ids'])
+                    # label_length = len(self.tokenizer.tokenize(label)) + 1
+                    # if prompt_length + label_length > self.args.max_length:
+                    #     num_tokens_to_remove = prompt_length + label_length - self.args.max_length
+                    #     for _ in range(num_tokens_to_remove):
+                    #         if prompt_length > label_length:
+                    #             prompt_length -= 1
+                    #         else:
+                    #             label_length -= 1
+                    # else:
+                    #     label_length = self.args.max_length - prompt_length
+                    # assert prompt_length > 0
+                    # assert label_length > 0
+                    # assert prompt_length + label_length <= self.args.max_length
+                    encoded_dict = self.tokenizer(prompt,
+                                                  max_length=prompt_length,
+                                                  truncation="only_first",
+                                                  return_tensors="pt",
+                                                  return_attention_mask=True,
+                                                  return_token_type_ids=False)
+                    encoded_dict = self.tokenizer.build_inputs_for_generation(encoded_dict,
+                                                                              targets=answer,
+                                                                              max_gen_length=self.max_answer_seq_len,
+                                                                              padding=True)
+                    for key, val in encoded_dict.items():
+                        if key not in outputs:
+                            outputs[key] = []
+                        outputs[key].append(val)
+                outputs = {key: torch.stack(val) for key, val in outputs.items()}
+            else:
+                raise ValueError(f"Unsupported model name: {self.args.actor_model_path}")
 
         # Filter out seq with no asnwers (or very short). This happens when users directly use the pre-training ckpt without supervised finetuning
         # NOTE: this will causes each GPU has different number of examples
-        batch_size = seq.shape[0]
-        prompt_length = prompts.shape[1]
-        ans = seq[:, prompt_length:]
-        self.prompt_length = prompt_length
-        valid_ans_len = (ans != self.tokenizer.pad_token_id).sum(dim=-1)
-        out_seq = []
-        for i in range(batch_size):
-            # if the answer is shorter than 1 token, drop it
-            if valid_ans_len[i] <= 1:
-                continue
-            else:
-                out_seq.append(seq[i:i + 1])
-        out_seq = torch.cat(out_seq, dim=0)  # concat output in the batch dim
-        logger.debug(f"[_generate_sequence] out_seq: {out_seq}")
+        # ans = seq[:, prompt_length:]
+        # self.prompt_length = prompt_length
+        # valid_ans_len = (ans != self.tokenizer.pad_token_id).sum(dim=-1)
+        # out_seq = []
+        # for i in range(batch_size):
+        #     # if the answer is shorter than 1 token, drop it
+        #     if valid_ans_len[i] <= 1:
+        #         continue
+        #     else:
+        #         out_seq.append(seq[i:i + 1])
+        # out_seq = torch.cat(out_seq, dim=0)  # concat output in the batch dim
+        # logger.debug(f"[_generate_sequence] out_seq: {out_seq}")
 
-        return out_seq
+        return outputs
 
-    def generate_experience(self, prompts):
+    def generate_experience(self, inputs):
         self.eval()
-        seq = self._generate_sequence(prompts)
+        outputs = self._generate_sequence(inputs)
         self.train()
 
-        pad_token_id = self.tokenizer.pad_token_id
-        # TODO: need to modify fo GLM-based models
-        attention_mask = seq.not_equal(pad_token_id).long()
+        # pad_token_id = self.tokenizer.pad_token_id
+        # attention_mask = seq.not_equal(pad_token_id).long()
+        device = inputs['input_ids'].device
+        input_ids = outputs['input_ids'].to(device)
+        attention_mask = outputs['attention_mask'].to(device) if "attention_mask" in outputs else None
+        position_ids = outputs['position_ids'].to(device) if "position_ids" in outputs else None
 
         with torch.no_grad():
-            output = self.actor_model(seq, attention_mask=attention_mask)
-            output_ref = self.ref_model(seq, attention_mask=attention_mask)
-            reward_score = self.reward_model.reward(seq, attention_mask)[1].detach()
-            values = self.critic_model.reward(seq, attention_mask)[0].detach()
+            output = self.actor_model(input_ids, attention_mask=attention_mask, position_ids=position_ids)
+            output_ref = self.ref_model(input_ids, attention_mask=attention_mask, position_ids=position_ids)
+            reward_score = self.reward_model.reward(input_ids, attention_mask, position_ids)[1].detach()
+            values = self.critic_model.reward(input_ids, attention_mask, position_ids)[0].detach()
             # reward_score = self.reward_model.forward_value(
             #     seq, attention_mask,
             #     prompt_length=self.prompt_length)['chosen_end_scores'].detach(
@@ -1334,12 +1426,12 @@ class DeepSpeedPPOTrainer():
         logits_ref = output_ref.logits
 
         return {
-            'prompts': prompts,
-            'logprobs': gather_log_probs(logits[:, :-1, :], seq[:, 1:]),
-            'ref_logprobs': gather_log_probs(logits_ref[:, :-1, :], seq[:, 1:]),
+            'prompts': inputs['input_ids'],
+            'logprobs': gather_log_probs(logits[:, :-1, :], input_ids[:, 1:]),
+            'ref_logprobs': gather_log_probs(logits_ref[:, :-1, :], input_ids[:, 1:]),
             'value': values,
             'rewards': reward_score,
-            'input_ids': seq,
+            'input_ids': input_ids,
             "attention_mask": attention_mask
         }
 

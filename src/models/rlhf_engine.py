@@ -58,7 +58,7 @@ def create_hf_model(model_class,
         dschf = None
     if rlhf_training:
         # the weight loading is handled by create critic model
-        model = model_class.from_config(model_config)
+        model = model_class.from_config(model_config, trust_remote_code=True)
     else:
         model = model_class.from_pretrained(
             model_name_or_path,
@@ -86,7 +86,7 @@ def create_critic_model(model_name_or_path,
                         lora_train_bias="none"):
     # OPT model family always put a padding token at the beginning of the sequence,
     # we did not see this in other models but not sure if it is a general rule
-    critic_model = create_hf_model(AutoModel, model_name_or_path, tokenizer,
+    critic_model = create_hf_model(AutoModelForCausalLM, model_name_or_path, tokenizer,
                                    ds_config, rlhf_training, disable_dropout)
     critic_model.config.lora_rank = lora_rank
     critic_model.config.lora_alpha = lora_alpha
@@ -254,7 +254,7 @@ class DeepSpeedRLHFEngine:
             # num_padding_at_beginning=self.args.num_padding_at_beginning,
             rlhf_training=True,
             disable_dropout=self.args.disable_critic_dropout,
-            checkpoint=self.args.reward_checkpoint,
+            checkpoint=self.args.critic_checkpoint,
             lora_rank=self.args.critic_lora_rank,
             lora_alpha=self.args.lora_alpha,
             lora_train_bias=self.args.lora_train_bias)
@@ -318,7 +318,7 @@ class DeepSpeedRLHFEngine:
             ds_config=ds_eval_config,
             # num_padding_at_beginning=self.args.num_padding_at_beginning,
             rlhf_training=True,
-            checkpoint=self.args.reward_checkpoint,
+            checkpoint=self.args.critic_checkpoint,
             lora_rank=self.args.critic_lora_rank,
             lora_alpha=self.args.lora_alpha,
             lora_train_bias=self.args.lora_train_bias)

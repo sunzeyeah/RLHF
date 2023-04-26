@@ -189,6 +189,7 @@ class SFTDataset(Dataset):
     def __init__(self, args, filename, tokenizer):
         self.args = args
         self.tokenizer = tokenizer
+        self.model_name_or_path = args.model_name_or_path if hasattr(args, "model_name_or_path") else args.actor_model_path
 
         self.post_list = self.load_dataset(filename)
         for k in range(5):
@@ -202,7 +203,7 @@ class SFTDataset(Dataset):
         prompt = data['prompt']
         label = data['label']
         prefix = data['prefix']
-        if "pangu" in self.args.model_name_or_path:
+        if "pangu" in self.model_name_or_path:
             encoded_dict = self.tokenizer(prompt, prefix+label, max_length=self.args.max_length, return_tensors="pt",
                                           truncation="longest_first", padding="max_length", return_token_type_ids=False)
 
@@ -211,7 +212,7 @@ class SFTDataset(Dataset):
                 "attention_mask": encoded_dict['attention_mask'],
                 "labels": encoded_dict['input_ids'],
             }
-        elif "chatglm" in self.args.model_name_or_path:
+        elif "chatglm" in self.model_name_or_path:
             encoded_dict = self.tokenizer(prompt, label, max_length=self.args.max_length, return_tensors="pt",
                                           truncation="longest_first", padding="max_length")
 
@@ -219,7 +220,7 @@ class SFTDataset(Dataset):
                 "input_ids": encoded_dict['input_ids'][0],
                 "labels": encoded_dict['input_ids'][0],
             }
-        elif "glm" in self.args.model_name_or_path:
+        elif "glm" in self.model_name_or_path:
             encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
             prompt_length = len(encoded_prompt['input_ids'])
             label_length = len(self.tokenizer.tokenize(label)) + 1
@@ -250,7 +251,7 @@ class SFTDataset(Dataset):
                 "labels": encoded_dict['labels'][0],
             }
         else:
-            raise ValueError(f"Unsupported model name: {self.args.model_name_or_path}")
+            raise ValueError(f"Unsupported model name: {self.model_name_or_path}")
 
     @staticmethod
     def load_dataset(filename):
@@ -290,7 +291,7 @@ class RLHFDataset(Dataset):
         prompt = data['prompt']
         # label = data['label']
         prefix = data['prefix']
-        if "pangu" in self.args.model_name_or_path:
+        if "pangu" in self.args.actor_model_path:
             encoded_dict = self.tokenizer(prompt, self.tokenizer.sep_token + prefix,
                                           max_length=self.args.max_prompt_length,
                                           padding="max_length",
@@ -301,7 +302,7 @@ class RLHFDataset(Dataset):
                 "attention_mask": encoded_dict['attention_mask'],
                 # "labels": encoded_dict['input_ids'],
             }
-        elif "chatglm" in self.args.model_name_or_path:
+        elif "chatglm" in self.args.actor_model_path:
             encoded_dict = self.tokenizer(prompt, max_length=self.args.max_prompt_length, return_tensors="pt",
                                           padding="max_length",
                                           truncation="longest_first")
@@ -310,7 +311,7 @@ class RLHFDataset(Dataset):
                 "input_ids": encoded_dict['input_ids'][0],
                 # "labels": encoded_dict['input_ids'][0],
             }
-        elif "glm" in self.args.model_name_or_path:
+        elif "glm" in self.args.actor_model_path:
             encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
             prompt_length = len(encoded_prompt['input_ids'])
             encoded_dict = self.tokenizer(prompt, prefix + self.tokenizer.mask_token,

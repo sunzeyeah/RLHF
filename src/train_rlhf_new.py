@@ -70,6 +70,11 @@ def get_parser():
                         help="coefficient of pretraining loss in ppo-ptx objective function")
     parser.add_argument("--save_total_limit", type=int, default=2)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
+    parser.add_argument("--do_sample", type=bool, default=False)
+    parser.add_argument("--num_return_sequences", type=int, default=1)
+    parser.add_argument("--top_k", type=int, default=50)
+    parser.add_argument("--top_p", type=float, default=0.8)
+    parser.add_argument("--temperature", type=float, default=1.0)
     # deepspeed
     parser.add_argument('--enable_hybrid_engine', action='store_true',
                         help="Enable hybrid engine for actor model to optimize both inference and training through DeepSpeed.")
@@ -236,16 +241,16 @@ def main():
                 #         batch_prompt[k] = v
                 if batch_pretrain is not None:
                     batch_pretrain = {k: v.to(device) for k, v in batch_pretrain.items()}
-                    pretrain_dataset = pretraib_mini_dataset.add(batch_pretrain)
+                    pretrain_dataset = pretrain_mini_dataset.add(batch_pretrain)
                 else:
                     pretrain_dataset = pretrain_mini_dataset.add([[None] * args.train_batch_size])
-                prompts = batch_prompt['prompt']
+                # prompts = batch_prompt['prompts']
                 # length = prompts.size(-1)
                 # if length > args.max_prompt_length:
                 #     prompts = prompts[:, length - args.max_prompt_length:]
                 #     raise ValueError("Prompt length is too long")
 
-                out = trainer.generate_experience(prompts)
+                out = trainer.generate_experience(batch_prompt)
                 exp_dataset = exp_mini_dataset.add(out)
 
                 if exp_dataset is not None:
