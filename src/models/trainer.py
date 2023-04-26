@@ -1281,7 +1281,8 @@ class DeepSpeedPPOTrainer():
 
     def _generate_sequence(self, inputs):
         # max_min_length = self.max_answer_seq_len + prompts.shape[1]
-        batch_size, prompt_length = inputs['input_ids'].shape
+        batch_size = inputs['input_ids'].shape[0]
+        prompt_length = inputs['input_ids'].shape[-1]
 
         with torch.no_grad():
             logger.debug(f"[_generate_sequence] inputs: {inputs}")
@@ -1293,10 +1294,10 @@ class DeepSpeedPPOTrainer():
                                                        num_return_sequences=self.args.num_return_sequences,
                                                        top_p=self.args.top_p,
                                                        temperature=self.args.temperature,
-                                                       # max_length=max_min_length,
-                                                       # min_length=max_min_length
+                                                       max_length=self.args.max_length,
+                                                       min_length=self.args.max_length
                                                        )
-                logger.debug(f"[_generate_sequence] seq: {seq}")
+                logger.info(f"[_generate_sequence] seq: {seq}")
                 prompts = []
                 for i in range(batch_size):
                     prompt_ids = seq[i, :prompt_length]
@@ -1309,7 +1310,7 @@ class DeepSpeedPPOTrainer():
                 outputs = self.tokenizer(prompts, max_length=self.args.max_length,
                                          truncation="longest_first", padding="max_length",
                                          return_tensors="pt", return_token_type_ids=False)
-                logger.debug(f"[_generate_sequence] outputs: {outputs}")
+                logger.info(f"[_generate_sequence] outputs: {outputs}, outputs['input_ids'].shape: {outputs['input_ids'].shape}")
             elif "chatglm" in self.args.actor_model_path:
                 seq = self.actor_model.module.generate(**inputs,
                                                        max_new_tokens=self.max_answer_seq_len,
@@ -1318,7 +1319,9 @@ class DeepSpeedPPOTrainer():
                                                        do_sample=self.args.do_sample,
                                                        num_return_sequences=self.args.num_return_sequences,
                                                        top_p=self.args.top_p,
-                                                       temperature=self.args.temperature)
+                                                       temperature=self.args.temperature,
+                                                       max_length=self.args.max_length,
+                                                       min_length=self.args.max_length)
                 prompts = []
                 for i in range(batch_size):
                     prompt_ids = seq[i, :prompt_length]
@@ -1339,7 +1342,9 @@ class DeepSpeedPPOTrainer():
                                                        do_sample=self.args.do_sample,
                                                        num_return_sequences=self.args.num_return_sequences,
                                                        top_p=self.args.top_p,
-                                                       temperature=self.args.temperature)
+                                                       temperature=self.args.temperature,
+                                                       max_length=self.args.max_length,
+                                                       min_length=self.args.max_length)
                 outputs = dict()
                 for i in range(batch_size):
                     prompt_ids = seq[i, :prompt_length]
@@ -1427,12 +1432,13 @@ class DeepSpeedPPOTrainer():
 
         return {
             'prompts': inputs['input_ids'],
+            'input_ids': input_ids,
+            'attention_mask': attention_mask,
+            'position_ids': position_ids,
             'logprobs': gather_log_probs(logits[:, :-1, :], input_ids[:, 1:]),
             'ref_logprobs': gather_log_probs(logits_ref[:, :-1, :], input_ids[:, 1:]),
             'value': values,
-            'rewards': reward_score,
-            'input_ids': input_ids,
-            "attention_mask": attention_mask
+            'rewards': reward_score
         }
 
     def compute_rewards(self, prompts, log_probs, ref_log_probs, reward_score,
@@ -1459,9 +1465,11 @@ class DeepSpeedPPOTrainer():
         reward_score = inputs['rewards']
         values = inputs['value']
         attention_mask = inputs['attention_mask']
-        seq = inputs['input_ids']
+        position_ids = inputs['position_ids']
+        input_ids = inputs['input_ids']
 
         start = prompts.size()[-1] - 1
+        # TODO: modify attention mask for GLM-based models
         action_mask = attention_mask[:, 1:]
 
         old_values = values
@@ -1473,20 +1481,16 @@ class DeepSpeedPPOTrainer():
                 old_values, old_rewards, start)
 
         ### process the new outputs
-        batch = {'input_ids': seq, "attention_mask": attention_mask}
+        batch = {'input_ids': input_ids, "attention_mask": attention_mask, "position_ids": position_ids}
         actor_prob = self.actor_model(**batch, use_cache=False).logits
-        actor_log_prob = gather_log_probs(actor_prob[:, :-1, :],
-                                          inputs['input_ids'][:, 1:])
+        actor_log_prob = gather_log_probs(actor_prob[:, :-1, :],  input_ids[:, 1:])
         actor_loss = self.actor_loss_fn(actor_log_prob[:, start:],
                                         log_probs[:, start:], advantages,
                                         action_mask[:, start:])
         self.actor_model.backward(actor_loss)
         self.actor_model.step()
-        value = self.critic_model.forward_value(**batch,
-                                                return_value_only=True,
-                                                use_cache=False)[:, :-1]
-        critic_loss = self.critic_loss_fn(value[:, start:], old_values[:,
-                                                            start:],
+        value = self.critic_model.reward(**batch, use_cache=False)[0][:, :-1]
+        critic_loss = self.critic_loss_fn(value[:, start:], old_values[:, start:],
                                           returns, action_mask[:, start:])
         self.critic_model.backward(critic_loss)
         self.critic_model.step()

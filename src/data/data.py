@@ -3,7 +3,6 @@ import os
 import json
 import re
 import random
-import copy
 import torch
 
 from tqdm import tqdm
@@ -274,10 +273,10 @@ class SFTDataset(Dataset):
 
 
 class RLHFDataset(Dataset):
-    def __init__(self, args, filename, tokenizer, padding_side="left"):
+    def __init__(self, args, filename, tokenizer):
         self.args = args
-        self.tokenizer = copy.deepcopy(tokenizer)
-        self.tokenizer.padding_side = padding_side
+        self.tokenizer = tokenizer
+        assert tokenizer.padding_side == "left", "In RLHF training, need to set padding_side to 'left'"
 
         self.post_list = self.load_dataset(filename)
         for k in range(5):

@@ -390,12 +390,13 @@ class GPTPanguModel(GPTPanguPreTrainedModel):
 
                 outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(block),
-                    hidden_states=hidden_states,
-                    layer_past=None,
-                    attention_mask=attention_mask,
-                    head_mask=head_mask[i],
+                    hidden_states,
+                    # layer_past
+                    None,
+                    attention_mask,
+                    head_mask[i],
                     # custom query
-                    custom_query=query_embeds if i == last_layer_id else None,
+                    query_embeds if i == last_layer_id else None,
                 )
             else:
                 outputs = block(

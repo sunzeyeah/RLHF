@@ -9,6 +9,7 @@ import os
 import argparse
 import torch
 import random
+import copy
 import deepspeed
 
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM, default_data_collator
@@ -125,12 +126,14 @@ def get_parser():
     return args
 
 
-def create_datasets(args, tokenizer, ppo_ptx_enabled):
+def create_datasets(args, tokenizer, ppo_ptx_enabled, sft_tokenizer=None):
     train_dataset = RLHFDataset(args, os.path.join(args.data_dir, args.train_filename),
-                                tokenizer, padding_side="left")
+                                tokenizer)
     if ppo_ptx_enabled:
+        sft_tokenizer = copy.deepcopy(tokenizer)
+        sft_tokenizer.padding_side = "right"
         pretrain_dataset = SFTDataset(args, os.path.join(args.data_dir, args.pretrain_filename),
-                                      tokenizer)
+                                      sft_tokenizer)
 
     # DataLoaders creation:
     # data_collator = DataCollatorRLHF(args.max_length, pad_token_id)
@@ -197,7 +200,7 @@ def main():
     # load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path, use_cache=False, trust_remote_code=True)
     # tokenizer.pad_token = tokenizer.eos_token
-    # tokenizer.padding_side = "left" # PS: padding side does affect output of reward model
+    tokenizer.padding_side = "left" # PS: padding side slightly affect output of sft generation and reward model result
     args.max_prompt_length = args.max_length - args.max_gen_length
 
     # load dataset
