@@ -69,7 +69,7 @@ python setup.py --cpp_ext --cuda_ext bdist_wheel 2>&1 | tee build.log
 | 模型      | size | huggingface地址 | 百度网盘地址  |  提取码      | 
 | ----------- | ----------- | ----------- |  ----------- |  ----------- |
 | [Pangu-350M](https://openi.pcl.ac.cn/PCL-Platform.Intelligence/PanGu-Alpha)   | 659MB | [sunzeyeah/pangu-350M](https://huggingface.co/sunzeyeah/pangu-350M) | [Pangu-350M](https://pan.baidu.com/s/1IzgtW48S2PKyjxPPMe1rAQ) |  c5jj |
-| [Pangu-2.6B](https://openi.pcl.ac.cn/PCL-Platform.Intelligence/PanGu-Alpha)   | 9.8GB | [sunzeyeah/pangu-2.6B](https://huggingface.co/sunzeyeah/pangu-2.6B) | [Pangu-2.6B](https://pan.baidu.com/s/1Tzvja4q_LgQOwkWPQ4jShw)    | 2rad |
+| [Pangu-2.6B](https://openi.pcl.ac.cn/PCL-Platform.Intelligence/PanGu-Alpha)   | 9.8GB | [sunzeyeah/pangu-2_6B](https://huggingface.co/sunzeyeah/pangu-2_6B) | [Pangu-2.6B](https://pan.baidu.com/s/1Tzvja4q_LgQOwkWPQ4jShw)    | 2rad |
 | [Pangu-13B](https://openi.pcl.ac.cn/PCL-Platform.Intelligence/PanGu-Alpha)   | 23.6GB | [sunzeyeah/pangu-13B](https://huggingface.co/sunzeyeah/pangu-13B) | [Pangu-13B](https://pan.baidu.com/s/11fWAeYYKqI7pH0UiuJ5jEQ)    | u3dx |
 | [GLM-350M-chinese](https://github.com/THUDM/GLM) | 679MB | [sunzeyeah/glm-350M-chinese](https://huggingface.co/sunzeyeah/glm-350M-chinese) | [GLM-350M-chinese](https://pan.baidu.com/s/11Lef-E7Tsz5OGOueCpiqaA) | ii8e |
 | [GLM-10B-chinese](https://github.com/THUDM/GLM)   | 18.4G | [sunzeyeah/glm-10B-chinese](https://huggingface.co/sunzeyeah/glm-10B-chinese) | [GLM-10B-chinese](https://pan.baidu.com/s/1GuOefx42n_GzFfwnjoBltw) | fynj  |
@@ -173,7 +173,7 @@ SFT模型下载：
 | 预训练模型  |  SFT数据集  | size | huggingface地址 | 百度网盘地址  |  提取码      | 
 | ----------- | --- | ----------- | ----------- |  ----------- | ----------- |
 | Pangu-350M |  SFT & Reward Data | 1.3GB | [sunzeyeah/pangu-350M-sft](https://huggingface.co/sunzeyeah/pangu-350M-sft) | [Pangu-350M-SFT](https://pan.baidu.com/s/14nF63nAQz38jmplUC0EQ-g) | 0f8j |
-| Pangu-2.6B |  SFT & Reward Data | 9.8GB | [sunzeyeah/pangu-2.6B-sft](https://huggingface.co/sunzeyeah/pangu-2.6B-sft) | [Pangu-2.6B-SFT](https://pan.baidu.com/s/1Q2PKf0MnFsiFlNhU-6WIrg) | r13w |
+| Pangu-2.6B |  SFT & Reward Data | 9.8GB | [sunzeyeah/pangu-2_6B-sft](https://huggingface.co/sunzeyeah/pangu-2_6B-sft) | [Pangu-2.6B-SFT](https://pan.baidu.com/s/1Q2PKf0MnFsiFlNhU-6WIrg) | r13w |
 
 
 <details>
