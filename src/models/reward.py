@@ -40,10 +40,12 @@ class RewardModel(PreTrainedModel):
             self,
             input_ids=None,
             attention_mask=None,
-            position_ids=None
+            position_ids=None,
+            use_cache=None,
     ):
         batch_size = input_ids.shape[0]
-        transformer_outputs = self.transformer(input_ids, attention_mask=attention_mask, position_ids=position_ids)
+        transformer_outputs = self.transformer(input_ids, attention_mask=attention_mask, position_ids=position_ids,
+                                               use_cache=use_cache)
         if self.model_type == "glm":
             hidden_states = transformer_outputs.mems[-1]
         elif self.model_type == "chatglm":
@@ -80,19 +82,13 @@ class RewardModel(PreTrainedModel):
             rejected_input_ids=None,
             rejected_attention_mask=None,
             rejected_position_ids=None,
-            past_key_values=None,
-            token_type_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            mc_token_ids=None,
-            labels=None,
-            return_dict=False,
-            output_attentions=False,
-            output_hidden_states=False,
+            use_cache=None,
     ):
-        chosen_values, chosen_reward = self.reward(chosen_input_ids, attention_mask=chosen_attention_mask, position_ids=chosen_position_ids)
+        chosen_values, chosen_reward = self.reward(chosen_input_ids, attention_mask=chosen_attention_mask,
+                                                   position_ids=chosen_position_ids, use_cache=use_cache)
         if rejected_input_ids is not None:
-            reject_values, reject_reward = self.reward(rejected_input_ids, attention_mask=rejected_attention_mask, position_ids=rejected_position_ids)
+            reject_values, reject_reward = self.reward(rejected_input_ids, attention_mask=rejected_attention_mask,
+                                                       position_ids=rejected_position_ids, use_cache=use_cache)
             loss = self.loss_fn(chosen_reward, reject_reward)
         else:
             reject_values = None

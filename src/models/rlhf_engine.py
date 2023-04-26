@@ -66,7 +66,7 @@ def create_hf_model(model_class,
             config=model_config, trust_remote_code=True)
 
     model.config.end_token_id = tokenizer.eos_token_id
-    model.config.pad_token_id = model.config.eos_token_id
+    # model.config.pad_token_id = model.config.eos_token_id
     model.resize_token_embeddings(int(
         8 *
         math.ceil(len(tokenizer) / 8.0)))  # make the vocab size multiple of 8
@@ -179,7 +179,7 @@ class DeepSpeedRLHFEngine:
                                                 optimizer=optim,
                                                 lr_scheduler=lr_scheduler,
                                                 config=ds_config)
-
+        actor_engine.config['pad_token_id'] = actor_model.config.pad_token_id
         log_init("Actor", stime=stime)
 
         return actor_engine
