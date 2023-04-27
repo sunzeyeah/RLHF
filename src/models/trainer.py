@@ -1302,6 +1302,8 @@ class DeepSpeedPPOTrainer():
                     answer_ids = seq[i, prompt_length:]
                     prompt = self.tokenizer.decode(prompt_ids, skip_special_tokens=False)
                     answer = self.tokenizer.decode(answer_ids, skip_special_tokens=False)
+                    # Since prompt has <sep>, cannot use tokenizer(prompts, answers). Therefore concat prompt and answer,
+                    # use tokenizer(prompt+answer) instead
                     prompts.append(prompt + answer)
                 outputs = self.tokenizer(prompts, max_length=self.args.max_length,
                                          truncation="longest_first", padding="max_length",
@@ -1316,7 +1318,7 @@ class DeepSpeedPPOTrainer():
                                                        top_p=self.args.top_p,
                                                        temperature=self.args.temperature)
                 logger.debug(f"[_generate_sequence] seq: {seq}")
-                prompts = []
+                prompts, answers = [], []
                 for i in range(batch_size):
                     prompt_ids = seq[i, :prompt_length]
                     # prompt_start_index = (prompt_ids != self.tokenizer.pad_token_id).nonzero()[0].item()
@@ -1324,8 +1326,9 @@ class DeepSpeedPPOTrainer():
                     answer_ids = seq[i, prompt_length:]
                     prompt = self.tokenizer.decode(prompt_ids, skip_special_tokens=False)
                     answer = self.tokenizer.decode(answer_ids, skip_special_tokens=False)
-                    prompts.append(prompt + answer)
-                outputs = self.tokenizer(prompts, max_length=self.args.max_length,
+                    prompts.append(prompt)
+                    answers.append(answer)
+                outputs = self.tokenizer(prompts, answers, max_length=self.args.max_length,
                                          truncation="longest_first", padding="max_length",
                                          return_tensors="pt")
                 logger.debug(f"[_generate_sequence] outputs: {outputs}, outputs['input_ids'].shape: {outputs['input_ids'].shape}")

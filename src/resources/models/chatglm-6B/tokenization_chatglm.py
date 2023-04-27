@@ -130,8 +130,12 @@ class SPTokenizer:
 
     def decode(self, text_ids: List[int], special_tokens=False) -> str:
         ids = [int(_id) - self.num_image_tokens for _id in text_ids]
-        ids = [_id for _id in ids if _id >= 0]
-        text = self._get_text_tokenizer(encode_special_tokens=special_tokens).decode(ids)
+        text_tokenizer = self._get_text_tokenizer(encode_special_tokens=special_tokens)
+        if special_tokens:
+            text = "".join([text_tokenizer.convert_id_to_token(_id) for _id in ids if _id >= 0])
+        else:
+            ids = [_id for _id in ids if _id >= 0]
+            text = text_tokenizer.decode(ids)
         text = text.replace("<n>", "\n")
         text = text.replace(SPTokenizer.get_tab_token(), "\t")
         for i in range(2, self.max_blank_length + 1):
@@ -277,14 +281,14 @@ class ChatGLMTokenizer(PreTrainedTokenizer):
         if isinstance(token_ids[0], list):
             tokens = []
             for single_token_ids in token_ids:
-                if self.pad_token_id in single_token_ids:  # remove pad
+                if skip_special_tokens and self.pad_token_id in single_token_ids:  # remove pad
                     single_token_ids = list(filter((self.pad_token_id).__ne__, single_token_ids))
-                tokens.append(self.sp_tokenizer.decode(single_token_ids))
+                tokens.append(self.sp_tokenizer.decode(single_token_ids, not skip_special_tokens))
             return (tokens)
         else:
-            if self.pad_token_id in token_ids:  # remove pad
+            if skip_special_tokens and self.pad_token_id in token_ids:  # remove pad
                 token_ids = list(filter((self.pad_token_id).__ne__, token_ids))
-            return self.sp_tokenizer.decode(token_ids)
+            return self.sp_tokenizer.decode(token_ids, not skip_special_tokens)
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str) in an id using the vocab. """
