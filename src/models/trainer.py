@@ -1473,7 +1473,7 @@ class DeepSpeedPPOTrainer():
             answer_ids = input_ids[:, 1:][:, start:]
             batch_size = answer_ids.shape[0]
             answer_length = answer_ids.shape[-1]
-            action_mask = torch.ones((batch_size, answer_length), dtype=torch.long)
+            action_mask = torch.ones((batch_size, answer_length), dtype=torch.long, device=input_ids.device)
             for i, j in (answer_ids == self.tokenizer.pad_token_id).nonzero():
                 action_mask[i, j] = 0
 

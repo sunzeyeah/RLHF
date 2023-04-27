@@ -97,9 +97,12 @@ def create_critic_model(model_name_or_path,
     critic_model.config.lora_rank = lora_rank
     critic_model.config.lora_alpha = lora_alpha
     critic_model.config.lora_train_bias = lora_train_bias
-    critic_model = RewardModel(critic_model.config, critic_model.transformer, tokenizer,
-        # num_padding_at_beginning=num_padding_at_beginning
-     )
+    if "pangu" in model_name_or_path or "chatglm" in model_name_or_path:
+        critic_model = RewardModel(critic_model.config, critic_model.transformer, tokenizer,
+            # num_padding_at_beginning=num_padding_at_beginning
+         )
+    else:
+        critic_model = RewardModel(critic_model.config, critic_model.glm, tokenizer)
 
     if rlhf_training:
         assert os.path.exists(checkpoint), f"Cannot find reward model checkpoint at {checkpoint}"
