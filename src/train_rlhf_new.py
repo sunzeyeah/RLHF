@@ -187,6 +187,8 @@ def create_dataloader(args, train_dataset, pretrain_dataset=None):
 def main():
     args = get_parser()
 
+    assert not args.enable_hybrid_engine, "DeepSpeed currently does not support Pangu-based or GLM-based model in hybrid engine"
+
     if args.local_rank == -1:
         device = torch.device("cuda")
     else:

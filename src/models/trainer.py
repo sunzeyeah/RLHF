@@ -1293,30 +1293,6 @@ class DeepSpeedPPOTrainer():
                                                        do_sample=self.args.do_sample,
                                                        num_return_sequences=self.args.num_return_sequences,
                                                        top_p=self.args.top_p,
-                                                       temperature=self.args.temperature,
-                                                       )
-                logger.info(f"[_generate_sequence] seq: {seq}")
-                prompts = []
-                for i in range(batch_size):
-                    prompt_ids = seq[i, :prompt_length]
-                    # prompt_start_index = (prompt_ids != self.tokenizer.pad_token_id).nonzero()[0].item()
-                    # prompt_ids = seq[i, prompt_start_index:prompt_length]
-                    answer_ids = seq[i, prompt_length:]
-                    prompt = self.tokenizer.decode(prompt_ids, skip_special_tokens=False)
-                    answer = self.tokenizer.decode(answer_ids, skip_special_tokens=False)
-                    prompts.append(prompt + answer)
-                outputs = self.tokenizer(prompts, max_length=self.args.max_length,
-                                         truncation="longest_first", padding="max_length",
-                                         return_tensors="pt", return_token_type_ids=False)
-                logger.info(f"[_generate_sequence] outputs: {outputs}, outputs['input_ids'].shape: {outputs['input_ids'].shape}")
-            elif "chatglm" in self.args.actor_model_path:
-                seq = self.actor_model.module.generate(**inputs,
-                                                       max_new_tokens=self.max_answer_seq_len,
-                                                       eos_token_id=self.tokenizer.eop_token_id,
-                                                       pad_token_id=self.tokenizer.pad_token_id,
-                                                       do_sample=self.args.do_sample,
-                                                       num_return_sequences=self.args.num_return_sequences,
-                                                       top_p=self.args.top_p,
                                                        temperature=self.args.temperature)
                 prompts = []
                 for i in range(batch_size):
@@ -1329,7 +1305,30 @@ class DeepSpeedPPOTrainer():
                     prompts.append(prompt + answer)
                 outputs = self.tokenizer(prompts, max_length=self.args.max_length,
                                          truncation="longest_first", padding="max_length",
+                                         return_tensors="pt", return_token_type_ids=False)
+            elif "chatglm" in self.args.actor_model_path:
+                seq = self.actor_model.module.generate(**inputs,
+                                                       max_new_tokens=self.max_answer_seq_len,
+                                                       eos_token_id=self.tokenizer.eop_token_id,
+                                                       pad_token_id=self.tokenizer.pad_token_id,
+                                                       do_sample=self.args.do_sample,
+                                                       num_return_sequences=self.args.num_return_sequences,
+                                                       top_p=self.args.top_p,
+                                                       temperature=self.args.temperature)
+                logger.debug(f"[_generate_sequence] seq: {seq}")
+                prompts = []
+                for i in range(batch_size):
+                    prompt_ids = seq[i, :prompt_length]
+                    # prompt_start_index = (prompt_ids != self.tokenizer.pad_token_id).nonzero()[0].item()
+                    # prompt_ids = seq[i, prompt_start_index:prompt_length]
+                    answer_ids = seq[i, prompt_length:]
+                    prompt = self.tokenizer.decode(prompt_ids, skip_special_tokens=False)
+                    answer = self.tokenizer.decode(answer_ids, skip_special_tokens=False)
+                    prompts.append(prompt + answer)
+                outputs = self.tokenizer(prompts, max_length=self.args.max_length,
+                                         truncation="longest_first", padding="max_length",
                                          return_tensors="pt")
+                logger.debug(f"[_generate_sequence] outputs: {outputs}, outputs['input_ids'].shape: {outputs['input_ids'].shape}")
             elif "glm" in self.args.actor_model_path:
                 seq = self.actor_model.module.generate(**inputs,
                                                        max_new_tokens=self.max_answer_seq_len,
@@ -1436,20 +1435,20 @@ class DeepSpeedPPOTrainer():
         }
 
     def compute_rewards(self, prompts, log_probs, ref_log_probs, reward_score, action_mask):
-        logger.info(f"[compute_rewards] prompts: {prompts.shape}, log_probs: {log_probs.shape}, ref_log_probs: {ref_log_probs.shape}, "
+        logger.debug(f"[compute_rewards] prompts: {prompts.shape}, log_probs: {log_probs.shape}, ref_log_probs: {ref_log_probs.shape}, "
                     f"reward_score: {reward_score.shape}, action_mask: {action_mask.shape}")
         kl_divergence_estimate = -self.kl_ctl * (log_probs - ref_log_probs)
         rewards = kl_divergence_estimate
-        logger.info(f"before rewards: {rewards.shape}")
+        logger.debug(f"before rewards: {rewards.shape}")
         start = prompts.shape[1] - 1
-        ends = start + action_mask[:, start:].sum(1)
+        ends = start + action_mask.sum(1)
         reward_clip = torch.clamp(reward_score, -self.clip_reward_value,
                                   self.clip_reward_value)
         batch_size = log_probs.shape[0]
         for j in range(batch_size):
-            logger.info(f"j={j}, ends[j]={ends[j]}, rewards[j, start:ends[j]]: {rewards[j, start:ends[j]].shape}")
+            logger.debug(f"j={j}, ends[j]={ends[j]}, rewards[j, start:ends[j]]: {rewards[j, start:ends[j]].shape}")
             rewards[j, start:ends[j]][-1] += reward_clip[j]
-        logger.info(f"after rewards: {rewards.shape}")
+        logger.debug(f"after rewards: {rewards.shape}")
         return rewards
 
     def train_rlhf(self, inputs):
@@ -1465,8 +1464,15 @@ class DeepSpeedPPOTrainer():
         input_ids = inputs['input_ids']
 
         start = prompts.size()[-1] - 1
-        # TODO: modify attention mask for GLM-based models
-        action_mask = attention_mask[:, 1:]
+        if attention_mask is not None and len(attention_mask.shape) == 2:
+            action_mask = attention_mask[:, 1:][:, start:]
+        else:
+            answer_ids = input_ids[:, 1:][:, start:]
+            batch_size = answer_ids.shape[0]
+            answer_length = answer_ids.shape[-1]
+            action_mask = torch.ones((batch_size, answer_length), dtype=torch.long)
+            for i, j in (answer_ids == self.tokenizer.pad_token_id).nonzero():
+                action_mask[i, j] = 0
 
         old_values = values
         with torch.no_grad():
@@ -1481,12 +1487,12 @@ class DeepSpeedPPOTrainer():
         actor_log_prob = gather_log_probs(actor_prob[:, :-1, :],  input_ids[:, 1:])
         actor_loss = self.actor_loss_fn(actor_log_prob[:, start:],
                                         log_probs[:, start:], advantages,
-                                        action_mask[:, start:])
+                                        action_mask)
         self.actor_model.backward(actor_loss)
         self.actor_model.step()
         value = self.critic_model.reward(**batch, use_cache=False)[0][:, :-1]
         critic_loss = self.critic_loss_fn(value[:, start:], old_values[:, start:],
-                                          returns, action_mask[:, start:])
+                                          returns, action_mask)
         self.critic_model.backward(critic_loss)
         self.critic_model.step()
 
@@ -1519,7 +1525,7 @@ class DeepSpeedPPOTrainer():
 
     def get_advantages_and_returns(self, values, rewards, start):
         # Generalized advantage estimation (https://arxiv.org/abs/1707.06347)
-        logger.info(f"[get_advantages_and_returns] values: {values.shape}, rewards: {rewards.shape}, start: {start}")
+        logger.debug(f"[get_advantages_and_returns] values: {values.shape}, rewards: {rewards.shape}, start: {start}")
         lastgaelam = 0
         advantages_reversed = []
         length = rewards.size()[-1]
@@ -1529,7 +1535,7 @@ class DeepSpeedPPOTrainer():
             lastgaelam = delta + self.gamma * self.lam * lastgaelam
             advantages_reversed.append(lastgaelam)
         advantages = torch.stack(advantages_reversed[::-1], dim=1)
-        logger.info(f"advantages: {advantages.shape}, values[:, start:]: {values[:, start:].shape}")
+        logger.debug(f"advantages: {advantages.shape}, values[:, start:]: {values[:, start:].shape}")
         returns = advantages + values[:, start:]
         return advantages.detach(), returns
 

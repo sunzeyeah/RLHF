@@ -10,7 +10,7 @@ import json
 
 from deepspeed.ops.adam import FusedAdam
 from deepspeed.ops.adam import DeepSpeedCPUAdam
-from transformers import AutoModelForCausalLM, get_scheduler
+from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, get_scheduler
 from transformers import AutoConfig, AutoModel
 from transformers.deepspeed import HfDeepSpeedConfig
 
@@ -67,9 +67,9 @@ def create_hf_model(model_class,
 
     model.config.end_token_id = tokenizer.eos_token_id
     # model.config.pad_token_id = model.config.eos_token_id
-    model.resize_token_embeddings(int(
-        8 *
-        math.ceil(len(tokenizer) / 8.0)))  # make the vocab size multiple of 8
+    # model.resize_token_embeddings(int(
+    #     8 *
+    #     math.ceil(len(tokenizer) / 8.0)))  # make the vocab size multiple of 8
 
     return model
 
@@ -86,7 +86,13 @@ def create_critic_model(model_name_or_path,
                         lora_train_bias="none"):
     # OPT model family always put a padding token at the beginning of the sequence,
     # we did not see this in other models but not sure if it is a general rule
-    critic_model = create_hf_model(AutoModelForCausalLM, model_name_or_path, tokenizer,
+    if "pangu" in model_name_or_path:
+        model_class = AutoModelForCausalLM
+    elif "glm" in model_name_or_path:
+        model_class = AutoModelForSeq2SeqLM
+    else:
+        raise ValueError(f"Unsupported model type: {model_name_or_path}")
+    critic_model = create_hf_model(model_class, model_name_or_path, tokenizer,
                                    ds_config, rlhf_training, disable_dropout)
     critic_model.config.lora_rank = lora_rank
     critic_model.config.lora_alpha = lora_alpha
@@ -109,6 +115,12 @@ class DeepSpeedRLHFEngine:
         self.args = args
         self.num_total_iters = num_total_iters
         self.tokenizer = tokenizer
+        if "pangu" in actor_model_name_or_path:
+            self.model_class = AutoModelForCausalLM
+        elif "glm" in actor_model_name_or_path:
+            self.model_class = AutoModelForSeq2SeqLM
+        else:
+            raise ValueError(f"Unsuppported model type: {actor_model_name_or_path}")
 
         self.actor = self._init_actor(
             actor_model_name_or_path=actor_model_name_or_path)
@@ -144,7 +156,7 @@ class DeepSpeedRLHFEngine:
 
         # Model
         actor_model = create_hf_model(
-            model_class=AutoModelForCausalLM,
+            model_class=self.model_class,
             model_name_or_path=actor_model_name_or_path,
             tokenizer=self.tokenizer,
             ds_config=ds_config,
@@ -196,7 +208,7 @@ class DeepSpeedRLHFEngine:
                                        offload=self.args.offload_reference_model,
                                        stage=zero_stage)
 
-        ref_model = create_hf_model(AutoModelForCausalLM,
+        ref_model = create_hf_model(self.model_class,
                                     actor_model_name_or_path, self.tokenizer,
                                     ds_config)
 
@@ -218,7 +230,7 @@ class DeepSpeedRLHFEngine:
                                        offload=self.args.offload_reference_model,
                                        stage=zero_stage)
 
-        actor_model_ema = create_hf_model(AutoModelForCausalLM,
+        actor_model_ema = create_hf_model(self.model_class,
                                           actor_model_name_or_path,
                                           self.tokenizer, ds_config)
         if self.args.actor_lora_rank > 0:
