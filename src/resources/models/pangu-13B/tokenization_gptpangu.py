@@ -30,7 +30,7 @@ class GPTPanguTokenizer(PreTrainedTokenizer):
         self.sp = sentencepiece.SentencePieceProcessor()
         self.sp.Load(model_file=model_file)
         self.translator = str.maketrans(" \n", "\u2582\u2583")
-
+        self.vocab_file = model_file
         # special token ids
         # self.eos_token_id = self.sp.piece_to_id("<eot>")
 
@@ -139,7 +139,7 @@ class GPTPanguTokenizer(PreTrainedTokenizer):
         """
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
-                save_directory, self.vocab_files_names["vocab_file"]
+                save_directory, self.vocab_files_names["model_file"]
             )
         else:
             vocab_file = save_directory
