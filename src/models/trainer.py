@@ -1431,7 +1431,7 @@ class DeepSpeedPPOTrainer():
             'position_ids': position_ids,
             'logprobs': gather_log_probs(logits[:, :-1, :], input_ids[:, 1:]),
             'ref_logprobs': gather_log_probs(logits_ref[:, :-1, :], input_ids[:, 1:]),
-            'value': values,
+            'value': values[:, :-1],
             'rewards': reward_score
         }
 

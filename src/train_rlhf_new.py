@@ -11,6 +11,7 @@ import torch
 import random
 import copy
 import deepspeed
+import numpy as np
 
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM, default_data_collator
 from torch.utils.data import RandomSampler, DistributedSampler, DataLoader
@@ -129,19 +130,35 @@ def get_parser():
 def create_datasets(args, tokenizer_padding_from_left, ppo_ptx_enabled, tokenizer_padding_from_right):
     train_dataset = RLHFDataset(args, os.path.join(args.data_dir, args.train_filename),
                                 tokenizer_padding_from_left)
+    iters_prompt = len(train_dataset) // args.train_batch_size
+
     if ppo_ptx_enabled:
         pretrain_dataset = SFTDataset(args, os.path.join(args.data_dir, args.pretrain_filename),
                                       tokenizer_padding_from_right)
+        iters_pretrain = len(pretrain_dataset) // args.train_batch_size
+    else:
+        pretrain_dataset = None
+        iters_pretrain = np.inf
+
+    num_update_steps_per_epoch = min(iters_prompt, iters_pretrain) * \
+                                 (args.train_batch_size / args.ppo_train_batch_size) * \
+                                 args.ppo_epochs / args.gradient_accumulation_steps
+    num_total_iters = int(args.num_epochs * num_update_steps_per_epoch)
+
+    return train_dataset, pretrain_dataset, num_total_iters
+
+
+def create_dataloader(args, train_dataset, pretrain_dataset=None):
 
     # DataLoaders creation:
     # data_collator = DataCollatorRLHF(args.max_length, pad_token_id)
     if args.local_rank == -1:
         prompt_train_sampler = RandomSampler(train_dataset)
-        if ppo_ptx_enabled:
+        if pretrain_dataset is not None:
             pretrain_sampler = RandomSampler(pretrain_dataset)
     else:
         prompt_train_sampler = DistributedSampler(train_dataset)
-        if ppo_ptx_enabled:
+        if pretrain_dataset is not None:
             pretrain_sampler = DistributedSampler(pretrain_dataset)
 
     prompt_train_dataloader = DataLoader(
@@ -149,7 +166,7 @@ def create_datasets(args, tokenizer_padding_from_left, ppo_ptx_enabled, tokenize
         # collate_fn=data_collator,
         sampler=prompt_train_sampler,
         batch_size=args.train_batch_size)
-    if ppo_ptx_enabled:
+    if pretrain_dataset is not None:
         pretrain_dataloader = DataLoader(
             pretrain_dataset,
             # collate_fn=default_data_collator,
@@ -159,12 +176,12 @@ def create_datasets(args, tokenizer_padding_from_left, ppo_ptx_enabled, tokenize
         pretrain_dataloader = [None] * len(
             prompt_train_dataloader)
 
-    num_update_steps_per_epoch = min(len(prompt_train_dataloader), len(pretrain_dataloader)) * \
-                                 (args.train_batch_size / args.ppo_train_batch_size) * \
-                                 args.ppo_epochs / args.gradient_accumulation_steps
-    num_total_iters = int(args.num_epochs * num_update_steps_per_epoch)
+    # num_update_steps_per_epoch = min(len(prompt_train_dataloader), len(pretrain_dataloader)) * \
+    #                              (args.train_batch_size / args.ppo_train_batch_size) * \
+    #                              args.ppo_epochs / args.gradient_accumulation_steps
+    # num_total_iters = int(args.num_epochs * num_update_steps_per_epoch)
 
-    return prompt_train_dataloader, pretrain_dataloader, num_total_iters
+    return prompt_train_dataloader, pretrain_dataloader#, num_total_iters
 
 
 def main():
@@ -176,14 +193,14 @@ def main():
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
         # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-        deepspeed.init_distributed()
+        # deepspeed.init_distributed()
 
-    args.global_rank = torch.distributed.get_rank()
-    if args.global_rank <= 0:
+    # args.global_rank = torch.distributed.get_rank()
+    if args.local_rank <= 0:
         logger.info(f"Parameters: {args}")
 
     set_seed(args.seed)
-    torch.distributed.barrier()
+    # torch.distributed.barrier()
 
     # Set PPO-ptx
     ppo_ptx_enabled = args.pretrain_filename is not None
@@ -191,7 +208,8 @@ def main():
         args.gradient_accumulation_steps_actor = args.gradient_accumulation_steps * 2
     else:
         args.gradient_accumulation_steps_actor = args.gradient_accumulation_steps
-    n_gpus = torch.distributed.get_world_size()
+    # n_gpus = torch.distributed.get_world_size()
+    n_gpus = torch.cuda.device_count()
     args.global_train_batch_size_actor = args.ppo_train_batch_size * args.gradient_accumulation_steps_actor * n_gpus
     args.global_train_batch_size_critic = args.ppo_train_batch_size * args.gradient_accumulation_steps * n_gpus
 
@@ -202,17 +220,13 @@ def main():
     tokenizer_padding_from_left.padding_side = "left" # PS: padding side slightly affect output of sft generation and reward model result
     args.max_prompt_length = args.max_length - args.max_gen_length
 
-    # load dataset
     if args.do_train:
-        prompt_train_dataloader, pretrain_dataloader, num_total_iters = create_datasets(args, tokenizer_padding_from_left,
-                                                                                        ppo_ptx_enabled, tokenizer_padding_from_right)
+        # load data and create dataset
+        prompt_train_dataset, pretrain_dataset, num_total_iters = create_datasets(args, tokenizer_padding_from_left,
+                                                                                  ppo_ptx_enabled, tokenizer_padding_from_right)
         args.warmup_steps = int(num_total_iters * args.warmup_ratio)
-    # if args.do_eval:
-    #     dev_dataset = SFTDataset.load_dataset(os.path.join(args.data_dir, args.eval_filename))
-    # else:
-    #     dev_dataset = None
 
-    if args.do_train:
+        # load rlhf engine
         rlhf_engine = DeepSpeedRLHFEngine(
             actor_model_name_or_path=args.actor_model_path,
             critic_model_name_or_path=args.critic_model_path,
@@ -220,19 +234,26 @@ def main():
             num_total_iters=num_total_iters,
             args=args)
 
+        # create dataloader [need to be called after rlhf engine initialization because
+        # DistributedSampler can only be called after deepspeed.initialize() is called]
+        prompt_train_dataloader, pretrain_dataloader = create_dataloader(args, prompt_train_dataset,
+                                                                         pretrain_dataset)
+
+        # create deepspeed ppo trainer
         ppo_trainer = DeepSpeedPPOPTXTrainer if ppo_ptx_enabled else DeepSpeedPPOTrainer
         trainer = ppo_trainer(rlhf_engine, args)
 
+        # create ppo experience dataset
         exp_mini_dataset = PPODataset(args.ppo_batch_numbers,
                                       args.ppo_train_batch_size)
         pretrain_mini_dataset = PPODataset(args.ppo_batch_numbers,
                                            args.ppo_train_batch_size)
 
-        if args.global_rank <= 0:
+        if args.local_rank <= 0:
             logger.info("Start training")
 
         for epoch in range(args.num_epochs):
-            if args.global_rank <= 0:
+            if args.local_rank <= 0:
                 logger.info(f"Beginning of Epoch {epoch+1}/{args.num_epochs}, "
                             f"Total Generation Batches {min(len(prompt_train_dataloader), len(pretrain_dataloader))}")
             for step, (batch_prompt, batch_pretrain) in enumerate(zip(prompt_train_dataloader, pretrain_dataloader)):
@@ -285,17 +306,17 @@ def main():
                         random.shuffle(exp_dataset)
                         random.shuffle(pretrain_dataset)
 
-                    if args.global_rank <= 0:
+                    if args.local_rank <= 0:
                         logger.info(f'epoch: {epoch}, step: {step}, ppo_ep: {ppo_ep+1}, act_loss: {actor_loss/inner_iter},'
                                     f'cri_loss: {critic_loss/inner_iter}, pretrain_loss: {pretrain_loss/inner_iter}')
                     average_reward = get_all_reduce_mean(average_reward).item()
-                    if args.global_rank <= 0:
+                    if args.local_rank <= 0:
                         logger.info(f"average reward score: {average_reward/inner_iter}")
 
                 if args.actor_gradient_checkpointing:
                     rlhf_engine.actor.gradient_checkpointing_disable()
 
-        if args.global_rank <= 0:
+        if args.local_rank <= 0:
             logger.info('saving model ...')
 
         if args.actor_lora_rank > 0:
@@ -306,22 +327,22 @@ def main():
         if args.critic_lora_rank > 0:
             rlhf_engine.critic = convert_lora_to_linear_layer(rlhf_engine.critic)
 
-        if torch.distributed.get_rank() == 0:
+        if args.local_rank == 0:
             save_hf_format(rlhf_engine.actor, tokenizer_padding_from_right, args, sub_folder='actor')
             save_hf_format(rlhf_engine.critic, tokenizer_padding_from_right, args, sub_folder='critic')
             if args.enable_ema:
                 save_hf_format(rlhf_engine.actor_ema, tokenizer_padding_from_right, args, sub_folder='actor_ema')
 
         if args.actor_zero_stage == 3:
-            save_zero_three_model(rlhf_engine.actor, global_rank=args.global_rank,
+            save_zero_three_model(rlhf_engine.actor, global_rank=args.local_rank,
                                   save_dir=os.path.join(args.output_dir, 'actor'),
                                   zero_stage=args.actor_zero_stage)
             if args.enable_ema:
-                save_zero_three_model(rlhf_engine.actor_ema, global_rank=args.global_rank,
+                save_zero_three_model(rlhf_engine.actor_ema, global_rank=args.local_rank,
                                       save_dir=os.path.join(args.output_dir, 'actor_ema'),
                                       zero_stage=args.actor_zero_stage)
         if args.critic_zero_stage == 3:
-            save_zero_three_model(rlhf_engine.critic, global_rank=args.global_rank,
+            save_zero_three_model(rlhf_engine.critic, global_rank=args.local_rank,
                                   save_dir=os.path.join(args.output_dir, 'critic'),
                                   zero_stage=args.critic_zero_stage)
 

@@ -29,8 +29,8 @@ TODOs:
 """
 
 
-def log_init(model_name, stime=None):
-    if torch.distributed.get_rank() == 0:
+def log_init(model_name, rank, stime=None):
+    if rank == 0:
         tag = "start" if stime is None else "end"
         suffix = "ing" if stime is None else "ed"
         duration = ""
@@ -127,7 +127,7 @@ class DeepSpeedRLHFEngine:
             self.critic.gradient_checkpointing_enable()
 
     def _init_actor(self, actor_model_name_or_path):
-        stime = log_init("Actor")
+        stime = log_init("Actor", self.args.local_rank)
 
         # DS Config
         ds_config = get_train_ds_config(
@@ -180,12 +180,12 @@ class DeepSpeedRLHFEngine:
                                                 lr_scheduler=lr_scheduler,
                                                 config=ds_config)
         actor_engine.config['pad_token_id'] = actor_model.config.pad_token_id
-        log_init("Actor", stime=stime)
+        log_init("Actor", self.args.local_rank, stime=stime)
 
         return actor_engine
 
     def _init_ref(self, actor_model_name_or_path):
-        stime = log_init("Ref")
+        stime = log_init("Ref", self.args.local_rank)
         # DS Config
         zero_stage = self.args.actor_zero_stage
         if zero_stage != 3:
@@ -203,11 +203,11 @@ class DeepSpeedRLHFEngine:
         ref_engine, *_ = deepspeed.initialize(model=ref_model,
                                               config=ds_config)
 
-        log_init("Ref", stime=stime)
+        log_init("Ref", self.args.local_rank, stime=stime)
         return ref_engine
 
     def _init_ema(self, actor_model_name_or_path):
-        stime = log_init("EMA")
+        stime = log_init("EMA", self.args.local_rank)
         # DS Config
         zero_stage = self.args.actor_zero_stage
         if zero_stage != 3:
@@ -229,11 +229,11 @@ class DeepSpeedRLHFEngine:
         ema_engine, *_ = deepspeed.initialize(model=actor_model_ema,
                                               config=ds_config)
 
-        log_init("EMA", stime=stime)
+        log_init("EMA", self.args.local_rank, stime=stime)
         return ema_engine
 
     def _init_critic(self, critic_model_name_or_path):
-        stime = log_init("Critic")
+        stime = log_init("Critic", self.args.local_rank)
         ds_config = get_train_ds_config(global_batch_size=self.args.global_train_batch_size_critic,
                                         micro_batch_size=self.args.ppo_train_batch_size,
                                         offload=self.args.offload,
@@ -289,11 +289,11 @@ class DeepSpeedRLHFEngine:
                                                  lr_scheduler=lr_scheduler,
                                                  config=ds_config)
 
-        log_init("Critic", stime=stime)
+        log_init("Critic", self.args.local_rank, stime=stime)
         return critic_engine
 
     def _init_reward(self, critic_model_name_or_path):
-        stime = log_init("Reward")
+        stime = log_init("Reward", self.args.local_rank)
         # DS Config
         zero_stage = self.args.critic_zero_stage
         if zero_stage != 3:
@@ -326,5 +326,5 @@ class DeepSpeedRLHFEngine:
         reward_engine, *_ = deepspeed.initialize(model=reward_model,
                                                  config=ds_config)
 
-        log_init("Reward", stime=stime)
+        log_init("Reward", self.args.local_rank, stime=stime)
         return reward_engine
