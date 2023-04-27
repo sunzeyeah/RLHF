@@ -1493,30 +1493,32 @@ class DeepSpeedPPOTrainer():
         return actor_loss, critic_loss
 
     def actor_loss_fn(self, logprobs, old_logprobs, advantages, mask):
-        ## policy gradient loss
+        ## Clipped Surrogate Objective for policy update in PPO (https://arxiv.org/abs/1707.06347)
         log_ratio = (logprobs - old_logprobs) * mask
         ratio = torch.exp(log_ratio)
-        pg_loss1 = -advantages * ratio
-        pg_loss2 = -advantages * torch.clamp(ratio, 1.0 - self.cliprange,
-                                             1.0 + self.cliprange)
-        pg_loss = torch.sum(torch.max(pg_loss1, pg_loss2) * mask) / mask.sum()
-        return pg_loss
+        pg_objective1 = advantages * ratio
+        pg_objective2 = advantages * torch.clamp(ratio, 1.0 - self.cliprange,
+                                                 1.0 + self.cliprange)
+        pg_objective = torch.sum(torch.min(pg_objective1, pg_objective2) * mask) / mask.sum()
+        return -pg_objective
 
     def critic_loss_fn(self, values, old_values, returns, mask):
-        ## value loss
+        # Clipped surrogate objective for value function (? not seen in original paper)
         values_clipped = torch.clamp(
             values,
             old_values - self.cliprange_value,
             old_values + self.cliprange_value,
             )
+        # Squared-error loss of value function (https://arxiv.org/abs/1707.06347)
         vf_loss1 = (values - returns)**2
         vf_loss2 = (values_clipped - returns)**2
+        # TODO: using max puts a lower bound and no uppper bound on the loss, is this really desired?
         vf_loss = 0.5 * torch.sum(
             torch.max(vf_loss1, vf_loss2) * mask) / mask.sum()
         return vf_loss
 
     def get_advantages_and_returns(self, values, rewards, start):
-        # Adopted from https://github.com/CarperAI/trlx/blob/main/trlx/models/modeling_ppo.py#L134
+        # Generalized advantage estimation (https://arxiv.org/abs/1707.06347)
         logger.info(f"[get_advantages_and_returns] values: {values.shape}, rewards: {rewards.shape}, start: {start}")
         lastgaelam = 0
         advantages_reversed = []
