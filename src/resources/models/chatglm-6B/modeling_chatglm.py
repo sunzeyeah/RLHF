@@ -12,7 +12,7 @@ import torch.utils.checkpoint
 import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss, LayerNorm
-from torch.nn.utils import skip_init
+# from torch.nn.utils import skip_init
 from typing import Optional, Tuple, Union, List, Callable
 
 from transformers.utils import (
@@ -379,16 +379,16 @@ class SelfAttention(torch.nn.Module):
         self.inner_hidden_size = num_attention_heads * self.hidden_size_per_attention_head
 
         # Strided linear layer.
-        self.query_key_value = skip_init(
-            torch.nn.Linear,
+        # self.query_key_value = skip_init(
+        self.query_key_value = torch.nn.Linear(
             hidden_size,
             3 * self.inner_hidden_size,
             bias=bias,
             dtype=params_dtype,
         )
 
-        self.dense = skip_init(
-            torch.nn.Linear,
+        # self.dense = skip_init(
+        self.dense = torch.nn.Linear(
             self.inner_hidden_size,
             hidden_size,
             bias=bias,
@@ -510,16 +510,16 @@ class GLU(torch.nn.Module):
         if inner_hidden_size is None:
             inner_hidden_size = 4 * hidden_size
         self.inner_hidden_size = inner_hidden_size
-        self.dense_h_to_4h = skip_init(
-            torch.nn.Linear,
+        # self.dense_h_to_4h = skip_init(
+        self.dense_h_to_4h = torch.nn.Linear(
             self.hidden_size,
             self.inner_hidden_size,
             bias=bias,
             dtype=params_dtype,
         )
         # Project back to h.
-        self.dense_4h_to_h = skip_init(
-            torch.nn.Linear,
+        # self.dense_4h_to_h = skip_init(
+        self.dense_4h_to_h = torch.nn.Linear(
             self.inner_hidden_size,
             self.hidden_size,
             bias=bias,
@@ -767,8 +767,8 @@ class ChatGLMModel(ChatGLMPreTrainedModel):
         self.pre_seq_len = config.pre_seq_len
         self.prefix_projection = config.prefix_projection
 
-        self.word_embeddings = skip_init(
-            torch.nn.Embedding,
+        # self.word_embeddings = skip_init(
+        self.word_embeddings = torch.nn.Embedding(
             num_embeddings=self.vocab_size, embedding_dim=self.hidden_size,
             dtype=self.params_dtype
         )
@@ -1018,8 +1018,8 @@ class ChatGLMForConditionalGeneration(ChatGLMPreTrainedModel):
 
         self.transformer = ChatGLMModel(config)
 
-        self.lm_head = skip_init(
-            nn.Linear,
+        # self.lm_head = skip_init(
+        self.lm_head = nn.Linear(
             config.hidden_size,
             config.vocab_size,
             bias=False,
