@@ -128,7 +128,7 @@ bash train_reward.sh
 ```
 
 ### 4. RLHF
-利用PPO算法和Reward Model，进一步更新SFT模型。基于开源RLHF框架[trlx](https://github.com/CarperAI/trlx) 实现
+利用PPO算法和Reward Model，进一步更新SFT模型。基于开源框架[DeepSpeedChat](https://github.com/microsoft/DeepSpeedExamples/tree/master/applications/DeepSpeed-Chat) 实现
 ```bash
 cd examples
 bash train_rlhf.sh
