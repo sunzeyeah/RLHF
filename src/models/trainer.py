@@ -1377,7 +1377,7 @@ class DeepSpeedPPOTrainer():
                     for key, val in encoded_dict.items():
                         if key not in outputs:
                             outputs[key] = []
-                        outputs[key].append(val)
+                        outputs[key].append(val[0])
                 outputs = {key: torch.stack(val) for key, val in outputs.items()}
             else:
                 raise ValueError(f"Unsupported model name: {self.args.actor_model_path}")

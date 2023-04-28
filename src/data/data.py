@@ -311,26 +311,27 @@ class RLHFDataset(Dataset):
                 # "labels": encoded_dict['input_ids'][0],
             }
         elif "glm" in self.args.actor_model_path:
-            encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
-            prompt_length = len(encoded_prompt['input_ids'])
+            # encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
+            # prompt_length = len(encoded_prompt['input_ids'])
             encoded_dict = self.tokenizer(prompt, prefix + self.tokenizer.mask_token,
-                                          max_length=min(prompt_length, self.args.max_prompt_length),
+                                          max_length=self.args.max_prompt_length,
                                           padding="max_length",
                                           truncation="only_first",
                                           return_tensors="pt",
                                           return_token_type_ids=False)
-            max_gen_length = self.args.max_length - prompt_length
+            # max_gen_length = self.args.max_length - prompt_length
             # max_gen_length = self.args.max_gen_length
-            assert prompt_length > 0
-            assert max_gen_length > 0
-            assert prompt_length + max_gen_length <= self.args.max_length
+            # assert prompt_length > 0
+            # assert max_gen_length > 0
+            # assert prompt_length + max_gen_length <= self.args.max_length
             encoded_dict = self.tokenizer.build_inputs_for_generation(encoded_dict,
-                                                                      max_gen_length=max_gen_length, padding=True)
+                                                                      max_gen_length=self.args.max_gen_length,
+                                                                      padding=True)
 
             return {
                 "input_ids": encoded_dict['input_ids'][0],
                 "position_ids": encoded_dict['position_ids'][0],
-                "attention_mask": encoded_dict['attention_mask'][0],
+                "generation_attention_mask": encoded_dict['generation_attention_mask'][0],
                 # "labels": encoded_dict['labels'][0],
             }
         else:
