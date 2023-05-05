@@ -148,9 +148,9 @@ class RewardModel(PreTrainedModel):
         return {
             "loss": loss,
             "chosen_values": chosen_values,
-            "chosen_reward": torch.sigmoid(chosen_reward),
+            "chosen_reward": chosen_reward,
             "reject_values": reject_values,
-            "reject_reward": torch.sigmoid(reject_reward) if reject_reward is not None else reject_reward,
+            "reject_reward": reject_reward if reject_reward is not None else reject_reward,
         }
 
 
