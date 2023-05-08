@@ -176,8 +176,9 @@ class VocabEmbedding(torch.nn.Module):
         self.vocab_end_index = self.num_embeddings
 
         # Allocate weights.
-        self.weight = Parameter(torch.Tensor(self.num_embeddings,
-                                             self.embedding_dim))
+        weight = torch.Tensor(self.num_embeddings, self.embedding_dim)
+        self.register_buffer("weight", weight)
+
         # And initialize.
         init.xavier_normal_(self.weight)
 
