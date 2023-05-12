@@ -1414,8 +1414,8 @@ class DeepSpeedPPOTrainer():
         with torch.no_grad():
             output = self.actor_model(input_ids, attention_mask=attention_mask, position_ids=position_ids)
             output_ref = self.ref_model(input_ids, attention_mask=attention_mask, position_ids=position_ids)
-            reward_score = self.reward_model.reward(input_ids, attention_mask, position_ids)[1].detach()
-            values = self.critic_model.reward(input_ids, attention_mask, position_ids)[0].detach()
+            reward_score = self.reward_model(input_ids, attention_mask, position_ids)['chosen_reward'].detach()
+            values = self.critic_model(input_ids, attention_mask, position_ids)['chosen_values'].detach()
             # reward_score = self.reward_model.forward_value(
             #     seq, attention_mask,
             #     prompt_length=self.prompt_length)['chosen_end_scores'].detach(

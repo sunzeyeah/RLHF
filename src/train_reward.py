@@ -52,6 +52,7 @@ def get_parser():
     parser.add_argument("--save_steps", type=int, default=1000)
     parser.add_argument("--save_total_limit", type=int, default=2)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
+    parser.add_argument("--max_grad_norm", type=float, default=1.0)
     parser.add_argument("--gradient_checkpointing", action="store_true",
                         help="If True, use gradient checkpointing to save memory at the expense of slower backward pass.")
     parser.add_argument("--deepspeed_config", type=str, default=None)
@@ -175,6 +176,7 @@ def main():
         learning_rate=args.learning_rate,
         lr_scheduler_type=args.lr_scheduler_type,
         per_device_train_batch_size=args.train_batch_size,
+        max_grad_norm=args.max_grad_norm,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         warmup_ratio=args.warmup_ratio,
         weight_decay=args.weight_decay,

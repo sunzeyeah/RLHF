@@ -21,7 +21,7 @@ class RewardModel(PreTrainedModel):
         self.pad_id = tokenizer.pad_token_id
         self.transformer = model
         self.v_head = nn.Linear(config.hidden_size, 1, bias=False)
-        self.loss_fn = PairWiseLoss()
+        # self.loss_fn = PairWiseLoss()
         if config.lora_rank > 0:
             convert_to_lora_recursively(model, config.lora_rank, config.lora_alpha)
             lora.mark_only_lora_as_trainable(model, config.lora_train_bias)
@@ -66,11 +66,12 @@ class RewardModel(PreTrainedModel):
         # last_hidden_states = outputs['last_hidden_state']
         # values = self.value_head(last_hidden_states)[:, :-1]
 
-        rewards = values.mean(dim=-1)
-        if len(rewards.shape) == 2:
-            rewards = rewards.squeeze(1)    # ensure shape is (B)
-
-        assert len(rewards.shape) == 1 and rewards.shape[0] == batch_size
+        rewards = None
+        # rewards = values.mean(dim=-1)
+        # if len(rewards.shape) == 2:
+        #     rewards = rewards.squeeze(1)    # ensure shape is (B)
+        #
+        # assert len(rewards.shape) == 1 and rewards.shape[0] == batch_size
 
         return values, rewards
 
@@ -84,73 +85,66 @@ class RewardModel(PreTrainedModel):
             rejected_position_ids=None,
             use_cache=None,
     ):
+        bs = chosen_input_ids.shape[0]
+        chosen_end_scores = []
+        rejected_end_scores = []
+
+        # compute reward for chosen inputs
         chosen_values, chosen_reward = self.reward(chosen_input_ids, attention_mask=chosen_attention_mask,
                                                    position_ids=chosen_position_ids, use_cache=use_cache)
+        if len(chosen_input_ids.shape) == 3:
+            chosen_input_ids = chosen_input_ids.squeeze(1)
+
+        # compute reward for rejected inputs if it is not none
         if rejected_input_ids is not None:
             reject_values, reject_reward = self.reward(rejected_input_ids, attention_mask=rejected_attention_mask,
                                                        position_ids=rejected_position_ids, use_cache=use_cache)
-            loss = self.loss_fn(chosen_reward, reject_reward)
+            # loss = self.loss_fn(chosen_reward, reject_reward)
+
+            if len(rejected_input_ids.shape) == 3:
+                rejected_input_ids = rejected_input_ids.squeeze(1)
+            loss = 0
+            for i in range(bs):
+                # Check if there is any padding otherwise take length of sequence
+                c_inds = (chosen_input_ids[i] == self.pad_id).nonzero()
+                c_ind = c_inds[0].item() if len(c_inds) > 0 else chosen_input_ids.shape[1]
+                r_inds = (rejected_input_ids[i] == self.pad_id).nonzero()
+                r_ind = r_inds[0].item() if len(r_inds) > 0 else rejected_input_ids.shape[1]
+                end_ind = max(c_ind, r_ind)
+
+                # Retrieve first index where trajectories diverge
+                divergence_ind = (chosen_input_ids[i] != rejected_input_ids[i]).nonzero()[0]
+                assert divergence_ind > 0
+
+                # Index into the correct rewards
+                c_truncated_reward = chosen_values[i][divergence_ind:end_ind]
+                r_truncated_reward = reject_values[i][divergence_ind:end_ind]
+
+                # Use the last non-padding token output as reward score
+                chosen_end_scores.append(c_truncated_reward[-1])
+                rejected_end_scores.append(r_truncated_reward[-1])
+
+                # Compute loss
+                loss += -torch.log(torch.sigmoid(c_truncated_reward - r_truncated_reward)).mean()
+            loss = loss / bs
+            rejected_end_scores = torch.stack(rejected_end_scores)
         else:
             reject_values = None
-            reject_reward = None
+            rejected_end_scores = None
             loss = None
+            for i in range(bs):
+                c_inds = (chosen_input_ids[i] == self.pad_id).nonzero()
+                c_ind = c_inds[0].item() if len(c_inds) > 0 else chosen_input_ids.shape[1]
+                chosen_end_scores.append(chosen_values[i, c_ind - 1])
 
-        # # Split the inputs and rewards into two parts, chosen and rejected
-        # assert len(input_ids.shape) == 2
-        # bs = input_ids.shape[0] // 2
-        # chosen = input_ids[:bs]
-        # rejected = input_ids[bs:]
-        # chosen_rewards = rewards[:bs]
-        # rejected_rewards = rewards[bs:]
-        #
-        # # Compute pairwise loss. Only backprop on the last value before padding
-        # loss = 0
-        # inference = False
-        # for i in range(bs):
-        #     if torch.all(torch.eq(chosen[i], rejected[i])).item():
-        #         c_inds = (chosen[i] == self.pad_id).nonzero()
-        #         c_ind = c_inds[0].item() if len(c_inds) > 0 else chosen.shape[1]
-        #         chosen_end_scores.append(chosen_rewards[i, c_ind - 1])
-        #         inference = True
-        #         continue
-        #
-        #     # Check if there is any padding otherwise take length of sequence
-        #     c_inds = (chosen[i] == self.pad_id).nonzero()
-        #     c_ind = c_inds[0].item() if len(c_inds) > 0 else chosen.shape[1]
-        #     r_inds = (rejected[i] == self.pad_id).nonzero()
-        #     r_ind = r_inds[0].item() if len(r_inds) > 0 else rejected.shape[1]
-        #     end_ind = max(c_ind, r_ind)
-        #
-        #     # Retrieve first index where trajectories diverge
-        #     divergence_ind = (chosen[i] != rejected[i]).nonzero()[0]
-        #     assert divergence_ind > 0
-        #
-        #     # Index into the correct rewards
-        #     c_truncated_reward = chosen_rewards[i][divergence_ind:end_ind]
-        #     r_truncated_reward = rejected_rewards[i][divergence_ind:end_ind]
-        #
-        #     # Append the last rewards to the list of end scores
-        #     chosen_end_scores.append(c_truncated_reward[-1])
-        #     rejected_end_scores.append(r_truncated_reward[-1])
-        #
-        #     # Compute loss
-        #     loss += -torch.log(torch.sigmoid(c_truncated_reward - r_truncated_reward)).mean()
-        # loss = loss / bs
-
-        # if not inference:
-        #     chosen_end_scores = torch.stack(chosen_end_scores)
-        #     rejected_end_scores = torch.stack(rejected_end_scores)
-        #
-        # if inference:
-        #     chosen_end_scores = torch.stack(chosen_end_scores)
-        #     return {"chosen_end_scores": chosen_end_scores}
+        chosen_end_scores = torch.stack(chosen_end_scores)
 
         return {
             "loss": loss,
             "chosen_values": chosen_values,
-            "chosen_reward": chosen_reward,
+            "chosen_reward": chosen_end_scores,
             "reject_values": reject_values,
-            "reject_reward": reject_reward if reject_reward is not None else reject_reward,
+            "reject_reward": rejected_end_scores
         }
 
 
