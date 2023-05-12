@@ -261,9 +261,10 @@ class SFTDataset(Dataset):
                 item = json.loads(line)
                 prompt = clean_text(item['prompt'])
                 label = clean_text(item['answers'][0]['answer'])
+                score = item['answers'][0]['score']
                 prefix = item['prefix']
 
-                if len(prompt) <= 0 or len(label) <= 0:
+                if len(prompt) <= 0 or len(label) <= 0 or score <= 0:
                     discard += 1
                     continue
                 datasets.append({"prompt": prompt, "label": label, "prefix": prefix})
