@@ -88,10 +88,11 @@ def get_parser():
     parser.add_argument("--checkpoint", type=str, default=None)
     parser.add_argument("--test_filename", type=str, default=None)
     parser.add_argument("--output_filename", type=str, default=None)
+    parser.add_argument("--do_sample", action="store_true")
     parser.add_argument("--num_return_sequences", type=int, default=1)
-    parser.add_argument("--top_k", type=int, default=50)
-    parser.add_argument("--top_p", type=float, default=0.8)
-    parser.add_argument("--temperature", type=float, default=1.0)
+    parser.add_argument("--top_k", type=int, default=None)
+    parser.add_argument("--top_p", type=float, default=None)
+    parser.add_argument("--temperature", type=float, default=None)
 
     args = parser.parse_args()
     
@@ -231,6 +232,7 @@ def main():
     if args.do_pred:
         model.eval()
         device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
+        model = model.to(device)
         tokenizer.padding_side = "left"
         with open(os.path.join(args.output_dir, args.output_filename), "w", encoding="utf-8") as w:
             w.write("\t".join(["prompt"]+[f"model_answer_{i}" for i in range(args.num_return_sequences)])+"\n")
@@ -247,8 +249,9 @@ def main():
                     outputs = model.generate(**inputs,
                                              max_new_tokens=args.max_length_generation,
                                              pad_token_id=tokenizer.pad_token_id,
-                                             do_sample=False,
+                                             do_sample=args.do_sample,
                                              num_return_sequences=args.num_return_sequences,
+                                             top_k=args.top_k,
                                              top_p=args.top_p,
                                              temperature=args.temperature)
                 elif "chatglm" in args.model_name_or_path:
@@ -266,8 +269,9 @@ def main():
                                              max_new_tokens=args.max_length_generation,
                                              eos_token_id=tokenizer.eop_token_id,
                                              pad_token_id=tokenizer.pad_token_id,
-                                             do_sample=False,
+                                             do_sample=args.do_sample,
                                              num_return_sequences=args.num_return_sequences,
+                                             top_k=args.top_k,
                                              top_p=args.top_p,
                                              temperature=args.temperature)
                 elif "glm" in args.model_name_or_path:
@@ -286,8 +290,9 @@ def main():
                                              max_new_tokens=min(args.max_length_generation, max_gen_length),
                                              eos_token_id=tokenizer.eop_token_id,
                                              pad_token_id=tokenizer.pad_token_id,
-                                             do_sample=False,
+                                             do_sample=args.do_sample,
                                              num_return_sequences=args.num_return_sequences,
+                                             top_k=args.top_k,
                                              top_p=args.top_p,
                                              temperature=args.temperature)
                 else:

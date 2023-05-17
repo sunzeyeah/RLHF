@@ -383,20 +383,21 @@ class GPTPanguModel(GPTPanguPreTrainedModel):
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, use_cache, output_attentions)
+                        assert len(inputs) == 1
+                        input_0 = inputs[0]
+                        return module(**input_0, use_cache=use_cache, output_attentions=output_attentions)
 
                     return custom_forward
 
                 outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(block),
-                    hidden_states,
-                    # layer_past
-                    None,
-                    attention_mask,
-                    head_mask[i],
-                    # custom query
-                    query_embeds if i == last_layer_id else None,
+                    {
+                        "hidden_states": hidden_states,
+                        "layer_past": None,
+                        "attention_mask": attention_mask,
+                        "head_mask": head_mask[i],
+                        "custom_query": query_embeds if i == last_layer_id else None
+                    }
                 )
             else:
                 outputs = block(
