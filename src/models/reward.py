@@ -121,8 +121,8 @@ class RewardModel(PreTrainedModel):
                 r_truncated_reward = reject_values[i][divergence_ind:end_ind]
 
                 # Use the last non-padding token output as reward score
-                chosen_end_scores.append(c_truncated_reward[-1])
-                rejected_end_scores.append(r_truncated_reward[-1])
+                chosen_end_scores.append(chosen_values[i][c_ind-1])
+                rejected_end_scores.append(reject_values[i][r_ind-1])
 
                 # Compute loss
                 loss += -torch.log(torch.sigmoid(c_truncated_reward - r_truncated_reward)).mean()
