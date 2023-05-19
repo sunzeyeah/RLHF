@@ -270,16 +270,29 @@ def main():
             prompt_iter = iter(prompt_train_dataloader)
             pretrain_iter = iter(pretrain_dataloader)
             step = 0
-            while True:
             # for step, (batch_prompt, batch_pretrain) in enumerate(zip(prompt_train_dataloader, pretrain_dataloader)):
+            while True:
+                # generate sequence: generate only one sequence at a time, aggregate to form a batch
+                answer_start_indices = []
+                output_sequences = dict()
                 for _ in range(args.train_batch_size):
                     try:
                         batch_prompt = next(prompt_iter)
                         batch_prompt = {k: v.to(device) for k, v in batch_prompt.items()}
-                        out = trainer.generate_experience(batch_prompt)
-                        exp_dataset = exp_mini_dataset.add(out)
+                        outputs, prompt_length = trainer.generate_sequence(batch_prompt)
+                        answer_start_indices.append(prompt_length-1)
+                        for key, val in outputs.items():
+                            if key not in output_sequences:
+                                output_sequences[key] = []
+                            output_sequences[key].append(val[0])
                     except StopIteration:
                         break
+                if len(output_sequences) > 0:
+                    output_sequences = {key: torch.stack(val) for key, val in output_sequences.items()}
+                    output_experiences = trainer.generate_experience(output_sequences, answer_start_indices, device)
+                    exp_dataset = exp_mini_dataset.add(output_experiences)
+                else:
+                    exp_dataset = None
 
                 try:
                     batch_pretrain = next(pretrain_iter)
