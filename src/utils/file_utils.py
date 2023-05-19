@@ -23,7 +23,7 @@ def print_rank_0(*message):
     Print only once from the main rank
     """
     if os.environ.get("RANK", "0") == "0":
-        print(*message)
+        logger.info(*message)
 
 
 def significant(x: Number, ndigits=2) -> Number:
@@ -50,8 +50,30 @@ def significant(x: Number, ndigits=2) -> Number:
 #     torch.cuda.manual_seed(seed)
 
 
-def print_gpu_utilization(prefix: str = "", index: int = 0):
+def print_gpu_utilization(prefix: str = "", index: int = 0, only_rank_0: bool = True):
     nvmlInit()
     handle = nvmlDeviceGetHandleByIndex(index)
     info = nvmlDeviceGetMemoryInfo(handle)
-    logger.info(f"[{prefix}] GPU memory occupied: {info.used // 1024**2} MB")
+    if only_rank_0:
+        if index == 0:
+            logger.info(f"[{prefix}] GPU memory occupied: {info.used // 1024**2} MB")
+    else:
+        logger.info(f"[{prefix}] GPU memory occupied: {info.used // 1024**2} MB")
+
+
+def print_gpu_utilization_torch(prefix: str = "", index: int = 0, only_rank_0: bool = True):
+    memory_allocated = torch.cuda.memory_allocated() / 1024 ** 3
+    max_memory_allocated = torch.cuda.max_memory_allocated() / 1024 ** 3
+    memory_reserved = torch.cuda.memory_reserved() / 1024 ** 3
+    max_memory_reserved = torch.cuda.max_memory_reserved() / 1024 ** 3
+    if only_rank_0:
+        if index == 0:
+            logger.info(f"[{prefix}] GPU-{index}: memory allocated: {memory_allocated:.2f} GB, "
+                        f"max memory allocated: {max_memory_allocated:.2f} GB, "
+                        f"memory reserved: {memory_reserved:.2f} GB, "
+                        f"max memory reserved: {max_memory_allocated:.2f} GB")
+    else:
+        logger.info(f"[{prefix}] GPU-{index}: memory allocated: {memory_allocated:.2f} GB, "
+                    f"max memory allocated: {max_memory_allocated:.2f} GB, "
+                    f"memory reserved: {memory_reserved:.2f} GB, "
+                    f"max memory reserved: {max_memory_reserved:.2f} GB")
