@@ -126,7 +126,8 @@ def main():
         ds_config["train_micro_batch_size_per_gpu"] = args.train_batch_size
         ds_config["gradient_accumulation_steps"] = args.gradient_accumulation_steps
         ds_config["gradient_clipping"] = args.max_grad_norm
-        ds_config['train_batch_size'] = args.train_batch_size * args.gradient_accumulation_steps * torch.cuda.device_count()
+        # TODO: before calling dist init, world size is always 1, therefore ds_config['train_batch_size'] cannot multiply world size
+        ds_config['train_batch_size'] = args.train_batch_size * args.gradient_accumulation_steps #* torch.cuda.device_count()
         # TODO: assuming hidden_size=4096
         ds_config["zero_optimization"]["reduce_bucket_size"] = 4096 * 4096
         ds_config["zero_optimization"]["stage3_prefetch_bucket_size"] = 0.9 * 4096 * 4096
@@ -274,6 +275,7 @@ def main():
         # )
 
         # deepspeed initialize
+        ds_config['train_batch_size'] = args.train_batch_size * args.gradient_accumulation_steps * torch.cuda.device_count()
         model_engine, *_ = deepspeed.initialize(model=model,
                                                 # optimizer=optim,
                                                 # lr_scheduler=lr_scheduler,
@@ -290,6 +292,9 @@ def main():
             batch_size=args.train_batch_size)
 
         # training
+        model_engine.train()
+        if args.gradient_checkpointing:
+            model_engine.module.gradient_checkpointing_enable()
         for epoch in range(args.num_epochs):
             if args.local_rank <= 0:
                 logger.info(f"Beginning of Epoch {epoch+1}/{args.num_epochs}")

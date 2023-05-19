@@ -23,7 +23,7 @@ from transformers import AutoTokenizer, PretrainedConfig
 from src.utils.logger import logger
 from src.utils.config import TRLConfig
 from src.data.pipeline import BaseRolloutStore
-from src.utils.file_utils import significant
+from src.utils.file_utils import significant, print_gpu_utilization, print_gpu_utilization_torch
 from src.utils.modeling_utils import (
     filter_non_scalars,
     get_distributed_config,
@@ -1400,9 +1400,13 @@ class DeepSpeedPPOTrainer():
         return outputs
 
     def generate_experience(self, inputs):
+        print_gpu_utilization("[generate_experience - before self._generate_experience()]", self.args.local_rank)
+        print_gpu_utilization_torch("[generate_experience - before self._generate_experience()]", self.args.local_rank)
         self.eval()
         outputs = self._generate_sequence(inputs)
         self.train()
+        print_gpu_utilization("[generate_experience - after self._generate_experience()]", self.args.local_rank)
+        print_gpu_utilization_torch("[generate_experience - after self._generate_experience()]", self.args.local_rank)
 
         # pad_token_id = self.tokenizer.pad_token_id
         # attention_mask = seq.not_equal(pad_token_id).long()
@@ -1422,6 +1426,8 @@ class DeepSpeedPPOTrainer():
             # )
             # values = self.critic_model.forward_value(
             #     seq, attention_mask, return_value_only=True).detach()[:, :-1]
+        print_gpu_utilization("[generate_experience - after call actor and critic]", self.args.local_rank)
+        print_gpu_utilization_torch("[generate_experience - after call actor and critic]", self.args.local_rank)
 
         logits = output.logits
         logits_ref = output_ref.logits
@@ -1477,27 +1483,43 @@ class DeepSpeedPPOTrainer():
             for i, j in (answer_ids == self.tokenizer.pad_token_id).nonzero():
                 action_mask[i, j] = 0
 
+        print_gpu_utilization("[train_rlhf - before compute reward and advantages]", self.args.local_rank)
+        print_gpu_utilization_torch("[train_rlhf - before compute reward and advantages]", self.args.local_rank)
         old_values = values
         with torch.no_grad():
             old_rewards = self.compute_rewards(prompts, log_probs,
                                                ref_log_probs, reward_score,
                                                action_mask)
             advantages, returns = self.get_advantages_and_returns(old_values, old_rewards, start)
+        print_gpu_utilization("[train_rlhf - after compute reward and advantages]", self.args.local_rank)
+        print_gpu_utilization_torch("[train_rlhf - after compute reward and advantages]", self.args.local_rank)
 
         ### process the new outputs
         batch = {'input_ids': input_ids, "attention_mask": attention_mask, "position_ids": position_ids}
         actor_prob = self.actor_model(**batch, use_cache=False).logits
+        print_gpu_utilization("[train_rlhf - after self.actor_model]", self.args.local_rank)
+        print_gpu_utilization_torch("[train_rlhf - after self.actor_model]", self.args.local_rank)
         actor_log_prob = gather_log_probs(actor_prob[:, :-1, :],  input_ids[:, 1:])
         actor_loss = self.actor_loss_fn(actor_log_prob[:, start:],
                                         log_probs[:, start:], advantages,
                                         action_mask)
         self.actor_model.backward(actor_loss)
+        print_gpu_utilization("[train_rlhf - after actor backward]", self.args.local_rank)
+        print_gpu_utilization_torch("[train_rlhf - after actor backward]", self.args.local_rank)
         self.actor_model.step()
+        print_gpu_utilization("[train_rlhf - after actor step]", self.args.local_rank)
+        print_gpu_utilization_torch("[train_rlhf - after actor step]", self.args.local_rank)
         value = self.critic_model.reward(**batch, use_cache=False)[0][:, :-1]
+        print_gpu_utilization("[train_rlhf - after self.critic_model]", self.args.local_rank)
+        print_gpu_utilization_torch("[train_rlhf - after self.critic_model]", self.args.local_rank)
         critic_loss = self.critic_loss_fn(value[:, start:], old_values[:, start:],
                                           returns, action_mask)
         self.critic_model.backward(critic_loss)
+        print_gpu_utilization("[train_rlhf - after critic backward]", self.args.local_rank)
+        print_gpu_utilization_torch("[train_rlhf - after critic backward]", self.args.local_rank)
         self.critic_model.step()
+        print_gpu_utilization("[train_rlhf - after critic step]", self.args.local_rank)
+        print_gpu_utilization_torch("[train_rlhf - after critic step]", self.args.local_rank)
 
         return actor_loss, critic_loss
 
