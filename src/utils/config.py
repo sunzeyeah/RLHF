@@ -434,6 +434,7 @@ def default_sft_config():
 
 def get_train_ds_config(global_batch_size=32,
                         micro_batch_size=4,
+                        gradient_accumulation_steps=8,
                         offload=False,
                         stage=2,
                         enable_hybrid_engine=False,
@@ -460,6 +461,7 @@ def get_train_ds_config(global_batch_size=32,
     return {
         "train_batch_size": global_batch_size,
         "train_micro_batch_size_per_gpu": micro_batch_size,
+        "gradient_accumulation_steps": gradient_accumulation_steps,
         "steps_per_print": 10,
         "zero_optimization": zero_opt_dict,
         "fp16": {
@@ -480,7 +482,7 @@ def get_train_ds_config(global_batch_size=32,
     }
 
 
-def get_eval_ds_config(global_batch_size=32, micro_batch_size=4, offload=False, stage=0):
+def get_eval_ds_config(global_batch_size=32, micro_batch_size=4, gradient_accumulation_steps=8, offload=False, stage=0):
     device = "cpu" if offload else "none"
     zero_opt_dict = {
         "stage": stage,
@@ -493,6 +495,7 @@ def get_eval_ds_config(global_batch_size=32, micro_batch_size=4, offload=False, 
     return {
         "train_batch_size": global_batch_size,
         "train_micro_batch_size_per_gpu": micro_batch_size,
+        "gradient_accumulation_steps": gradient_accumulation_steps,
         "steps_per_print": 10,
         "zero_optimization": zero_opt_dict,
         "fp16": {

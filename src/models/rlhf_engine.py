@@ -148,6 +148,7 @@ class DeepSpeedRLHFEngine:
         ds_config = get_train_ds_config(
             global_batch_size=self.args.global_train_batch_size_actor,
             micro_batch_size=self.args.ppo_train_batch_size,
+            gradient_accumulation_steps=self.args.gradient_accumulation_steps_actor,
             offload=self.args.offload,
             stage=self.args.actor_zero_stage,
             enable_hybrid_engine=self.args.enable_hybrid_engine,
@@ -208,6 +209,7 @@ class DeepSpeedRLHFEngine:
             zero_stage = 0
         ds_config = get_eval_ds_config(global_batch_size=self.args.global_train_batch_size_actor,
                                        micro_batch_size=self.args.ppo_train_batch_size,
+                                       gradient_accumulation_steps=self.args.eval_accumulation_steps,
                                        offload=self.args.offload_reference_model,
                                        stage=zero_stage)
 
@@ -230,6 +232,7 @@ class DeepSpeedRLHFEngine:
             zero_stage = 0
         ds_config = get_eval_ds_config(global_batch_size=self.args.global_train_batch_size_actor,
                                        micro_batch_size=self.args.ppo_train_batch_size,
+                                       gradient_accumulation_steps=self.args.eval_accumulation_steps,
                                        offload=self.args.offload_reference_model,
                                        stage=zero_stage)
 
@@ -251,6 +254,7 @@ class DeepSpeedRLHFEngine:
         stime = log_init("Critic", self.args.local_rank)
         ds_config = get_train_ds_config(global_batch_size=self.args.global_train_batch_size_critic,
                                         micro_batch_size=self.args.ppo_train_batch_size,
+                                        gradient_accumulation_steps=self.args.gradient_accumulation_steps,
                                         offload=self.args.offload,
                                         stage=self.args.critic_zero_stage)
 
@@ -258,6 +262,7 @@ class DeepSpeedRLHFEngine:
         #TODO(jeff): it means we never create the critic w. zero.init context if we are using ZeRO-3
         ds_eval_config = get_eval_ds_config(global_batch_size=self.args.global_train_batch_size_critic,
                                             micro_batch_size=self.args.ppo_train_batch_size,
+                                            gradient_accumulation_steps=self.args.eval_accumulation_steps,
                                             offload=False,
                                             stage=0)
 
@@ -316,6 +321,7 @@ class DeepSpeedRLHFEngine:
             zero_stage = 0
         ds_config = get_eval_ds_config(global_batch_size=self.args.global_train_batch_size_critic,
                                        micro_batch_size=self.args.ppo_train_batch_size,
+                                       gradient_accumulation_steps=self.args.eval_accumulation_steps,
                                        offload=self.args.offload,
                                        stage=zero_stage)
 
@@ -323,6 +329,7 @@ class DeepSpeedRLHFEngine:
         #TODO(jeff): it means we never create the critic w. zero.init context if we are using ZeRO-3
         ds_eval_config = get_eval_ds_config(global_batch_size=self.args.global_train_batch_size_critic,
                                             micro_batch_size=self.args.ppo_train_batch_size,
+                                            gradient_accumulation_steps=self.args.eval_accumulation_steps,
                                             offload=False,
                                             stage=0)
 
