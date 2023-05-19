@@ -242,7 +242,7 @@ def main():
                 # label = dev_data['label']
                 if "pangu" in args.model_name_or_path:
                     inputs = tokenizer(prompt, tokenizer.sep_token + prefix, max_length=args.max_length,
-                                       truncation="longest_first", add_special_tokens=False,
+                                       truncation="only_first", add_special_tokens=False,
                                        return_tensors="pt", return_token_type_ids=False)
                     # inputs = tokenizer(prompt, add_special_tokens=False, return_token_type_ids=False, return_tensors="pt")
                     inputs = inputs.to(device)

@@ -1286,99 +1286,90 @@ class DeepSpeedPPOTrainer():
 
         with torch.no_grad():
             logger.debug(f"[_generate_sequence] inputs: {inputs}")
+            prompts = []
+            answers = []
+            outputs = dict()
+            for i in range(batch_size):
+                input = {k: v[i].unsqueeze(0) for k, v in inputs.items()}
+                prompt = self.tokenizer.decode(input['input_ids'][0], skip_special_tokens=False)
+                if "pangu" in self.args.actor_model_path:
+                    seq = self.actor_model.module.generate(**input,
+                                                           max_new_tokens=self.max_answer_seq_len,
+                                                           pad_token_id=self.tokenizer.pad_token_id,
+                                                           do_sample=self.args.do_sample,
+                                                           num_return_sequences=self.args.num_return_sequences,
+                                                           top_p=self.args.top_p,
+                                                           temperature=self.args.temperature)
+                    for output_ids in seq:
+                        answer = self.tokenizer.decode(output_ids[prompt_length:], skip_special_tokens=True)
+                        # Since prompt has <sep>, cannot use tokenizer(prompts, answers). Therefore concat prompt and answer, use tokenizer(prompt+answer) instead
+                        prompts.append(prompt + answer)
+                elif "chatglm" in self.args.actor_model_path:
+                    seq = self.actor_model.module.generate(**input,
+                                                           max_new_tokens=self.max_answer_seq_len,
+                                                           eos_token_id=self.tokenizer.eop_token_id,
+                                                           pad_token_id=self.tokenizer.pad_token_id,
+                                                           do_sample=self.args.do_sample,
+                                                           num_return_sequences=self.args.num_return_sequences,
+                                                           top_p=self.args.top_p,
+                                                           temperature=self.args.temperature)
+                    logger.debug(f"[_generate_sequence] seq: {seq}")
+                    for output_ids in seq:
+                        answer = self.tokenizer.decode(output_ids[prompt_length:], skip_special_tokens=True)
+                        prompts.append(prompt)
+                        answers.append(answer)
+                elif "glm" in self.args.actor_model_path:
+                    seq = self.actor_model.module.generate(**input,
+                                                           max_new_tokens=self.max_answer_seq_len,
+                                                           eos_token_id=self.tokenizer.eop_token_id,
+                                                           pad_token_id=self.tokenizer.pad_token_id,
+                                                           do_sample=self.args.do_sample,
+                                                           num_return_sequences=self.args.num_return_sequences,
+                                                           top_p=self.args.top_p,
+                                                           temperature=self.args.temperature)
+                    for output_ids in seq:
+                        answer = self.tokenizer.decode(output_ids[prompt_length:], skip_special_tokens=True)
+                        label_length = len(self.tokenizer.tokenize(answer)) + 1
+                        if prompt_length + label_length > self.args.max_length:
+                            num_tokens_to_remove = prompt_length + label_length - self.args.max_length
+                            for _ in range(num_tokens_to_remove):
+                                if prompt_length > label_length:
+                                    prompt_length -= 1
+                                else:
+                                    label_length -= 1
+                        else:
+                            label_length = self.args.max_length - prompt_length
+                        assert prompt_length > 0
+                        assert label_length > 0
+                        assert prompt_length + label_length == self.args.max_length
+                        encoded_dict = self.tokenizer(prompt,
+                                                      max_length=prompt_length,
+                                                      return_tensors="pt",
+                                                      return_attention_mask=True,
+                                                      return_token_type_ids=False,
+                                                      add_special_tokens=False)
+                        encoded_dict = self.tokenizer.build_inputs_for_generation(encoded_dict,
+                                                                                  targets=answer,
+                                                                                  max_gen_length=label_length,
+                                                                                  padding=True)
+                        for key, val in encoded_dict.items():
+                            if key not in outputs:
+                                outputs[key] = []
+                            outputs[key].append(val[0])
+                else:
+                    raise ValueError(f"Unsupported model name: {self.args.actor_model_path}")
+
             if "pangu" in self.args.actor_model_path:
-                seq = self.actor_model.module.generate(**inputs,
-                                                       max_new_tokens=self.max_answer_seq_len,
-                                                       pad_token_id=self.tokenizer.pad_token_id,
-                                                       do_sample=self.args.do_sample,
-                                                       num_return_sequences=self.args.num_return_sequences,
-                                                       top_p=self.args.top_p,
-                                                       temperature=self.args.temperature)
-                prompts = []
-                for i in range(batch_size):
-                    prompt_ids = seq[i, :prompt_length]
-                    # prompt_start_index = (prompt_ids != self.tokenizer.pad_token_id).nonzero()[0].item()
-                    # prompt_ids = seq[i, prompt_start_index:prompt_length]
-                    answer_ids = seq[i, prompt_length:]
-                    prompt = self.tokenizer.decode(prompt_ids, skip_special_tokens=False)
-                    answer = self.tokenizer.decode(answer_ids, skip_special_tokens=False)
-                    # Since prompt has <sep>, cannot use tokenizer(prompts, answers). Therefore concat prompt and answer,
-                    # use tokenizer(prompt+answer) instead
-                    prompts.append(prompt + answer)
                 outputs = self.tokenizer(prompts, max_length=self.args.max_length,
-                                         truncation="longest_first", padding="max_length",
-                                         return_tensors="pt", return_token_type_ids=False)
+                                         padding="max_length", return_tensors="pt", return_token_type_ids=False)
+                logger.debug(f"[_generate_sequence] outputs['input_ids'].shape: {outputs['input_ids'].shape}, outputs: {outputs}")
             elif "chatglm" in self.args.actor_model_path:
-                seq = self.actor_model.module.generate(**inputs,
-                                                       max_new_tokens=self.max_answer_seq_len,
-                                                       eos_token_id=self.tokenizer.eop_token_id,
-                                                       pad_token_id=self.tokenizer.pad_token_id,
-                                                       do_sample=self.args.do_sample,
-                                                       num_return_sequences=self.args.num_return_sequences,
-                                                       top_p=self.args.top_p,
-                                                       temperature=self.args.temperature)
-                logger.debug(f"[_generate_sequence] seq: {seq}")
-                prompts, answers = [], []
-                for i in range(batch_size):
-                    prompt_ids = seq[i, :prompt_length]
-                    # prompt_start_index = (prompt_ids != self.tokenizer.pad_token_id).nonzero()[0].item()
-                    # prompt_ids = seq[i, prompt_start_index:prompt_length]
-                    answer_ids = seq[i, prompt_length:]
-                    prompt = self.tokenizer.decode(prompt_ids, skip_special_tokens=False)
-                    answer = self.tokenizer.decode(answer_ids, skip_special_tokens=False)
-                    prompts.append(prompt)
-                    answers.append(answer)
                 outputs = self.tokenizer(prompts, answers, max_length=self.args.max_length,
-                                         truncation="longest_first", padding="max_length",
-                                         return_tensors="pt")
-                logger.debug(f"[_generate_sequence] outputs: {outputs}, outputs['input_ids'].shape: {outputs['input_ids'].shape}")
+                                         padding="max_length", return_tensors="pt")
+                logger.debug(f"[_generate_sequence] outputs['input_ids'].shape: {outputs['input_ids'].shape}, outputs: {outputs}")
             elif "glm" in self.args.actor_model_path:
-                seq = self.actor_model.module.generate(**inputs,
-                                                       max_new_tokens=self.max_answer_seq_len,
-                                                       eos_token_id=self.tokenizer.eop_token_id,
-                                                       pad_token_id=self.tokenizer.pad_token_id,
-                                                       do_sample=self.args.do_sample,
-                                                       num_return_sequences=self.args.num_return_sequences,
-                                                       top_p=self.args.top_p,
-                                                       temperature=self.args.temperature)
-                outputs = dict()
-                for i in range(batch_size):
-                    prompt_ids = seq[i, :prompt_length]
-                    # prompt_start_index = (prompt_ids != self.tokenizer.pad_token_id).nonzero()[0].item()
-                    # prompt_ids = seq[i, prompt_start_index:prompt_length]
-                    answer_ids = seq[i, prompt_length:]
-                    prompt = self.tokenizer.decode(prompt_ids, skip_special_tokens=False)
-                    answer = self.tokenizer.decode(answer_ids, skip_special_tokens=False)
-                    # encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
-                    # prompt_length = len(encoded_prompt['input_ids'])
-                    # label_length = len(self.tokenizer.tokenize(label)) + 1
-                    # if prompt_length + label_length > self.args.max_length:
-                    #     num_tokens_to_remove = prompt_length + label_length - self.args.max_length
-                    #     for _ in range(num_tokens_to_remove):
-                    #         if prompt_length > label_length:
-                    #             prompt_length -= 1
-                    #         else:
-                    #             label_length -= 1
-                    # else:
-                    #     label_length = self.args.max_length - prompt_length
-                    # assert prompt_length > 0
-                    # assert label_length > 0
-                    # assert prompt_length + label_length <= self.args.max_length
-                    encoded_dict = self.tokenizer(prompt,
-                                                  max_length=prompt_length,
-                                                  truncation="only_first",
-                                                  return_tensors="pt",
-                                                  return_attention_mask=True,
-                                                  return_token_type_ids=False)
-                    encoded_dict = self.tokenizer.build_inputs_for_generation(encoded_dict,
-                                                                              targets=answer,
-                                                                              max_gen_length=self.max_answer_seq_len,
-                                                                              padding=True)
-                    for key, val in encoded_dict.items():
-                        if key not in outputs:
-                            outputs[key] = []
-                        outputs[key].append(val[0])
                 outputs = {key: torch.stack(val) for key, val in outputs.items()}
+                logger.debug(f"[_generate_sequence] outputs['input_ids'].shape: {outputs['input_ids'].shape}, outputs: {outputs}")
             else:
                 raise ValueError(f"Unsupported model name: {self.args.actor_model_path}")
 

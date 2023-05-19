@@ -72,7 +72,7 @@ def get_parser():
                         help="coefficient of pretraining loss in ppo-ptx objective function")
     parser.add_argument("--save_total_limit", type=int, default=2)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
-    parser.add_argument("--do_sample", type=bool, default=False)
+    parser.add_argument("--do_sample", action="store_true")
     parser.add_argument("--num_return_sequences", type=int, default=1)
     parser.add_argument("--top_k", type=int, default=50)
     parser.add_argument("--top_p", type=float, default=0.8)
@@ -161,11 +161,13 @@ def create_dataloader(args, train_dataset, pretrain_dataset=None):
         if pretrain_dataset is not None:
             pretrain_sampler = DistributedSampler(pretrain_dataset)
 
+    # prompt_train_dataloader is only used for generate_experience() where batch size is fiex at 1
     prompt_train_dataloader = DataLoader(
         train_dataset,
         # collate_fn=data_collator,
         sampler=prompt_train_sampler,
-        batch_size=args.train_batch_size)
+        batch_size=1)
+        # batch_size=args.train_batch_size)
     if pretrain_dataset is not None:
         pretrain_dataloader = DataLoader(
             pretrain_dataset,
@@ -265,26 +267,29 @@ def main():
             if args.local_rank <= 0:
                 logger.info(f"Beginning of Epoch {epoch+1}/{args.num_epochs}, "
                             f"Total Generation Batches {min(len(prompt_train_dataloader), len(pretrain_dataloader))}")
-            for step, (batch_prompt, batch_pretrain) in enumerate(zip(prompt_train_dataloader, pretrain_dataloader)):
-                batch_prompt = {k: v.to(device) for k, v in batch_prompt.items()}
-                # for k, v in batch_prompt.items():
-                #     try:
-                #         batch_prompt[k] = v.to(device)
-                #     except:
-                #         batch_prompt[k] = v
-                if batch_pretrain is not None:
-                    batch_pretrain = {k: v.to(device) for k, v in batch_pretrain.items()}
-                    pretrain_dataset = pretrain_mini_dataset.add(batch_pretrain)
-                else:
-                    pretrain_dataset = pretrain_mini_dataset.add([[None] * args.train_batch_size])
-                # prompts = batch_prompt['prompts']
-                # length = prompts.size(-1)
-                # if length > args.max_prompt_length:
-                #     prompts = prompts[:, length - args.max_prompt_length:]
-                #     raise ValueError("Prompt length is too long")
+            prompt_iter = iter(prompt_train_dataloader)
+            pretrain_iter = iter(pretrain_dataloader)
+            step = 0
+            while True:
+            # for step, (batch_prompt, batch_pretrain) in enumerate(zip(prompt_train_dataloader, pretrain_dataloader)):
+                for _ in range(args.train_batch_size):
+                    try:
+                        batch_prompt = next(prompt_iter)
+                        batch_prompt = {k: v.to(device) for k, v in batch_prompt.items()}
+                        out = trainer.generate_experience(batch_prompt)
+                        exp_dataset = exp_mini_dataset.add(out)
+                    except StopIteration:
+                        break
 
-                out = trainer.generate_experience(batch_prompt)
-                exp_dataset = exp_mini_dataset.add(out)
+                try:
+                    batch_pretrain = next(pretrain_iter)
+                    if batch_pretrain is not None:
+                        batch_pretrain = {k: v.to(device) for k, v in batch_pretrain.items()}
+                        pretrain_dataset = pretrain_mini_dataset.add(batch_pretrain)
+                    else:
+                        pretrain_dataset = pretrain_mini_dataset.add([[None] * args.train_batch_size])
+                except StopIteration:
+                    pass
 
                 if exp_dataset is not None:
                     inner_iter = 0
@@ -324,6 +329,8 @@ def main():
 
                 if args.actor_gradient_checkpointing:
                     rlhf_engine.actor.gradient_checkpointing_disable()
+
+                step += 1
 
         if args.local_rank <= 0:
             logger.info('saving model ...')

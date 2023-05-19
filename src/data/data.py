@@ -234,7 +234,7 @@ class SFTDataset(Dataset):
                 label_length = self.args.max_length - prompt_length
             assert prompt_length > 0
             assert label_length > 0
-            assert prompt_length + label_length <= self.args.max_length
+            assert prompt_length + label_length == self.args.max_length
             encoded_dict = self.tokenizer(prompt, prefix + self.tokenizer.mask_token,
                                           max_length=prompt_length,
                                           truncation="only_first",
@@ -294,8 +294,8 @@ class RLHFDataset(Dataset):
         if "pangu" in self.args.actor_model_path:
             encoded_dict = self.tokenizer(prompt, self.tokenizer.sep_token + prefix,
                                           max_length=self.args.max_prompt_length,
-                                          padding="max_length",
-                                          truncation="longest_first", add_special_tokens=False,
+                                          # padding="max_length",
+                                          truncation="only_first", add_special_tokens=False,
                                           return_tensors="pt", return_token_type_ids=False)
             return {
                 "input_ids": encoded_dict['input_ids'][0],
@@ -304,8 +304,8 @@ class RLHFDataset(Dataset):
             }
         elif "chatglm" in self.args.actor_model_path:
             encoded_dict = self.tokenizer(prompt, max_length=self.args.max_prompt_length, return_tensors="pt",
-                                          padding="max_length",
-                                          truncation="longest_first")
+                                          # padding="max_length",
+                                          truncation="only_first")
 
             return {
                 "input_ids": encoded_dict['input_ids'][0],
@@ -316,15 +316,10 @@ class RLHFDataset(Dataset):
             # prompt_length = len(encoded_prompt['input_ids'])
             encoded_dict = self.tokenizer(prompt, prefix + self.tokenizer.mask_token,
                                           max_length=self.args.max_prompt_length,
-                                          padding="max_length",
+                                          # padding="max_length",
                                           truncation="only_first",
                                           return_tensors="pt",
                                           return_token_type_ids=False)
-            # max_gen_length = self.args.max_length - prompt_length
-            # max_gen_length = self.args.max_gen_length
-            # assert prompt_length > 0
-            # assert max_gen_length > 0
-            # assert prompt_length + max_gen_length <= self.args.max_length
             encoded_dict = self.tokenizer.build_inputs_for_generation(encoded_dict,
                                                                       max_gen_length=self.args.max_gen_length,
                                                                       padding=True)
