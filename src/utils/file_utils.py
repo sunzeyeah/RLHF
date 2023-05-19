@@ -54,7 +54,7 @@ def print_gpu_utilization(prefix: str = "", index: int = 0, only_rank_0: bool = 
     nvmlInit()
     handle = nvmlDeviceGetHandleByIndex(index)
     info = nvmlDeviceGetMemoryInfo(handle)
-    memory_used = info.used // 1024**3
+    memory_used = info.used / 1024**3
     if only_rank_0:
         if index == 0:
             logger.info(f"[{prefix}] GPU-{index} memory occupied: {memory_used:.2f} GB")

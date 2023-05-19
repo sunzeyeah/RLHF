@@ -19,7 +19,7 @@ from torch.utils.data import RandomSampler, DistributedSampler, DataLoader
 from src.utils import logger, RESOURCE_PATH
 from src.models.rlhf_engine import DeepSpeedRLHFEngine
 from src.models.trainer import DeepSpeedPPOTrainer, DeepSpeedPPOPTXTrainer
-from src.utils.file_utils import set_seed
+from src.utils.file_utils import set_seed, print_gpu_utilization_torch, print_gpu_utilization
 from src.data.data import SFTDataset, RLHFDataset, PPODataset
 from src.utils.modeling_utils import get_all_reduce_mean, save_hf_format, moving_average, save_zero_three_model
 
@@ -222,6 +222,9 @@ def main():
     tokenizer_padding_from_left.padding_side = "left" # PS: padding side slightly affect output of sft generation and reward model result
     args.max_prompt_length = args.max_length - args.max_gen_length
 
+    print_gpu_utilization("before create deepspeed rlhf engine", args.local_rank)
+    print_gpu_utilization_torch("before create deepspeed rlhf engine", args.local_rank)
+
     if args.do_train:
         # load data and create dataset
         prompt_train_dataset, pretrain_dataset, num_total_iters = create_datasets(args, tokenizer_padding_from_left,
@@ -242,8 +245,12 @@ def main():
                                                                          pretrain_dataset)
 
         # create deepspeed ppo trainer
+        print_gpu_utilization("after create deepspeed rlhf engine", args.local_rank)
+        print_gpu_utilization_torch("after create deepspeed rlhf engine", args.local_rank)
         ppo_trainer = DeepSpeedPPOPTXTrainer if ppo_ptx_enabled else DeepSpeedPPOTrainer
         trainer = ppo_trainer(rlhf_engine, args)
+        print_gpu_utilization("after create deepspeed trainer", args.local_rank)
+        print_gpu_utilization_torch("after create deepspeed trainer", args.local_rank)
 
         # create ppo experience dataset
         exp_mini_dataset = PPODataset(args.ppo_batch_numbers,
