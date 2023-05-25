@@ -49,9 +49,7 @@ class RewardModel(PreTrainedModel):
         if self.model_type == "glm":
             hidden_states = transformer_outputs.mems[-1]
         elif self.model_type == "chatglm":
-            hidden_states = transformer_outputs[0]
-            seq_len, batch_size, hidden_size = hidden_states.shape
-            hidden_states = hidden_states.view(batch_size, seq_len, hidden_size)
+            hidden_states = transformer_outputs[0].permute(1, 0, 2)
         elif self.model_type == "pangu":
             hidden_states = transformer_outputs[0]
             hidden_states = hidden_states.squeeze(1)
