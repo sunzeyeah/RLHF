@@ -80,3 +80,18 @@ def print_gpu_utilization_torch(prefix: str = "", index: int = 0, only_rank_0: b
                     f"memory reserved: {memory_reserved:.2f} GB, "
                     # f"max memory reserved: {max_memory_reserved:.2f} GB"
                     )
+
+
+def print_trainable_parameters(model):
+    """
+    Prints the number of trainable parameters in the model.
+    """
+    trainable_params = 0
+    all_param = 0
+    for _, param in model.named_parameters():
+        all_param += param.numel()
+        if param.requires_grad:
+            trainable_params += param.numel()
+    logger.info(
+        f"trainable params: {trainable_params} || all params: {all_param} || trainable%: {100 * trainable_params / all_param}"
+    )

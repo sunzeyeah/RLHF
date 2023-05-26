@@ -22,3 +22,5 @@ icetk
 cpm_kernels
 protobuf==3.20.0
 pynvml
+bitsandbytes>=0.39.0
+peft>=0.4.0

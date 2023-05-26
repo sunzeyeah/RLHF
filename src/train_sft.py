@@ -18,12 +18,17 @@ from transformers import (
     Trainer,
     TrainingArguments,
     default_data_collator,
-    TextGenerationPipeline
+    BitsAndBytesConfig
+)
+from peft import (
+    prepare_model_for_kbit_training,
+    LoraConfig,
+    get_peft_model
 )
 
 from src.utils import logger, RESOURCE_PATH
 from src.data.data import SFTDataset
-from src.utils.file_utils import set_seed
+from src.utils.file_utils import set_seed, print_trainable_parameters
 from src.models import convert_to_lora_recursively
 
 
@@ -46,7 +51,8 @@ def get_parser():
     parser.add_argument("--local_rank", type=int, default=-1)
     parser.add_argument("--max_length", type=int, default=1024)
     parser.add_argument("--max_length_generation", type=int, default=None)
-    # parser.add_argument("--max_length_label", type=int, default=824)
+    parser.add_argument("--bits", type=int, default=32,
+                        help="bits used to load model, including: 32, 16, 8, 4")
     # train
     parser.add_argument("--do_train", action="store_true")
     parser.add_argument("--train_filename", type=str, default=None)
@@ -106,16 +112,41 @@ def main():
 
     set_seed(args.seed)
 
-    # load model and tokenizer
+    # load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+
+    # load model
+    if torch.cuda.is_available():
+        bf16 = torch.cuda.get_device_capability()[0] >= 8
+        if bf16:
+            fp16 = False
+            bnb_4bit_compute_dtype = torch.bfloat16
+        else:
+            fp16 = True
+            bnb_4bit_compute_dtype = torch.float16
+    else:
+        fp16 = False
+        bf16 = False
+        bnb_4bit_compute_dtype = None
+    bnb_config = BitsAndBytesConfig(
+        load_in_8bit=args.bits == 8,
+        load_in_4bit=args.bits == 4,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=bnb_4bit_compute_dtype
+    )
     if "pangu" in args.model_name_or_path:
         model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+        # model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, quantization_config=bnb_config,
+        #                                              device_map={"": 0})
         model.resize_token_embeddings(tokenizer.vocab_size)
         # model.config.pad_token_id = tokenizer.pad_token_id
         # model.config.bos_token_id = tokenizer.bos_token_id
         # model.config.eos_token_id = tokenizer.eos_token_id
     elif "glm" in args.model_name_or_path:
-        model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
+        # model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
+        model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, quantization_config=bnb_config,
+                                                     device_map={"": args.local_rank})
         if "chatglm" in args.model_name_or_path:
             model = model.half()
     else:
@@ -126,9 +157,24 @@ def main():
     # model.config.lora_train_bias = args.lora_train_bias
     # model = SFTModelWithLoRA(model.config, model)
 
+    if args.bits in [4, 8]:
+        if args.gradient_checkpointing:
+            model.gradient_checkpointing_enable()
+        model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=args.gradient_checkpointing)
+
     if args.lora_rank > 0:
-        convert_to_lora_recursively(model, args.lora_rank, args.lora_alpha)
-        lora.mark_only_lora_as_trainable(model, args.lora_train_bias)
+        # convert_to_lora_recursively(model, args.lora_rank, args.lora_alpha)
+        # lora.mark_only_lora_as_trainable(model, args.lora_train_bias)
+        config = LoraConfig(
+            r=args.lora_rank,
+            lora_alpha=args.lora_alpha,
+            target_modules=["query_key_value"],
+            lora_dropout=0.05,
+            bias=args.lora_train_bias,
+            task_type="CAUSAL_LM"
+        )
+        model = get_peft_model(model, config)
+        print_trainable_parameters(model)
 
     if args.checkpoint is not None:
         st = torch.load(args.checkpoint, map_location="cpu")
@@ -155,12 +201,6 @@ def main():
 
     # training arguments
     deepspeed_config = os.path.join(RESOURCE_PATH, "config", "deepspeed", args.deepspeed_config) if args.deepspeed_config is not None else None
-    if torch.cuda.is_available():
-        bf16 = torch.cuda.get_device_capability()[0] >= 8
-        fp16 = False if bf16 else True
-    else:
-        fp16 = False
-        bf16 = False
     training_args = TrainingArguments(
         output_dir=args.output_dir,
         no_cuda=not torch.cuda.is_available(),
@@ -178,8 +218,9 @@ def main():
         half_precision_backend="auto",
         fp16=fp16,
         bf16=bf16,
-        adam_beta1=0.9,
-        adam_beta2=0.95,
+        optim="paged_adamw_8bit",
+        # adam_beta1=0.9,
+        # adam_beta2=0.95,
         save_strategy=args.save_strategy,
         save_steps=args.save_steps,
         save_total_limit=args.save_total_limit,
@@ -220,6 +261,7 @@ def main():
         data_collator=default_data_collator,
         preprocess_logits_for_metrics=preprocess_logits_for_metrics,
     )
+    # model.config.use_cache = False  # silence the warnings. Please re-enable for inference!
 
     if args.do_train:
         trainer.train()
