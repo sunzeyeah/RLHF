@@ -59,6 +59,203 @@ class DataCollatorRLHF:
         return batch
 
 
+class PretrainDataset(Dataset):
+    def __init__(self, args, filename, tokenizer):
+        self.args = args
+        self.tokenizer = tokenizer
+        self.model_name_or_path = args.model_name_or_path if hasattr(args, "model_name_or_path") else args.actor_model_path
+
+        self.post_list = self.load_dataset(filename)
+        for k in range(5):
+            logger.info(f"PretrainDataset sample-{k}\n: {self.post_list[k]}")
+
+    def __len__(self):
+        return len(self.post_list)
+
+    def __getitem__(self, idx):
+        data = self.post_list[idx]
+        content = data['content']
+        eos_ids = data['eos_ids']
+        if "llama" in self.model_name_or_path:
+            encoded_dict = self.tokenizer(content,  max_length=self.args.max_length, return_tensors="pt",
+                                          truncation="longest_first",
+                                          #return_attention_mask=False,
+                                          return_token_type_ids=False)
+
+            return {
+                "input_ids": encoded_dict['input_ids'][0],
+                "attention_mask": encoded_dict['attention_mask'][0],
+                "labels": encoded_dict['input_ids'][0],
+            }
+        elif "pangu" in self.model_name_or_path:
+            encoded_dict = self.tokenizer(content, max_length=self.args.max_length, return_tensors="pt",
+                                          truncation="longest_first", return_token_type_ids=False)
+
+            return {
+                "input_ids": encoded_dict['input_ids'],
+                "attention_mask": encoded_dict['attention_mask'],
+                "labels": encoded_dict['input_ids'],
+            }
+        elif "chatglm" in self.model_name_or_path:
+            encoded_dict = self.tokenizer(content, max_length=self.args.max_length, return_tensors="pt",
+                                          truncation="longest_first")
+
+            return {
+                "input_ids": encoded_dict['input_ids'][0],
+                "labels": encoded_dict['input_ids'][0],
+            }
+        elif "glm" in self.model_name_or_path:
+            encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
+            prompt_length = len(encoded_prompt['input_ids'])
+            label_length = len(self.tokenizer.tokenize(label)) + 1
+            if prompt_length + label_length > self.args.max_length:
+                num_tokens_to_remove = prompt_length + label_length - self.args.max_length
+                for _ in range(num_tokens_to_remove):
+                    if prompt_length > label_length:
+                        prompt_length -= 1
+                    else:
+                        label_length -= 1
+            else:
+                label_length = self.args.max_length - prompt_length
+            assert prompt_length > 0
+            assert label_length > 0
+            assert prompt_length + label_length == self.args.max_length
+            encoded_dict = self.tokenizer(prompt, prefix + self.tokenizer.mask_token,
+                                          max_length=prompt_length,
+                                          truncation="only_first",
+                                          return_tensors="pt",
+                                          return_attention_mask=True,
+                                          return_token_type_ids=False)
+            encoded_dict = self.tokenizer.build_inputs_for_generation(encoded_dict, targets=label,
+                                                                      max_gen_length=label_length, padding=True)
+            return {
+                "input_ids": encoded_dict['input_ids'][0],
+                "position_ids": encoded_dict['position_ids'][0],
+                "attention_mask": encoded_dict['attention_mask'][0],
+                "labels": encoded_dict['labels'][0],
+            }
+        else:
+            raise ValueError(f"Unsupported model name: {self.model_name_or_path}")
+
+    def load_dataset(self, filename):
+        discard = 0
+        datasets = []
+        with open(filename, "r", encoding="utf-8") as f:
+            data = []
+            eos_ids = []
+            length = 0
+            for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
+                item = json.loads(line)
+                content = clean_text(item['prompt'])
+                # content = clean_text(item['content'])
+                if len(content) <= 0:
+                    discard += 1
+                    continue
+                tokens = self.tokenizer.tokenize(content)
+                if length + len(tokens) + 1 < self.args.max_length:
+                    data.append(content)
+                    length += len(tokens) + 1
+                    eos_ids.append(length)
+                else:
+                    data.append(content)
+                    datasets.append({"content": f" {self.tokenizer.eos_token} ".join(data), "eos_ids": eos_ids})
+                    data = []
+                    eos_ids = []
+                    length = 0
+        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+
+        return datasets
+
+
+class SFTDataset(Dataset):
+    def __init__(self, args, filename, tokenizer):
+        self.args = args
+        self.tokenizer = tokenizer
+        self.model_name_or_path = args.model_name_or_path if hasattr(args, "model_name_or_path") else args.actor_model_path
+
+        self.post_list = self.load_dataset(filename)
+        for k in range(5):
+            logger.info(f"SFTDataset sample-{k}\n: {self.post_list[k]}")
+
+    def __len__(self):
+        return len(self.post_list)
+
+    def __getitem__(self, idx):
+        data = self.post_list[idx]
+        prompt = data['prompt']
+        label = data['label']
+        prefix = data['prefix']
+        if "pangu" in self.model_name_or_path:
+            encoded_dict = self.tokenizer(prompt, prefix+label, max_length=self.args.max_length, return_tensors="pt",
+                                          truncation="longest_first", padding="max_length", return_token_type_ids=False)
+
+            return {
+                "input_ids": encoded_dict['input_ids'],
+                "attention_mask": encoded_dict['attention_mask'],
+                "labels": encoded_dict['input_ids'],
+            }
+        elif "chatglm" in self.model_name_or_path:
+            encoded_dict = self.tokenizer(prompt, label, max_length=self.args.max_length, return_tensors="pt",
+                                          truncation="longest_first", padding="max_length")
+
+            return {
+                "input_ids": encoded_dict['input_ids'][0],
+                "labels": encoded_dict['input_ids'][0],
+            }
+        elif "glm" in self.model_name_or_path:
+            encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
+            prompt_length = len(encoded_prompt['input_ids'])
+            label_length = len(self.tokenizer.tokenize(label)) + 1
+            if prompt_length + label_length > self.args.max_length:
+                num_tokens_to_remove = prompt_length + label_length - self.args.max_length
+                for _ in range(num_tokens_to_remove):
+                    if prompt_length > label_length:
+                       prompt_length -= 1
+                    else:
+                        label_length -= 1
+            else:
+                label_length = self.args.max_length - prompt_length
+            assert prompt_length > 0
+            assert label_length > 0
+            assert prompt_length + label_length == self.args.max_length
+            encoded_dict = self.tokenizer(prompt, prefix + self.tokenizer.mask_token,
+                                          max_length=prompt_length,
+                                          truncation="only_first",
+                                          return_tensors="pt",
+                                          return_attention_mask=True,
+                                          return_token_type_ids=False)
+            encoded_dict = self.tokenizer.build_inputs_for_generation(encoded_dict, targets=label,
+                                                                      max_gen_length=label_length, padding=True)
+            return {
+                "input_ids": encoded_dict['input_ids'][0],
+                "position_ids": encoded_dict['position_ids'][0],
+                "attention_mask": encoded_dict['attention_mask'][0],
+                "labels": encoded_dict['labels'][0],
+            }
+        else:
+            raise ValueError(f"Unsupported model name: {self.model_name_or_path}")
+
+    @staticmethod
+    def load_dataset(filename):
+        discard = 0
+        datasets = []
+        with open(filename, "r", encoding="utf-8") as f:
+            for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
+                item = json.loads(line)
+                prompt = clean_text(item['prompt'])
+                label = clean_text(item['answers'][0]['answer'])
+                score = item['answers'][0]['score']
+                prefix = item['prefix']
+
+                if len(prompt) <= 0 or len(label) <= 0 or score <= 0:
+                    discard += 1
+                    continue
+                datasets.append({"prompt": prompt, "label": label, "prefix": prefix})
+        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+
+        return datasets
+
+
 class PairwiseDataset(Dataset):
     def __init__(self, args, filename, tokenizer):
         self.pairs = self.load_dataset(filename)
@@ -182,95 +379,6 @@ class PairwiseDataset(Dataset):
         logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return pairs
-
-
-class SFTDataset(Dataset):
-    def __init__(self, args, filename, tokenizer):
-        self.args = args
-        self.tokenizer = tokenizer
-        self.model_name_or_path = args.model_name_or_path if hasattr(args, "model_name_or_path") else args.actor_model_path
-
-        self.post_list = self.load_dataset(filename)
-        for k in range(5):
-            logger.info(f"SFTDataset sample-{k}\n: {self.post_list[k]}")
-
-    def __len__(self):
-        return len(self.post_list)
-
-    def __getitem__(self, idx):
-        data = self.post_list[idx]
-        prompt = data['prompt']
-        label = data['label']
-        prefix = data['prefix']
-        if "pangu" in self.model_name_or_path:
-            encoded_dict = self.tokenizer(prompt, prefix+label, max_length=self.args.max_length, return_tensors="pt",
-                                          truncation="longest_first", padding="max_length", return_token_type_ids=False)
-
-            return {
-                "input_ids": encoded_dict['input_ids'],
-                "attention_mask": encoded_dict['attention_mask'],
-                "labels": encoded_dict['input_ids'],
-            }
-        elif "chatglm" in self.model_name_or_path:
-            encoded_dict = self.tokenizer(prompt, label, max_length=self.args.max_length, return_tensors="pt",
-                                          truncation="longest_first", padding="max_length")
-
-            return {
-                "input_ids": encoded_dict['input_ids'][0],
-                "labels": encoded_dict['input_ids'][0],
-            }
-        elif "glm" in self.model_name_or_path:
-            encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
-            prompt_length = len(encoded_prompt['input_ids'])
-            label_length = len(self.tokenizer.tokenize(label)) + 1
-            if prompt_length + label_length > self.args.max_length:
-                num_tokens_to_remove = prompt_length + label_length - self.args.max_length
-                for _ in range(num_tokens_to_remove):
-                    if prompt_length > label_length:
-                       prompt_length -= 1
-                    else:
-                        label_length -= 1
-            else:
-                label_length = self.args.max_length - prompt_length
-            assert prompt_length > 0
-            assert label_length > 0
-            assert prompt_length + label_length == self.args.max_length
-            encoded_dict = self.tokenizer(prompt, prefix + self.tokenizer.mask_token,
-                                          max_length=prompt_length,
-                                          truncation="only_first",
-                                          return_tensors="pt",
-                                          return_attention_mask=True,
-                                          return_token_type_ids=False)
-            encoded_dict = self.tokenizer.build_inputs_for_generation(encoded_dict, targets=label,
-                                                                      max_gen_length=label_length, padding=True)
-            return {
-                "input_ids": encoded_dict['input_ids'][0],
-                "position_ids": encoded_dict['position_ids'][0],
-                "attention_mask": encoded_dict['attention_mask'][0],
-                "labels": encoded_dict['labels'][0],
-            }
-        else:
-            raise ValueError(f"Unsupported model name: {self.model_name_or_path}")
-
-    @staticmethod
-    def load_dataset(filename):
-        discard = 0
-        datasets = []
-        with open(filename, "r", encoding="utf-8") as f:
-            for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
-                item = json.loads(line)
-                prompt = clean_text(item['prompt'])
-                label = clean_text(item['answers'][0]['answer'])
-                score = item['answers'][0]['score']
-                prefix = item['prefix']
-
-                if len(prompt) <= 0 or len(label) <= 0 or score <= 0:
-                    discard += 1
-                    continue
-                datasets.append({"prompt": prompt, "label": label, "prefix": prefix})
-        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
-
-        return datasets
 
 
 class RLHFDataset(Dataset):

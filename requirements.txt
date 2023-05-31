@@ -3,7 +3,7 @@ sentencepiece
 nltk>=3.8.1
 rouge-score>=0.1.2
 evaluate>=0.4.0
-transformers>=4.26.1
+transformers>=4.29.1
 numpy==1.23.2
 tensorflow>=2.5.0
 #triton==1.0.0
@@ -12,7 +12,7 @@ ninja
 torchmetrics
 opencc
 torchtyping
-accelerate>=0.16.0
+accelerate>=0.19.0
 ray
 tqdm
 rich
