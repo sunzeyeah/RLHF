@@ -136,18 +136,20 @@ def main():
         bnb_4bit_compute_dtype=bnb_4bit_compute_dtype
     )
     if "pangu" in args.model_name_or_path:
-        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-        # model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, quantization_config=bnb_config,
-        #                                              device_map={"": 0})
+        model = AutoModelForCausalLM.from_pretrained(
+            args.model_name_or_path, use_cache=False, trust_remote_code=True,
+            quantization_config=bnb_config, device_map={"": args.local_rank}
+        )
         model.resize_token_embeddings(tokenizer.vocab_size)
         # model.config.pad_token_id = tokenizer.pad_token_id
         # model.config.bos_token_id = tokenizer.bos_token_id
         # model.config.eos_token_id = tokenizer.eos_token_id
     elif "glm" in args.model_name_or_path:
-        # model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
-        model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, quantization_config=bnb_config,
-                                                     device_map={"": args.local_rank})
-        if "chatglm" in args.model_name_or_path:
+        model = AutoModelForSeq2SeqLM.from_pretrained(
+            args.model_name_or_path, trust_remote_code=True,
+            quantization_config=bnb_config, device_map={"": args.local_rank}
+        )
+        if "chatglm" in args.model_name_or_path and args.bits not in [4, 8]:
             model = model.half()
     else:
         raise ValueError(f"Unsupported model name: {args.model_name_or_path}")

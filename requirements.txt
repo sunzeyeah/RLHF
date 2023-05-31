@@ -12,7 +12,7 @@ ninja
 torchmetrics
 opencc
 torchtyping
-accelerate
+accelerate>=0.16.0
 ray
 tqdm
 rich
