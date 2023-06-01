@@ -12,6 +12,7 @@ import torch.nn.functional as F
 
 from src.utils import logger
 from src.utils.nlp_utils import clean_text
+from src.models.llama import _prepare_decoder_attention_mask
 
 
 class DataCollatorReward:
@@ -78,14 +79,22 @@ class PretrainDataset(Dataset):
         eos_ids = data['eos_ids']
         if "llama" in self.model_name_or_path:
             encoded_dict = self.tokenizer(content,  max_length=self.args.max_length, return_tensors="pt",
-                                          truncation="longest_first",
-                                          #return_attention_mask=False,
+                                          truncation="longest_first", return_attention_mask=False,
                                           return_token_type_ids=False)
-
+            # construct attention mask so that different samples cannot attend to each other
+            combined_attention_mask = torch.full((self.args.max_length, self.args.max_length),
+                                                 torch.tensor(torch.finfo(torch.float16).min))
+            for i in range(len(eos_ids)-1):
+                attention_mask = torch.ones((1, eos_ids[i+1]-eos_ids[i]), dtype=torch.long)
+                attention_mask = _prepare_decoder_attention_mask(attention_mask, attention_mask.shape,
+                                                                 torch.float16, "cpu", 0)
+                logger.debug(f"{i}-th sample, shape: {attention_mask.shape}, attention_mask: {attention_mask}")
+                combined_attention_mask[eos_ids[i]:eos_ids[i+1], eos_ids[i]:eos_ids[i+1]] = attention_mask
+            logger.debug(f"shape: {combined_attention_mask.shape}, combined_attention_mask: {combined_attention_mask}")
             return {
-                "input_ids": encoded_dict['input_ids'][0],
-                "attention_mask": encoded_dict['attention_mask'][0],
-                "labels": encoded_dict['input_ids'][0],
+                        "input_ids": encoded_dict['input_ids'][0],
+                        "attention_mask": combined_attention_mask,
+                        "labels": encoded_dict['input_ids'][0],
             }
         elif "pangu" in self.model_name_or_path:
             encoded_dict = self.tokenizer(content, max_length=self.args.max_length, return_tensors="pt",
@@ -142,12 +151,13 @@ class PretrainDataset(Dataset):
         datasets = []
         with open(filename, "r", encoding="utf-8") as f:
             data = []
-            eos_ids = []
+            eos_ids = [0]
             length = 0
             for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
                 item = json.loads(line)
                 content = clean_text(item['prompt'])
                 # content = clean_text(item['content'])
+                # if the length of a sample < max_lengnth, then concat multiple samples until reaching max_length
                 if len(content) <= 0:
                     discard += 1
                     continue
@@ -155,12 +165,13 @@ class PretrainDataset(Dataset):
                 if length + len(tokens) + 1 < self.args.max_length:
                     data.append(content)
                     length += len(tokens) + 1
-                    eos_ids.append(length)
+                    eos_ids.append(length + 1)
                 else:
                     data.append(content)
+                    eos_ids.append(self.args.max_length)
                     datasets.append({"content": f" {self.tokenizer.eos_token} ".join(data), "eos_ids": eos_ids})
                     data = []
-                    eos_ids = []
+                    eos_ids = [0]
                     length = 0
         logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 

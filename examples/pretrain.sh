@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MODEL="llama-7b"
+MODEL="llama-7B"
 
 ROOT="/mnt/sfevol775196/sunzeye273"
 #ROOT="/mnt/share-pa002-vol682688-prd/sunzeye273"
