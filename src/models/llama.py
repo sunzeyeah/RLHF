@@ -24,8 +24,8 @@ def _prepare_decoder_attention_mask(attention_mask, input_shape, dtype, device, 
     # create causal mask
     if attention_mask is not None:
         # attention mask is already given in 3d shape
-        if len(attention_mask.shape) > 2:
-            return attention_mask.to(device)
+        if len(attention_mask.shape) == 3:
+            return attention_mask.unsqueeze(1).to(device)
 
     # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
     combined_attention_mask = None

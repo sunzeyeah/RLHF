@@ -104,7 +104,7 @@ def main():
 
     # load model
     if "llama" in args.model_name_or_path:
-        model = LlamaForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+        model = LlamaForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True).half()
     elif "pangu" in args.model_name_or_path:
         model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         model.resize_token_embeddings(tokenizer.vocab_size)
