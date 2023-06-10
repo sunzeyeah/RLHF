@@ -19,12 +19,12 @@ from transformers import (
 )
 from torch.utils.data import RandomSampler, DistributedSampler, DataLoader
 from transformers.deepspeed import HfDeepSpeedConfig
-from deepspeed.ops.adam import FusedAdam
-from deepspeed.ops.adam import DeepSpeedCPUAdam
+# from deepspeed.ops.adam import FusedAdam
+# from deepspeed.ops.adam import DeepSpeedCPUAdam
 
 from src.utils import logger, RESOURCE_PATH
 from src.data.data import PretrainDataset
-from src.utils.file_utils import set_seed
+from src.utils.file_utils import set_seed, print_gpu_utilization_torch
 from src.models import convert_to_lora_recursively
 
 
@@ -130,7 +130,7 @@ def main():
         ds_config["zero_optimization"]["stage3_param_persistence_threshold"] = 10 * 4096
         if torch.cuda.is_available():
             bf16 = torch.cuda.get_device_capability()[0] >= 8
-            fp16 = False if bf16 else True
+            fp16 = not bf16
         else:
             fp16 = False
             bf16 = False
@@ -164,6 +164,7 @@ def main():
             model = model.half()
     else:
         raise ValueError(f"Unsupported model name: {args.model_name_or_path}")
+    print_gpu_utilization_torch("after from_pretrained()", args.local_rank)
 
     if args.lora_rank > 0:
         convert_to_lora_recursively(model, args.lora_rank, args.lora_alpha)
@@ -276,6 +277,8 @@ def main():
                                                 # optimizer=optim,
                                                 # lr_scheduler=lr_scheduler,
                                                 config=ds_config)
+        print_gpu_utilization_torch("after deepspeed.initialize()", args.local_rank)
+
         # create data loader
         if args.local_rank == -1:
             train_sampler = RandomSampler(train_dataset)
@@ -291,6 +294,7 @@ def main():
         model_engine.train()
         if args.gradient_checkpointing:
             model_engine.module.gradient_checkpointing_enable()
+        print_gpu_utilization_torch("before training begin", args.local_rank)
         for epoch in range(args.num_epochs):
             if args.local_rank <= 0:
                 logger.info(f"Beginning of Epoch {epoch+1}/{args.num_epochs}")
