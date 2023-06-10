@@ -119,7 +119,7 @@ def main():
     if args.deepspeed_config is not None:
         ds_config_filename = os.path.join(RESOURCE_PATH, "config", "deepspeed", args.deepspeed_config)
         ds_config = json.load(open(ds_config_filename, "r", encoding="utf-8"))
-        ds_config["steps_per_print"] = args.logging_steps
+        # ds_config["steps_per_print"] = args.logging_steps
         ds_config["train_micro_batch_size_per_gpu"] = args.train_batch_size
         ds_config["gradient_accumulation_steps"] = args.gradient_accumulation_steps
         ds_config["gradient_clipping"] = args.max_grad_norm
@@ -296,6 +296,7 @@ def main():
         if args.gradient_checkpointing:
             model_engine.module.gradient_checkpointing_enable()
         print_gpu_utilization("before training begin", args.local_rank)
+        global_step = 0
         for epoch in range(args.num_epochs):
             print_rank_0(f"Beginning of Epoch {epoch+1}/{args.num_epochs}")
             for step, batch in enumerate(train_dataloader):
@@ -304,10 +305,18 @@ def main():
                 output = model_engine(**batch)
                 model_engine.backward(output.loss)
                 model_engine.step()
-                # if step % args.logging_steps == 0:
-                #     print_rank_0(f"Epoch-{epoch+1}, Step-{step}, loss: {output.loss}")
+                global_step += 1
+                if global_step % args.logging_steps == 0:
+                    print_rank_0(f"Epoch-{epoch+1}, Gloal step-{global_step}, loss: {output.loss}")
+                if global_step % args.save_steps == 0 and args.local_rank <= 0:
+                    model_engine.save_checkpoint(args.output_dir, global_step)
+                    print_rank_0(f"Finished saving checkpoint @Step-{step}")
 
-            model_engine.save_checkpoint(args.output_dir, epoch)
+        print_rank_0(f"Finished training! epochs: {epoch+1}, steps: {global_step}")
+
+        if args.local_rank <= 0:
+            model_engine.save_checkpoint(args.output_dir, global_step)
+            print_rank_0(f"Finished saving checkpoint @Step-{global_step}")
 
     elif args.do_eval:
         pass
