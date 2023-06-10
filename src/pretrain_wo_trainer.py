@@ -24,8 +24,9 @@ from transformers.deepspeed import HfDeepSpeedConfig
 
 from src.utils import logger, RESOURCE_PATH
 from src.data.data import PretrainDataset
-from src.utils.file_utils import set_seed, print_gpu_utilization_torch
+from src.utils.file_utils import set_seed, print_gpu_utilization, print_rank_0
 from src.models import convert_to_lora_recursively
+from src.models.llama import LlamaForCausalLM
 
 
 # Create a preprocessing function to extract out the proper logits from the model output
@@ -110,8 +111,7 @@ def main():
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
 
-    if args.local_rank <= 0:
-        logger.info(f"Parameters: {args}")
+    print_rank_0(f"Parameters: {args}")
 
     set_seed(args.seed)
 
@@ -119,6 +119,7 @@ def main():
     if args.deepspeed_config is not None:
         ds_config_filename = os.path.join(RESOURCE_PATH, "config", "deepspeed", args.deepspeed_config)
         ds_config = json.load(open(ds_config_filename, "r", encoding="utf-8"))
+        ds_config["steps_per_print"] = args.logging_steps
         ds_config["train_micro_batch_size_per_gpu"] = args.train_batch_size
         ds_config["gradient_accumulation_steps"] = args.gradient_accumulation_steps
         ds_config["gradient_clipping"] = args.max_grad_norm
@@ -153,7 +154,7 @@ def main():
     # load tokenizer and model
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
     if "llama" in args.model_name_or_path:
-        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True).half()
+        model = LlamaForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True).half()
         # model.resize_token_embeddings(tokenizer.vocab_size)
         # model.config.pad_token_id = tokenizer.pad_token_id
         # model.config.bos_token_id = tokenizer.bos_token_id
@@ -164,7 +165,7 @@ def main():
             model = model.half()
     else:
         raise ValueError(f"Unsupported model name: {args.model_name_or_path}")
-    print_gpu_utilization_torch("after from_pretrained()", args.local_rank)
+    print_gpu_utilization("after from_pretrained()", args.local_rank)
 
     if args.lora_rank > 0:
         convert_to_lora_recursively(model, args.lora_rank, args.lora_alpha)
@@ -174,7 +175,7 @@ def main():
         st = torch.load(args.checkpoint, map_location="cpu")
         res = model.load_state_dict(st, strict=False)
 
-    logger.info(f"Finished loading model and tokenizer")
+    print_rank_0(f"Finished loading model and tokenizer")
 
     # Set up the datasets
     if args.do_train:
@@ -277,7 +278,7 @@ def main():
                                                 # optimizer=optim,
                                                 # lr_scheduler=lr_scheduler,
                                                 config=ds_config)
-        print_gpu_utilization_torch("after deepspeed.initialize()", args.local_rank)
+        print_gpu_utilization("after deepspeed.initialize()", args.local_rank)
 
         # create data loader
         if args.local_rank == -1:
@@ -294,18 +295,17 @@ def main():
         model_engine.train()
         if args.gradient_checkpointing:
             model_engine.module.gradient_checkpointing_enable()
-        print_gpu_utilization_torch("before training begin", args.local_rank)
+        print_gpu_utilization("before training begin", args.local_rank)
         for epoch in range(args.num_epochs):
-            if args.local_rank <= 0:
-                logger.info(f"Beginning of Epoch {epoch+1}/{args.num_epochs}")
-            for step, batch in tqdm(enumerate(train_dataloader), desc=f"Epoch={epoch+1}"):
+            print_rank_0(f"Beginning of Epoch {epoch+1}/{args.num_epochs}")
+            for step, batch in enumerate(train_dataloader):
                 batch = {k: v.to(device) for k, v in batch.items()}
                 logger.debug(f"batch keys: {batch.keys()}")
                 output = model_engine(**batch)
                 model_engine.backward(output.loss)
                 model_engine.step()
-                if step % args.logging_steps == 0:
-                    logger.info(f"Epoch-{epoch+1}, Step-{step}, loss: {output.loss}")
+                # if step % args.logging_steps == 0:
+                #     print_rank_0(f"Epoch-{epoch+1}, Step-{step}, loss: {output.loss}")
 
             model_engine.save_checkpoint(args.output_dir, epoch)
 

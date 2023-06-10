@@ -28,7 +28,7 @@ from deepspeed.ops.adam import DeepSpeedCPUAdam
 
 from src.utils import logger, RESOURCE_PATH
 from src.data.data import SFTDataset
-from src.utils.file_utils import set_seed
+from src.utils.file_utils import set_seed, print_rank_0
 from src.models import convert_to_lora_recursively
 
 
@@ -114,8 +114,7 @@ def main():
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
 
-    if args.local_rank <= 0:
-        logger.info(f"Parameters: {args}")
+    print_rank_0(f"Parameters: {args}")
 
     set_seed(args.seed)
 
@@ -123,6 +122,7 @@ def main():
     if args.deepspeed_config is not None:
         ds_config_filename = os.path.join(RESOURCE_PATH, "config", "deepspeed", args.deepspeed_config)
         ds_config = json.load(open(ds_config_filename, "r", encoding="utf-8"))
+        ds_config["steps_per_print"] = args.logging_steps
         ds_config["train_micro_batch_size_per_gpu"] = args.train_batch_size
         ds_config["gradient_accumulation_steps"] = args.gradient_accumulation_steps
         ds_config["gradient_clipping"] = args.max_grad_norm
@@ -177,7 +177,7 @@ def main():
         st = torch.load(args.checkpoint, map_location="cpu")
         res = model.load_state_dict(st, strict=False)
 
-    logger.info(f"Finished loading model and tokenizer")
+    print_rank_0(f"Finished loading model and tokenizer")
 
     # Set up the datasets
     if args.do_train:
@@ -195,67 +195,6 @@ def main():
                                   tokenizer)
     else:
         test_dataset = None
-
-    # # training arguments
-    # training_args = TrainingArguments(
-    #     output_dir=args.output_dir,
-    #     no_cuda=not torch.cuda.is_available(),
-    #     seed=args.seed,
-    #     data_seed=args.seed,
-    #     local_rank=args.local_rank,
-    #     do_train=args.do_train,
-    #     num_train_epochs=args.num_epochs,
-    #     learning_rate=args.learning_rate,
-    #     lr_scheduler_type=args.lr_scheduler_type,
-    #     per_device_train_batch_size=args.train_batch_size,
-    #     gradient_accumulation_steps=args.gradient_accumulation_steps,
-    #     warmup_ratio=args.warmup_ratio,
-    #     weight_decay=args.weight_decay,
-    #     half_precision_backend="auto",
-    #     fp16=fp16,
-    #     bf16=bf16,
-    #     adam_beta1=0.9,
-    #     adam_beta2=0.95,
-    #     save_strategy=args.save_strategy,
-    #     save_steps=args.save_steps,
-    #     save_total_limit=args.save_total_limit,
-    #     logging_steps=args.logging_steps,
-    #     report_to=["tensorboard"],
-    #     deepspeed=deepspeed_config,
-    #     gradient_checkpointing=args.gradient_checkpointing,
-    #     do_eval=args.do_eval,
-    #     evaluation_strategy=args.evaluation_strategy,
-    #     eval_steps=args.eval_steps,
-    #     eval_accumulation_steps=args.eval_accumulation_steps,
-    #     per_device_eval_batch_size=args.eval_batch_size,
-    #     do_predict=args.do_pred,
-    #     use_legacy_prediction_loop=args.do_pred,
-    # )
-    # if args.local_rank <= 0:
-    #     logger.info(f"Training Arguments: {training_args}")
-    #
-    # # Set up the metric
-    # rouge = evaluate.load("rouge")
-    #
-    # def compute_metrics(eval_preds):
-    #     labels_ids = eval_preds.label_ids
-    #     pred_ids = eval_preds.predictions
-    #     pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-    #     label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
-    #     result = rouge.compute(predictions=pred_str, references=label_str)
-    #
-    #     return result
-    #
-    # # Prepare the trainer and start training
-    # trainer = Trainer(
-    #     model=model,
-    #     args=training_args,
-    #     train_dataset=train_dataset,
-    #     eval_dataset=dev_dataset,
-    #     compute_metrics=compute_metrics,
-    #     data_collator=default_data_collator,
-    #     preprocess_logits_for_metrics=preprocess_logits_for_metrics,
-    # )
 
     if args.do_train:
         # # Optimizer
@@ -296,8 +235,7 @@ def main():
         if args.gradient_checkpointing:
             model_engine.module.gradient_checkpointing_enable()
         for epoch in range(args.num_epochs):
-            if args.local_rank <= 0:
-                logger.info(f"Beginning of Epoch {epoch+1}/{args.num_epochs}")
+            print_rank_0(f"Beginning of Epoch {epoch+1}/{args.num_epochs}")
             for step, batch in enumerate(train_dataloader):
                 batch = {k: v.to(device) for k, v in batch.items()}
                 logger.debug(f"batch keys: {batch.keys()}")

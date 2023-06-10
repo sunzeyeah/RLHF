@@ -8,7 +8,7 @@ ROOT="/mnt/sfevol775196/sunzeye273"
 #ROOT="/root/autodl-tmp"
 DATR_DIR=$ROOT/Data/chatgpt/processed
 #MAIN=$ROOT/Code/chatgpt/src/pretrain.py
-MAIN=$ROOT/Code/RLHF/src/pretrain.py
+MAIN=$ROOT/Code/RLHF/src/pretrain_wo_trainer.py
 MODEL_PATH=$ROOT/Data/models/$MODEL
 #MODEL_PATH=/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/$MODEL
 OUTPUT_DIR=$ROOT/Data/chatgpt/output/pretrain/$MODEL
@@ -30,9 +30,10 @@ CUDA_LAUNCH_BLOCKING=1 deepspeed $MAIN \
   --learning_rate 1e-5 \
   --do_train \
   --train_filename $TRAIN_FILENAME \
+  --num_epochs 2 \
   --train_batch_size 8 \
   --gradient_accumulation_steps 8 \
-  --num_epochs 2 \
+  --lr_scheduler_type "WarmupLR" \
   --gradient_checkpointing \
   --deepspeed_config "stage-3.json" \
   > out/pretrain_${MODEL}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1 &
