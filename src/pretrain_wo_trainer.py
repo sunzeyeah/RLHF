@@ -310,7 +310,7 @@ def main():
                     print_rank_0(f"Epoch-{epoch+1}, Gloal step-{global_step}, loss: {output.loss}")
                 if global_step % args.save_steps == 0 and args.local_rank <= 0:
                     model_engine.save_checkpoint(args.output_dir, global_step)
-                    print_rank_0(f"Finished saving checkpoint @Step-{step}")
+                    print_rank_0(f"Finished saving checkpoint @Step-{global_step}")
 
         print_rank_0(f"Finished training! epochs: {epoch+1}, steps: {global_step}")
 
