@@ -35,5 +35,5 @@ CUDA_LAUNCH_BLOCKING=1 deepspeed $MAIN \
   --gradient_accumulation_steps 8 \
   --lr_scheduler_type "WarmupLR" \
   --gradient_checkpointing \
-  --deepspeed_config "stage-3.json" \
+  --deepspeed_config "stage-3-no_trainer.json" \
   > out/pretrain_${MODEL}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1 &

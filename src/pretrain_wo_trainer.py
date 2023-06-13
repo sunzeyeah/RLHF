@@ -11,6 +11,7 @@ import loralib as lora
 import json
 import deepspeed
 
+from datetime import datetime
 from tqdm import tqdm
 from transformers import (
     AutoModelForCausalLM,
@@ -149,6 +150,8 @@ def main():
                     "warmup_max_lr": args.learning_rate,
                     "warmup_num_steps": args.warmup_steps
                 }
+        current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        ds_config['tensorboard']['job_name'] = f"deepspeed-{current_time}"
         dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
 
     # load tokenizer and model
