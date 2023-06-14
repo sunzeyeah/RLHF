@@ -155,8 +155,8 @@ class PretrainDataset(Dataset):
             length = 0
             for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
                 item = json.loads(line)
-                content = clean_text(item['prompt'])
-                # content = clean_text(item['content'])
+                content = item['prompt']
+                # content = item['content']
                 # if the length of a sample < max_lengnth, then concat multiple samples until reaching max_length
                 if len(content) <= 0:
                     discard += 1
