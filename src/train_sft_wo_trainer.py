@@ -29,6 +29,7 @@ from deepspeed.ops.adam import DeepSpeedCPUAdam
 from src.utils import logger, RESOURCE_PATH
 from src.data.data import SFTDataset
 from src.utils.file_utils import set_seed, print_rank_0
+from src.utils.modeling_utils import rotate_checkpoints, save_zero_three_model
 from src.models import convert_to_lora_recursively
 
 
@@ -247,12 +248,19 @@ def main():
                 if global_step % args.logging_steps == 0:
                     print_rank_0(f"Epoch-{epoch+1}, Gloal step-{global_step}, loss: {output.loss}")
                 if global_step % args.save_steps == 0:
-                    model_engine.save_checkpoint(args.output_dir, global_step)
+                    rotate_checkpoints(args.save_total_limit, use_mtime=True, output_dir=args.output_dir)
+                    save_zero_three_model(model_engine, args.local_rank,
+                                          save_dir=os.path.join(args.output_dir, f"checkpoint-{global_step}"),
+                                          zero_stage=ds_config['zero_optimization']['stage'])
+                    # model_engine.save_checkpoint(args.output_dir, global_step)
                     print_rank_0(f"Finished saving checkpoint @Step-{global_step}")
 
         print_rank_0(f"Finished training! epochs: {epoch+1}, steps: {global_step}")
 
-        model_engine.save_checkpoint(args.output_dir, global_step)
+        save_zero_three_model(model_engine, args.local_rank,
+                              save_dir=os.path.join(args.output_dir, f"checkpoint-{global_step}"),
+                              zero_stage=ds_config['zero_optimization']['stage'])
+        # model_engine.save_checkpoint(args.output_dir, global_step)
         print_rank_0(f"Finished saving checkpoint @Step-{global_step}")
 
     elif args.do_eval:

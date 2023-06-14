@@ -6,6 +6,8 @@ import os
 import subprocess
 import time
 import numpy as np
+import re
+import shutil
 import torch
 import torch.distributed as dist
 import torch.nn as nn
@@ -13,6 +15,7 @@ import torch.nn.functional as F
 import transformers
 import deepspeed
 
+from pathlib import Path
 from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
 from dataclasses import is_dataclass
 from enum import Enum
@@ -31,6 +34,8 @@ try:
     HAS_OPENDELTA = True
 except ModuleNotFoundError:
     HAS_OPENDELTA = False
+
+from src.utils.logger import logger
 
 
 def get_distributed_config(accelerator: Accelerator):
@@ -815,3 +820,38 @@ def save_zero_three_model(model_ema, global_rank, save_dir, zero_stage=0):
         if global_rank == 0:
             torch.save(output_state_dict, output_model_file)
         del output_state_dict
+
+
+def sorted_checkpoints(output_dir=None, checkpoint_prefix="checkpoint", use_mtime=False) -> List[str]:
+    ordering_and_checkpoint_path = []
+
+    glob_checkpoints = [str(x) for x in Path(output_dir).glob(f"{checkpoint_prefix}-*") if os.path.isdir(x)]
+
+    for path in glob_checkpoints:
+        if use_mtime:
+            ordering_and_checkpoint_path.append((os.path.getmtime(path), path))
+        else:
+            regex_match = re.match(f".*{checkpoint_prefix}-([0-9]+)", path)
+            if regex_match is not None and regex_match.groups() is not None:
+                ordering_and_checkpoint_path.append((int(regex_match.groups()[0]), path))
+
+    checkpoints_sorted = sorted(ordering_and_checkpoint_path)
+    checkpoints_sorted = [checkpoint[1] for checkpoint in checkpoints_sorted]
+
+    return checkpoints_sorted
+
+
+def rotate_checkpoints(save_total_limit, use_mtime=False, output_dir=None) -> None:
+    if save_total_limit is None or save_total_limit <= 0:
+        return
+
+    # Check if we should delete older checkpoint(s)
+    checkpoints_sorted = sorted_checkpoints(use_mtime=use_mtime, output_dir=output_dir)
+    if len(checkpoints_sorted) <= save_total_limit:
+        return
+
+    number_of_checkpoints_to_delete = max(0, len(checkpoints_sorted) - save_total_limit)
+    checkpoints_to_be_deleted = checkpoints_sorted[:number_of_checkpoints_to_delete]
+    for checkpoint in checkpoints_to_be_deleted:
+        logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
+        shutil.rmtree(checkpoint, ignore_errors=True)
