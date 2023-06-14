@@ -35,8 +35,6 @@ try:
 except ModuleNotFoundError:
     HAS_OPENDELTA = False
 
-from src.utils.logger import logger
-
 
 def get_distributed_config(accelerator: Accelerator):
     """
@@ -853,5 +851,5 @@ def rotate_checkpoints(save_total_limit, use_mtime=False, output_dir=None) -> No
     number_of_checkpoints_to_delete = max(0, len(checkpoints_sorted) - save_total_limit)
     checkpoints_to_be_deleted = checkpoints_sorted[:number_of_checkpoints_to_delete]
     for checkpoint in checkpoints_to_be_deleted:
-        logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
+        print(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
         shutil.rmtree(checkpoint, ignore_errors=True)

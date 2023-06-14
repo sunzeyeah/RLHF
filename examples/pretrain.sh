@@ -12,7 +12,7 @@ MAIN=$ROOT/Code/RLHF/src/pretrain_wo_trainer.py
 MODEL_PATH=$ROOT/Data/models/$MODEL
 #MODEL_PATH=/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/$MODEL
 OUTPUT_DIR=$ROOT/Data/chatgpt/output/pretrain/$MODEL
-TRAIN_FILENAME="train_data_v1.jsonl"
+TRAIN_FILENAME="pretrain_data_v1.jsonl"
 
 #cd $ROOT/Code/chatgpt || exit
 cd $ROOT/Code/RLHF || exit
