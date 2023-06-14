@@ -232,7 +232,7 @@ def main():
         logger.info(eval_result)
 
     if args.do_pred:
-        model.eval()
+        reward_model.eval()
         device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
         reward_model = reward_model.half().to(device)
         sampler = SequentialSampler(test_dataset)
