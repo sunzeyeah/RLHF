@@ -1,7 +1,8 @@
 ## Features
 
-提供2大功能：
-- LLM模型评测：参考GPT类模型，基于ZeroShot和FewShot实现 
+提供3大功能：
+- LLM模型预训练：支持常见模型的预训练，包括：decoder结构（LLaMA、GPT）、encoder结构（GLM）
+- LLM模型评测：参考GPT类模型，基于ZeroShot和FewShot实现
 - ChatGPT模型训练pipeline：根据[Learning to Summarize from human feedback](https://arxiv.org/abs/2009.01325) ，实现3大流程: SFT、Reward Model和RLHF
 
 ## Setup
@@ -99,7 +100,17 @@ python setup.py --cpp_ext --cuda_ext bdist_wheel 2>&1 | tee build.log
 
 ## Usage
 
-### 1. LLM模型评测
+### 1. LLM模型预训练
+对开源LLM进行增量预训练，基于deepspeed实现。目前支持2类模型架构：
+- decoder结构：GPT、LLaMA、Falcon
+- encoder结构：GLM、ChatGLM
+
+```bash
+cd examples
+bash pretrain.sh
+```
+
+### 2. LLM模型评测
 对开源中文LLM进行ZeroShot、OneShot或FewShot的评测，评测任务和数据集使用[CLUEBenchmark](https://github.com/CLUEbenchmark/CLUE) ，评测方法和prompt模板参考[Pangu-alpha论文](https://arxiv.org/abs/2104.12369) 。详见[eval_pretrain.py](./src/eval_pretrain.py) 和 [data.py](src/data/data.py)
 
 目前支持5个开源模型: 
@@ -114,20 +125,20 @@ cd examples
 bash eval_pretrain.sh
 ```
 
-### 2. SFT
+### 3. SFT
 使用开源LLM + SFT&Reward数据进行SFT训练
 ```bash
 cd examples
 bash train_sft.sh
 ```
-### 3. Reward Model
+### 4. Reward Model
 使用SFT模型 + SFT&Reward数据进行Reward模型训练。训练时，将SFT模型的前70%层固定，不进行梯度更新
 ```bash
 cd examples
 bash train_reward.sh
 ```
 
-### 4. RLHF
+### 5. RLHF
 利用PPO算法和Reward Model，进一步更新SFT模型。基于开源框架[DeepSpeedChat](https://github.com/microsoft/DeepSpeedExamples/tree/master/applications/DeepSpeed-Chat) 实现
 ```bash
 cd examples
