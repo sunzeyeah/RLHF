@@ -25,15 +25,14 @@ CUDA_LAUNCH_BLOCKING=1 deepspeed $MAIN \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_PATH \
   --max_length 2048 \
-  --logging_steps 10 \
-  --save_steps 50 \
-  --learning_rate 1e-5 \
+  --logging_steps 100 \
+  --save_steps 5000 \
+  --learning_rate 3e-4 \
   --do_train \
   --train_filename $TRAIN_FILENAME \
   --num_epochs 2 \
   --train_batch_size 8 \
   --gradient_accumulation_steps 8 \
-  --lr_scheduler_type "WarmupLR" \
   --gradient_checkpointing \
   --deepspeed_config "stage-3-no_trainer.json" \
   > out/pretrain_${MODEL}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1 &

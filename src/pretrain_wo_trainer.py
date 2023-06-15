@@ -56,10 +56,9 @@ def get_parser():
     parser.add_argument("--train_filename", type=str, default=None)
     parser.add_argument("--num_epochs", type=int, default=1)
     parser.add_argument("--learning_rate", type=float, default=1e-6)
-    parser.add_argument("--lr_scheduler_type", type=str, default="linear",
-                        help="transformers.trainer_utils.SchedulerType, including:"
-                             "linear, cosine, cosine_with_restarts, polynomial, constant,"
-                             "constant_with_warmup")
+    parser.add_argument("--lr_scheduler_type", type=str, default="OneCycle",
+                        help="deepspeed scheduler types, including:"
+                             "LRRangeTest, OneCycle, WarmupLR, WarmupDecayLR")
     parser.add_argument("--train_batch_size", type=int, default=4)
     parser.add_argument("--weight_decay", type=float, default=0.1)
     parser.add_argument("--warmup_steps", type=int, default=100)
@@ -147,9 +146,9 @@ def main():
             }
         ds_config["scheduler"]['type'] = args.lr_scheduler_type
         ds_config["scheduler"]["params"] = {
-                    "warmup_min_lr": 0,
-                    "warmup_max_lr": args.learning_rate,
-                    "warmup_num_steps": args.warmup_steps
+                    "cycle_min_lr": 1e-9,
+                    "cycle_max_lr": args.learning_rate,
+                    "cycle_first_step_size": args.warmup_steps
                 }
         current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         ds_config['tensorboard']['job_name'] = f"deepspeed-{current_time}"

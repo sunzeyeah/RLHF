@@ -29,7 +29,7 @@
     "enabled": "auto",
     "auto_cast": false,
     "loss_scale": 0,
-    "initial_scale_power": 32,
+    "initial_scale_power": 16,
     "loss_scale_window": 1000,
     "hysteresis": 2,
     "min_loss_scale": 1
@@ -47,11 +47,14 @@
     }
   },
   "scheduler": {
-    "type": "WarmupLR",
+    "type": "OneCycle",
     "params": {
-      "warmup_min_lr": "auto",
-      "warmup_max_lr": "auto",
-      "warmup_num_steps": "auto"
+      "cycle_min_lr": 1e-9,
+      "cycle_max_lr": "auto",
+      "cycle_first_step_size": "auto",
+      "cycle_momentum": true,
+      "cycle_min_mom": 0.85,
+      "cycle_max_mom": 0.99
     }
   },
   "tensorboard": {
