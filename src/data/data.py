@@ -165,8 +165,9 @@ class PretrainDataset(Dataset):
                 if len(content) <= 0:
                     discard += 1
                     continue
-                # datasets.append({"content": content, "eos_ids": None})
-                # continue
+                if "glm" in self.model_name_or_path:
+                    datasets.append({"content": content, "eos_ids": None})
+                    continue
                 tokens = self.tokenizer.tokenize(content)
                 if length + len(tokens) + 1 < self.args.max_length:
                     data.append(content)
