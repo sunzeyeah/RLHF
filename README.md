@@ -102,7 +102,7 @@ python setup.py --cpp_ext --cuda_ext bdist_wheel 2>&1 | tee build.log
 
 ### 1. LLM模型预训练
 对开源LLM进行增量预训练，基于deepspeed实现。目前支持2类模型架构：
-- decoder结构：GPT、LLaMA、Falcon
+- decoder结构：LLaMA、Pangu
 - encoder结构：GLM、ChatGLM
 
 ```bash

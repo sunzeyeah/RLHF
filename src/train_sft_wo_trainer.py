@@ -23,8 +23,8 @@ from transformers import (
 )
 from torch.utils.data import RandomSampler, DistributedSampler, DataLoader
 from transformers.deepspeed import HfDeepSpeedConfig
-from deepspeed.ops.adam import FusedAdam
-from deepspeed.ops.adam import DeepSpeedCPUAdam
+# from deepspeed.ops.adam import FusedAdam
+# from deepspeed.ops.adam import DeepSpeedCPUAdam
 from peft import (
     LoraConfig,
     get_peft_model
