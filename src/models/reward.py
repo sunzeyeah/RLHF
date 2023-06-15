@@ -6,9 +6,14 @@ from torch import nn
 from transformers.modeling_utils import PreTrainedModel
 from transformers.configuration_utils import PretrainedConfig
 from transformers.tokenization_utils import PreTrainedTokenizer
+from peft import (
+    LoraConfig,
+    get_peft_model
+)
 
 from src.models.loss import PairWiseLoss
-from src.models.lora import convert_to_lora_recursively
+from src.utils.file_utils import print_trainable_parameters
+# from src.models.lora import convert_to_lora_recursively
 
 
 class RewardModel(PreTrainedModel):
@@ -23,8 +28,17 @@ class RewardModel(PreTrainedModel):
         self.v_head = nn.Linear(config.hidden_size, 1, bias=False)
         # self.loss_fn = PairWiseLoss()
         if config.lora_rank > 0:
-            convert_to_lora_recursively(model, config.lora_rank, config.lora_alpha)
-            lora.mark_only_lora_as_trainable(model, config.lora_train_bias)
+            config = LoraConfig(
+                r=config.lora_rank,
+                lora_alpha=config.lora_alpha,
+                target_modules=config.target_modules.split(","),
+                lora_dropout=0.05,
+                bias=config.lora_train_bias,
+                task_type=config.task_type
+            )
+            self.transformer = get_peft_model(model, config)
+            # convert_to_lora_recursively(model, config.lora_rank, config.lora_alpha)
+            # lora.mark_only_lora_as_trainable(model, config.lora_train_bias)
 
     def gradient_checkpointing_enable(self):
         self.transformer.gradient_checkpointing_enable()

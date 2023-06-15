@@ -29,7 +29,7 @@ from peft import (
 from src.utils import logger, RESOURCE_PATH
 from src.data.data import SFTDataset
 from src.utils.file_utils import set_seed, print_trainable_parameters
-from src.models import convert_to_lora_recursively
+# from src.models import convert_to_lora_recursively
 
 
 # Create a preprocessing function to extract out the proper logits from the model output

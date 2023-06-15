@@ -33,6 +33,10 @@ from transformers.modeling_outputs import ModelOutput
 from transformers.models.bloom import modeling_bloom
 from transformers.models.opt import modeling_opt
 from huggingface_hub import hf_hub_download
+from peft import (
+    LoraConfig,
+    get_peft_model
+)
 
 from src.utils.modeling_utils import (
     hf_get_decoder,
@@ -43,7 +47,7 @@ from src.utils.modeling_utils import (
     hf_get_num_hidden_layers,
     make_head
 )
-from src.models.lora import convert_to_lora_recursively
+# from src.models.lora import convert_to_lora_recursively
 from src.models.sft import SFTModelWithLoRA
 
 
@@ -397,8 +401,17 @@ class AutoModelForCausalLMWithHydraValueHead(AutoModelForCausalLMWithValueHead):
             ).eval()
 
         if base_model.config.lora_rank > 0:
-            convert_to_lora_recursively(base_model, base_model.config.lora_rank, base_model.config.lora_alpha)
-            lora.mark_only_lora_as_trainable(base_model, base_model.config.lora_train_bias)
+            config = LoraConfig(
+                r=base_model.config.lora_rank,
+                lora_alpha=base_model.config.lora_alpha,
+                target_modules=config.target_modules.split(","),
+                lora_dropout=0.05,
+                bias=base_model.config.lora_train_bias,
+                task_type=config.task_type
+            )
+            self.base_model = get_peft_model(base_model, config)
+            # convert_to_lora_recursively(base_model, base_model.config.lora_rank, base_model.config.lora_alpha)
+            # lora.mark_only_lora_as_trainable(base_model, base_model.config.lora_train_bias)
 
     def forward_hydra(
             self,

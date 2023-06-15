@@ -25,12 +25,17 @@ from torch.utils.data import RandomSampler, DistributedSampler, DataLoader
 from transformers.deepspeed import HfDeepSpeedConfig
 from deepspeed.ops.adam import FusedAdam
 from deepspeed.ops.adam import DeepSpeedCPUAdam
+from peft import (
+    LoraConfig,
+    get_peft_model
+)
+
 
 from src.utils import logger, RESOURCE_PATH
 from src.data.data import SFTDataset
-from src.utils.file_utils import set_seed, print_rank_0
+from src.utils.file_utils import set_seed, print_rank_0, print_trainable_parameters
 from src.utils.modeling_utils import rotate_checkpoints, save_zero_three_model
-from src.models import convert_to_lora_recursively
+# from src.models import convert_to_lora_recursively
 
 
 # Create a preprocessing function to extract out the proper logits from the model output
@@ -163,16 +168,30 @@ def main():
         # model.config.pad_token_id = tokenizer.pad_token_id
         # model.config.bos_token_id = tokenizer.bos_token_id
         # model.config.eos_token_id = tokenizer.eos_token_id
+        target_modules = "q_proj,k_proj,v_proj"
+        task_type = "CAUSAL_LM"
     elif "glm" in args.model_name_or_path:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
         if "chatglm" in args.model_name_or_path:
             model = model.half()
+        target_modules = "query_key_value"
+        task_type = "SEQ_2_SEQ_LM"
     else:
         raise ValueError(f"Unsupported model name: {args.model_name_or_path}")
 
     if args.lora_rank > 0:
-        convert_to_lora_recursively(model, args.lora_rank, args.lora_alpha)
-        lora.mark_only_lora_as_trainable(model, args.lora_train_bias)
+        config = LoraConfig(
+            r=args.lora_rank,
+            lora_alpha=args.lora_alpha,
+            target_modules=target_modules.split(","),
+            lora_dropout=0.05,
+            bias=args.lora_train_bias,
+            task_type=task_type
+        )
+        model = get_peft_model(model, config)
+        print_trainable_parameters(model)
+        # convert_to_lora_recursively(model, args.lora_rank, args.lora_alpha)
+        # lora.mark_only_lora_as_trainable(model, args.lora_train_bias)
 
     if args.checkpoint is not None:
         st = torch.load(args.checkpoint, map_location="cpu")

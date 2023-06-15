@@ -185,6 +185,8 @@ def main():
         model.config.lora_rank = args.lora_rank
         model.config.lora_alpha = args.lora_alpha
         model.config.lora_train_bias = args.lora_train_bias
+        model.config.target_modules = "q_proj,k_proj,v_proj"
+        model.config.task_type = "CAUSAL_LM"
         # Initialize the reward model from the (supervised) fine-tuned SFT model
         reward_model = RewardModel(model.config, model.transformer, tokenizer)
         # reward_model = RewardModelWithLoRA(model.config, model.transformer, tokenizer)
@@ -193,6 +195,8 @@ def main():
         model.config.lora_rank = args.lora_rank
         model.config.lora_alpha = args.lora_alpha
         model.config.lora_train_bias = args.lora_train_bias
+        model.config.target_modules = "query_key_value"
+        model.config.task_type = "SEQ_2_SEQ_LM"
         # Initialize the reward model from the (supervised) fine-tuned SFT model
         reward_model = RewardModel(model.config, model, tokenizer)
         # reward_model = RewardModelWithLoRA(model.config, model.glm, tokenizer)
@@ -201,6 +205,8 @@ def main():
         model.config.lora_rank = args.lora_rank
         model.config.lora_alpha = args.lora_alpha
         model.config.lora_train_bias = args.lora_train_bias
+        model.config.target_modules = "query_key_value"
+        model.config.task_type = "SEQ_2_SEQ_LM"
         # Initialize the reward model from the (supervised) fine-tuned SFT model
         reward_model = RewardModel(model.config, model.glm, tokenizer)
         # reward_model = RewardModelWithLoRA(model.config, model.glm, tokenizer)
