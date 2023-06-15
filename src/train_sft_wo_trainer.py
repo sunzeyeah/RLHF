@@ -249,18 +249,20 @@ def main():
                     print_rank_0(f"Epoch-{epoch+1}, Gloal step-{global_step}, loss: {output.loss}")
                 if global_step % args.save_steps == 0:
                     rotate_checkpoints(args.save_total_limit, use_mtime=True, output_dir=args.output_dir)
-                    save_zero_three_model(model_engine, args.local_rank,
-                                          save_dir=os.path.join(args.output_dir, f"checkpoint-{global_step}"),
-                                          zero_stage=ds_config['zero_optimization']['stage'])
+                    # save_zero_three_model(model_engine, args.local_rank,
+                    #                       save_dir=os.path.join(args.output_dir, f"checkpoint-{global_step}"),
+                    #                       zero_stage=ds_config['zero_optimization']['stage'])
                     # model_engine.save_checkpoint(args.output_dir, global_step)
+                    model_engine.save_16bit_model(os.path.join(args.output_dir, f"checkpoint-{global_step}"))
                     print_rank_0(f"Finished saving checkpoint @Step-{global_step}")
 
         print_rank_0(f"Finished training! epochs: {epoch+1}, steps: {global_step}")
 
-        save_zero_three_model(model_engine, args.local_rank,
-                              save_dir=os.path.join(args.output_dir, f"checkpoint-{global_step}"),
-                              zero_stage=ds_config['zero_optimization']['stage'])
+        # save_zero_three_model(model_engine, args.local_rank,
+        #                       save_dir=os.path.join(args.output_dir, f"checkpoint-{global_step}"),
+        #                       zero_stage=ds_config['zero_optimization']['stage'])
         # model_engine.save_checkpoint(args.output_dir, global_step)
+        model_engine.save_16bit_model(os.path.join(args.output_dir, f"checkpoint-{global_step}"))
         print_rank_0(f"Finished saving checkpoint @Step-{global_step}")
 
     elif args.do_eval:
