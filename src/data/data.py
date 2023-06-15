@@ -106,7 +106,11 @@ class PretrainDataset(Dataset):
                 "labels": encoded_dict['input_ids'],
             }
         elif "chatglm" in self.model_name_or_path:
-            encoded_dict = self.tokenizer(content, max_length=self.args.max_length, return_tensors="pt",
+            # TODO: Temporary solution for chatglm pretraining, non-padding to be implemented
+            idx = random.choice(range(5, min(100, len(content))))
+            prompt = content[:idx]
+            label = content[:idx]
+            encoded_dict = self.tokenizer(prompt, label, max_length=self.args.max_length, return_tensors="pt",
                                           truncation="longest_first")
 
             return {
@@ -155,12 +159,14 @@ class PretrainDataset(Dataset):
             length = 0
             for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
                 item = json.loads(line)
-                content = item['prompt']
-                # content = item['content']
+                # content = item['prompt']
+                content = item['content']
                 # if the length of a sample < max_lengnth, then concat multiple samples until reaching max_length
                 if len(content) <= 0:
                     discard += 1
                     continue
+                # datasets.append({"content": content, "eos_ids": None})
+                # continue
                 tokens = self.tokenizer.tokenize(content)
                 if length + len(tokens) + 1 < self.args.max_length:
                     data.append(content)
@@ -173,7 +179,7 @@ class PretrainDataset(Dataset):
                     data = []
                     eos_ids = [0]
                     length = 0
-        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+        logger.info(f"Finished loading {os.path.basename(filename)}, # samples: {len(datasets)}, # discarded: {discard}")
 
         return datasets
 
