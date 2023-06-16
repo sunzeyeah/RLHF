@@ -41,11 +41,14 @@
     }
   },
   "scheduler": {
-    "type": "WarmupLR",
+    "type": "OneCycle",
     "params": {
-      "warmup_min_lr": "auto",
-      "warmup_max_lr": "auto",
-      "warmup_num_steps": "auto"
+      "cycle_min_lr": 0,
+      "cycle_max_lr": "auto",
+      "cycle_first_step_size": "auto",
+      "cycle_momentum": true,
+      "cycle_min_mom": 0.85,
+      "cycle_max_mom": 0.99
     }
   }
 }
