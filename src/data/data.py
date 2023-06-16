@@ -175,7 +175,7 @@ class PretrainDataset(Dataset):
                 else:
                     data.append(content)
                     eos_ids.append(self.args.max_length)
-                    datasets.append({"prompt": f"{ self.tokenizer.bos_token }".join(data), "eos_ids": eos_ids})
+                    datasets.append({"prompt": f" {self.tokenizer.bos_token} ".join(data), "eos_ids": eos_ids})
                     data = []
                     eos_ids = [0]
                     length = 0
