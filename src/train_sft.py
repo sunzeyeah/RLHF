@@ -83,11 +83,11 @@ def get_parser():
     parser.add_argument("--do_eval", action="store_true")
     parser.add_argument("--eval_filename", type=str, default=None)
     parser.add_argument("--eval_batch_size", type=int, default=4)
-    parser.add_argument("--evaluation_strategy", type=str, default="epoch",
+    parser.add_argument("--evaluation_strategy", type=str, default="steps",
                         help='- `"no"`: No evaluation is done during training.'
                              '- `"steps"`: Evaluation is done (and logged) every `eval_steps`.'
                              '- `"epoch"`: Evaluation is done at the end of each epoch.')
-    parser.add_argument("--eval_steps", type=int, default=None)
+    parser.add_argument("--eval_steps", type=int, default=100)
     parser.add_argument("--eval_accumulation_steps", type=int, default=1)
     # pred
     parser.add_argument("--do_pred", action="store_true")

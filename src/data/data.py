@@ -75,29 +75,31 @@ class PretrainDataset(Dataset):
 
     def __getitem__(self, idx):
         data = self.post_list[idx]
-        content = data['content']
-        eos_ids = data['eos_ids']
+        prompt = data['prompt']
+        label = data.get('label', None)
+        eos_ids = data.get('eos_ids', None)
         if "llama" in self.model_name_or_path:
-            encoded_dict = self.tokenizer(content,  max_length=self.args.max_length, return_tensors="pt",
-                                          truncation="longest_first", return_attention_mask=False,
+            encoded_dict = self.tokenizer(prompt,  max_length=self.args.max_length, return_tensors="pt",
+                                          truncation="longest_first", #return_attention_mask=False,
                                           return_token_type_ids=False)
-            # construct attention mask so that different samples cannot attend to each other
-            combined_attention_mask = torch.full((self.args.max_length, self.args.max_length),
-                                                 torch.tensor(torch.finfo(torch.float16).min))
-            for i in range(len(eos_ids)-1):
-                attention_mask = torch.ones((1, eos_ids[i+1]-eos_ids[i]), dtype=torch.long)
-                attention_mask = _prepare_decoder_attention_mask(attention_mask, attention_mask.shape,
-                                                                 torch.float16, "cpu", 0)
-                logger.debug(f"{i}-th sample, shape: {attention_mask.shape}, attention_mask: {attention_mask}")
-                combined_attention_mask[eos_ids[i]:eos_ids[i+1], eos_ids[i]:eos_ids[i+1]] = attention_mask
-            logger.debug(f"shape: {combined_attention_mask.shape}, combined_attention_mask: {combined_attention_mask}")
+            # # construct attention mask so that different samples cannot attend to each other
+            # combined_attention_mask = torch.full((self.args.max_length, self.args.max_length),
+            #                                      torch.tensor(torch.finfo(torch.float16).min))
+            # for i in range(len(eos_ids)-1):
+            #     attention_mask = torch.ones((1, eos_ids[i+1]-eos_ids[i]), dtype=torch.long)
+            #     attention_mask = _prepare_decoder_attention_mask(attention_mask, attention_mask.shape,
+            #                                                      torch.float16, "cpu", 0)
+            #     logger.debug(f"{i}-th sample, shape: {attention_mask.shape}, attention_mask: {attention_mask}")
+            #     combined_attention_mask[eos_ids[i]:eos_ids[i+1], eos_ids[i]:eos_ids[i+1]] = attention_mask
+            # logger.debug(f"shape: {combined_attention_mask.shape}, combined_attention_mask: {combined_attention_mask}")
             return {
                         "input_ids": encoded_dict['input_ids'][0],
-                        "attention_mask": combined_attention_mask,
+                        "attention_mask": encoded_dict['attention_mask'][0],
+                        # "attention_mask": combined_attention_mask,
                         "labels": encoded_dict['input_ids'][0],
             }
         elif "pangu" in self.model_name_or_path:
-            encoded_dict = self.tokenizer(content, max_length=self.args.max_length, return_tensors="pt",
+            encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length, return_tensors="pt",
                                           truncation="longest_first", return_token_type_ids=False)
 
             return {
@@ -107,9 +109,6 @@ class PretrainDataset(Dataset):
             }
         elif "chatglm" in self.model_name_or_path:
             # TODO: Temporary solution for chatglm pretraining, non-padding to be implemented
-            idx = random.choice(range(5, min(100, len(content))))
-            prompt = content[:idx]
-            label = content[:idx]
             encoded_dict = self.tokenizer(prompt, label, max_length=self.args.max_length, return_tensors="pt",
                                           truncation="longest_first")
 
@@ -118,7 +117,7 @@ class PretrainDataset(Dataset):
                 "labels": encoded_dict['input_ids'][0],
             }
         elif "glm" in self.model_name_or_path:
-            encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
+            encoded_prompt = self.tokenizer(prompt, self.tokenizer.mask_token)
             prompt_length = len(encoded_prompt['input_ids'])
             label_length = len(self.tokenizer.tokenize(label)) + 1
             if prompt_length + label_length > self.args.max_length:
@@ -133,7 +132,7 @@ class PretrainDataset(Dataset):
             assert prompt_length > 0
             assert label_length > 0
             assert prompt_length + label_length == self.args.max_length
-            encoded_dict = self.tokenizer(prompt, prefix + self.tokenizer.mask_token,
+            encoded_dict = self.tokenizer(prompt, self.tokenizer.mask_token,
                                           max_length=prompt_length,
                                           truncation="only_first",
                                           return_tensors="pt",
@@ -159,24 +158,24 @@ class PretrainDataset(Dataset):
             length = 0
             for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
                 item = json.loads(line)
-                # content = item['prompt']
-                content = item['content']
+                content = item['prompt']
                 # if the length of a sample < max_lengnth, then concat multiple samples until reaching max_length
                 if len(content) <= 0:
                     discard += 1
                     continue
-                if "glm" in self.model_name_or_path:
-                    datasets.append({"content": content, "eos_ids": None})
+                if "chatglm" in self.model_name_or_path:
+                    label = item['label']
+                    datasets.append({"prompt": content, "label": label, "eos_ids": None})
                     continue
                 tokens = self.tokenizer.tokenize(content)
                 if length + len(tokens) + 1 < self.args.max_length:
                     data.append(content)
                     length += len(tokens) + 1
-                    eos_ids.append(length + 1)
+                    eos_ids.append(length)
                 else:
                     data.append(content)
                     eos_ids.append(self.args.max_length)
-                    datasets.append({"content": f" {self.tokenizer.eos_token} ".join(data), "eos_ids": eos_ids})
+                    datasets.append({"prompt": f"{self.tokenizer.bos_token}".join(data), "eos_ids": eos_ids})
                     data = []
                     eos_ids = [0]
                     length = 0

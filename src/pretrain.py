@@ -82,7 +82,7 @@ def get_parser():
                         help='- `"no"`: No evaluation is done during training.'
                              '- `"steps"`: Evaluation is done (and logged) every `eval_steps`.'
                              '- `"epoch"`: Evaluation is done at the end of each epoch.')
-    parser.add_argument("--eval_steps", type=int, default=None)
+    parser.add_argument("--eval_steps", type=int, default=100)
     parser.add_argument("--eval_accumulation_steps", type=int, default=1)
     # pred
     parser.add_argument("--do_pred", action="store_true")

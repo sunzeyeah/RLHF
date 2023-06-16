@@ -26,8 +26,8 @@ CUDA_LAUNCH_BLOCKING=1 deepspeed $MAIN \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_PATH \
   --max_length 2048 \
-  --logging_steps 100 \
-  --save_steps 5000 \
+  --logging_steps 50 \
+  --save_steps 1000 \
   --learning_rate 3e-4 \
   --do_train \
   --train_filename $TRAIN_FILENAME \
@@ -39,5 +39,5 @@ CUDA_LAUNCH_BLOCKING=1 deepspeed $MAIN \
   --do_eval \
   --eval_filename $EVAL_FILENAME \
   --eval_batch_size 8 \
-  --eval_steps 1000 \
+  --eval_steps 500 \
   > out/pretrain_${MODEL}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1 &
