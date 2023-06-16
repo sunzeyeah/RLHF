@@ -149,9 +149,9 @@ def main():
                 "eps": 1e-8,
                 "weight_decay": args.weight_decay
             }
-        ds_config["scheduler"]['type'] = args.lr_scheduler_type
+        assert ds_config["scheduler"]['type'] == args.lr_scheduler_type
         ds_config["scheduler"]["params"] = {
-                    "cycle_min_lr": 1e-9,
+                    "cycle_min_lr": 0,
                     "cycle_max_lr": args.learning_rate,
                     "cycle_first_step_size": args.warmup_steps
                 }

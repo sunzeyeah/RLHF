@@ -63,10 +63,9 @@ def get_parser():
     parser.add_argument("--train_filename", type=str, default=None)
     parser.add_argument("--num_epochs", type=int, default=1)
     parser.add_argument("--learning_rate", type=float, default=1e-6)
-    parser.add_argument("--lr_scheduler_type", type=str, default="linear",
-                        help="transformers.trainer_utils.SchedulerType, including:"
-                             "linear, cosine, cosine_with_restarts, polynomial, constant,"
-                             "constant_with_warmup")
+    parser.add_argument("--lr_scheduler_type", type=str, default="OneCycle",
+                        help="deepspeed scheduler types, including:"
+                             "LRRangeTest, OneCycle, WarmupLR, WarmupDecayLR")
     parser.add_argument("--train_batch_size", type=int, default=4)
     parser.add_argument("--weight_decay", type=float, default=0.1)
     parser.add_argument("--warmup_steps", type=int, default=100)
@@ -152,12 +151,12 @@ def main():
                 "eps": 1e-8,
                 "weight_decay": args.weight_decay
             }
-        ds_config["scheduler"]['type'] = args.lr_scheduler_type
+        assert ds_config["scheduler"]['type'] == args.lr_scheduler_type
         ds_config["scheduler"]["params"] = {
-                    "warmup_min_lr": 0,
-                    "warmup_max_lr": args.learning_rate,
-                    "warmup_num_steps": args.warmup_steps
-                }
+            "cycle_min_lr": 0,
+            "cycle_max_lr": args.learning_rate,
+            "cycle_first_step_size": args.warmup_steps
+        }
         dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
 
     # load tokenizer and model

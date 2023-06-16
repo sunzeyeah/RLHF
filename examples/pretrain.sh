@@ -34,6 +34,7 @@ CUDA_LAUNCH_BLOCKING=1 deepspeed $MAIN \
   --num_epochs 2 \
   --train_batch_size 8 \
   --gradient_accumulation_steps 8 \
+  --warmup_steps 100 \
   --gradient_checkpointing \
   --deepspeed_config "stage-3-no_trainer.json" \
   --do_eval \
