@@ -225,67 +225,6 @@ def main():
     else:
         test_dataset = None
 
-    # # training arguments
-    # training_args = TrainingArguments(
-    #     output_dir=args.output_dir,
-    #     no_cuda=not torch.cuda.is_available(),
-    #     seed=args.seed,
-    #     data_seed=args.seed,
-    #     local_rank=args.local_rank,
-    #     do_train=args.do_train,
-    #     num_train_epochs=args.num_epochs,
-    #     learning_rate=args.learning_rate,
-    #     lr_scheduler_type=args.lr_scheduler_type,
-    #     per_device_train_batch_size=args.train_batch_size,
-    #     gradient_accumulation_steps=args.gradient_accumulation_steps,
-    #     warmup_ratio=args.warmup_ratio,
-    #     weight_decay=args.weight_decay,
-    #     half_precision_backend="auto",
-    #     fp16=fp16,
-    #     bf16=bf16,
-    #     adam_beta1=0.9,
-    #     adam_beta2=0.95,
-    #     save_strategy=args.save_strategy,
-    #     save_steps=args.save_steps,
-    #     save_total_limit=args.save_total_limit,
-    #     logging_steps=args.logging_steps,
-    #     report_to=["tensorboard"],
-    #     deepspeed=deepspeed_config,
-    #     gradient_checkpointing=args.gradient_checkpointing,
-    #     do_eval=args.do_eval,
-    #     evaluation_strategy=args.evaluation_strategy,
-    #     eval_steps=args.eval_steps,
-    #     eval_accumulation_steps=args.eval_accumulation_steps,
-    #     per_device_eval_batch_size=args.eval_batch_size,
-    #     do_predict=args.do_pred,
-    #     use_legacy_prediction_loop=args.do_pred,
-    # )
-    # if args.local_rank <= 0:
-    #     logger.info(f"Training Arguments: {training_args}")
-    #
-    # # Set up the metric
-    # rouge = evaluate.load("rouge")
-    #
-    # def compute_metrics(eval_preds):
-    #     labels_ids = eval_preds.label_ids
-    #     pred_ids = eval_preds.predictions
-    #     pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-    #     label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
-    #     result = rouge.compute(predictions=pred_str, references=label_str)
-    #
-    #     return result
-    #
-    # # Prepare the trainer and start training
-    # trainer = Trainer(
-    #     model=model,
-    #     args=training_args,
-    #     train_dataset=train_dataset,
-    #     eval_dataset=dev_dataset,
-    #     compute_metrics=compute_metrics,
-    #     data_collator=default_data_collator,
-    #     preprocess_logits_for_metrics=preprocess_logits_for_metrics,
-    # )
-
     if args.do_train:
         # # Optimizer
         # AdamOptimizer = DeepSpeedCPUAdam if "3" in args.deepspeed_config else FusedAdam
@@ -339,9 +278,9 @@ def main():
                 with torch.no_grad():
                     for eval_batch in eval_dataloader:
                         eval_batch = {k: v.to(device) for k, v in eval_batch.items()}
-                        output = model_engine(**eval_batch)
-                        pred_ids = preprocess_logits_for_metrics(output.logits, None)
-                        result_rouge = compute_metrics(pred_ids, batch['labels'])
+                        eval_output = model_engine(**eval_batch)
+                        pred_ids = preprocess_logits_for_metrics(eval_output.logits, None)
+                        result_rouge = compute_metrics(pred_ids, eval_batch['labels'])
                         for k, v in result_rouge.items():
                             key = f"eval_{k}"
                             if key not in eval_results:
@@ -374,7 +313,7 @@ def main():
                     print_rank_0(f"Epoch-{epoch+1}, Gloal step-{global_step}, loss: {output.loss}")
                 if args.do_eval and global_step % args.eval_steps == 0:
                     eval_results = eval()
-                    logger.info(f"Epoch-{epoch+1}, Gloal step-{global_step}, Evaluation result: {eval_results}")
+                    print_rank_0(f"Epoch-{epoch+1}, Gloal step-{global_step}, Evaluation result: {eval_results}")
                 if global_step % args.save_steps == 0:
                     rotate_checkpoints(args.save_total_limit, use_mtime=True, output_dir=args.output_dir)
                     # save_zero_three_model(model_engine, args.local_rank,
