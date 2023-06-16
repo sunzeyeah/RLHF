@@ -33,7 +33,7 @@ from src.data.data import PretrainDataset
 from src.utils.file_utils import set_seed, print_gpu_utilization, print_rank_0, print_trainable_parameters
 from src.utils.modeling_utils import rotate_checkpoints, save_zero_three_model
 # from src.models import convert_to_lora_recursively
-from src.models.llama import LlamaForCausalLM
+# from src.models.llama import LlamaForCausalLM
 
 
 # Create a preprocessing function to extract out the proper logits from the model output
@@ -162,7 +162,7 @@ def main():
     # load tokenizer and model
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
     if "llama" in args.model_name_or_path:
-        model = LlamaForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True).half()
+        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True).half()
         # model.resize_token_embeddings(tokenizer.vocab_size)
         # model.config.pad_token_id = tokenizer.pad_token_id
         # model.config.bos_token_id = tokenizer.bos_token_id

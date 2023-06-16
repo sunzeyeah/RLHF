@@ -26,7 +26,7 @@ from peft import (
 from src.utils import logger, RESOURCE_PATH
 from src.data.data import PretrainDataset
 from src.utils.file_utils import set_seed, print_trainable_parameters
-from src.models.llama import LlamaForCausalLM
+# from src.models.llama import LlamaForCausalLM
 
 
 # Create a preprocessing function to extract out the proper logits from the model output
@@ -112,7 +112,7 @@ def main():
 
     # load model
     if "llama" in args.model_name_or_path:
-        model = LlamaForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True).half()
+        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True).half()
         target_modules = "q_proj,k_proj,v_proj"
         task_type = "CAUSAL_LM"
     elif "pangu" in args.model_name_or_path:
