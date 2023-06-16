@@ -7,8 +7,9 @@ sys.path.insert(0, "/mnt/pa002-28359-vol543625-private/Code/chatgpt")
 import os
 import argparse
 import torch
-import loralib as lora
+import evaluate
 import json
+import numpy as np
 import deepspeed
 
 from datetime import datetime
@@ -18,7 +19,7 @@ from transformers import (
     AutoTokenizer,
     AutoModelForSeq2SeqLM,
 )
-from torch.utils.data import RandomSampler, DistributedSampler, DataLoader
+from torch.utils.data import RandomSampler, SequentialSampler, DistributedSampler, DataLoader
 from transformers.deepspeed import HfDeepSpeedConfig
 # from deepspeed.ops.adam import FusedAdam
 # from deepspeed.ops.adam import DeepSpeedCPUAdam
@@ -205,10 +206,19 @@ def main():
     else:
         train_dataset = None
     if args.do_eval:
-        dev_dataset = PretrainDataset(args, os.path.join(args.data_dir, args.eval_filename),
+        eval_dataset = PretrainDataset(args, os.path.join(args.data_dir, args.eval_filename),
                                       tokenizer)
+        # Set up the metric
+        rouge = evaluate.load("rouge")
+
+        def compute_metrics(pred_ids, label_ids):
+            pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+            label_str = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
+            result = rouge.compute(predictions=pred_str, references=label_str)
+
+            return result
     else:
-        dev_dataset = None
+        eval_dataset = None
     if args.do_pred:
         test_dataset = PretrainDataset(args, os.path.join(args.data_dir, args.test_filename),
                                        tokenizer)
@@ -312,6 +322,39 @@ def main():
             sampler=train_sampler,
             batch_size=args.train_batch_size)
 
+        if args.do_eval:
+            if args.local_rank == -1:
+                eval_sampler = SequentialSampler(eval_dataset)
+            else:
+                eval_sampler = DistributedSampler(eval_dataset)
+            eval_dataloader = DataLoader(
+                eval_dataset,
+                # collate_fn=data_collator,
+                sampler=eval_sampler,
+                batch_size=args.eval_batch_size)
+
+            def eval():
+                model_engine.eval()
+                eval_results = dict()
+                with torch.no_grad():
+                    for eval_batch in eval_dataloader:
+                        eval_batch = {k: v.to(device) for k, v in eval_batch.items()}
+                        output = model_engine(**eval_batch)
+                        pred_ids = preprocess_logits_for_metrics(output.logits, None)
+                        result_rouge = compute_metrics(pred_ids, batch['labels'])
+                        for k, v in result_rouge.items():
+                            key = f"eval_{k}"
+                            if key not in eval_results:
+                                eval_results[key] = []
+                            eval_results[key].append(v)
+                        if "eval_loss" not in eval_results:
+                            eval_results['eval_loss'] = []
+                        eval_results['eval_loss'].append(output.loss.tolist())
+                model_engine.train()
+                for k, v in eval_results.items():
+                    eval_results[k] = np.mean(eval_results[k])
+                return eval_results
+
         # training
         model_engine.train()
         if args.gradient_checkpointing:
@@ -329,6 +372,9 @@ def main():
                 global_step += 1
                 if global_step % args.logging_steps == 0:
                     print_rank_0(f"Epoch-{epoch+1}, Gloal step-{global_step}, loss: {output.loss}")
+                if args.do_eval and global_step % args.eval_steps == 0:
+                    eval_results = eval()
+                    logger.info(f"Epoch-{epoch+1}, Gloal step-{global_step}, Evaluation result: {eval_results}")
                 if global_step % args.save_steps == 0:
                     rotate_checkpoints(args.save_total_limit, use_mtime=True, output_dir=args.output_dir)
                     # save_zero_three_model(model_engine, args.local_rank,

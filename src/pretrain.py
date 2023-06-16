@@ -7,6 +7,7 @@ sys.path.insert(0, "/mnt/pa002-28359-vol543625-private/Code/chatgpt")
 import os
 import argparse
 import torch
+import evaluate
 
 from tqdm import tqdm
 from transformers import (
@@ -132,17 +133,17 @@ def main():
     # Set up the datasets
     if args.do_train:
         train_dataset = PretrainDataset(args, os.path.join(args.data_dir, args.train_filename),
-                                   tokenizer)
+                                        tokenizer)
     else:
         train_dataset = None
     if args.do_eval:
         dev_dataset = PretrainDataset(args, os.path.join(args.data_dir, args.eval_filename),
-                                 tokenizer)
+                                      tokenizer)
     else:
         dev_dataset = None
     if args.do_pred:
         test_dataset = PretrainDataset(args, os.path.join(args.data_dir, args.test_filename),
-                                  tokenizer)
+                                       tokenizer)
     else:
         test_dataset = None
 
@@ -192,16 +193,16 @@ def main():
         logger.info(f"Training Arguments: {training_args}")
 
     # Set up the metric
-    # rouge = evaluate.load("rouge")
-    #
-    # def compute_metrics(eval_preds):
-    #     labels_ids = eval_preds.label_ids
-    #     pred_ids = eval_preds.predictions
-    #     pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-    #     label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
-    #     result = rouge.compute(predictions=pred_str, references=label_str)
-    #
-    #     return result
+    rouge = evaluate.load("rouge")
+
+    def compute_metrics(eval_preds):
+        labels_ids = eval_preds.label_ids
+        pred_ids = eval_preds.predictions
+        pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+        label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
+        result = rouge.compute(predictions=pred_str, references=label_str)
+
+        return result
 
     # Prepare the trainer and start training
     trainer = Trainer(
@@ -209,9 +210,9 @@ def main():
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=dev_dataset,
-        # compute_metrics=compute_metrics,
+        compute_metrics=compute_metrics,
         data_collator=default_data_collator,
-        # preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
     )
     # model.config.use_cache = False  # silence the warnings. Please re-enable for inference!
 

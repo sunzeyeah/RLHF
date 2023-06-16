@@ -13,6 +13,7 @@ MODEL_PATH=$ROOT/Data/models/$MODEL
 #MODEL_PATH=/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/$MODEL
 OUTPUT_DIR=$ROOT/Data/chatgpt/output/pretrain/$MODEL
 TRAIN_FILENAME="pretrain_data_v1.jsonl"
+EVAL_FILENAME="pretrain_eval_data_v1.jsonl"
 
 #cd $ROOT/Code/chatgpt || exit
 cd $ROOT/Code/RLHF || exit
@@ -35,4 +36,8 @@ CUDA_LAUNCH_BLOCKING=1 deepspeed $MAIN \
   --gradient_accumulation_steps 8 \
   --gradient_checkpointing \
   --deepspeed_config "stage-3-no_trainer.json" \
+  --do_eval \
+  --eval_filename $EVAL_FILENAME \
+  --eval_batch_size 8 \
+  --eval_steps 1000 \
   > out/pretrain_${MODEL}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1 &
