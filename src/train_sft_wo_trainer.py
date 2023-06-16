@@ -188,6 +188,7 @@ def main():
             bias=args.lora_train_bias,
             task_type=task_type
         )
+        model.enable_input_require_grads()
         model = get_peft_model(model, config)
         print_trainable_parameters(model)
         # convert_to_lora_recursively(model, args.lora_rank, args.lora_alpha)

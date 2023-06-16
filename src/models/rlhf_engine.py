@@ -13,6 +13,11 @@ from deepspeed.ops.adam import DeepSpeedCPUAdam
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, get_scheduler
 from transformers import AutoConfig, AutoModel
 from transformers.deepspeed import HfDeepSpeedConfig
+from peft import (
+    prepare_model_for_kbit_training,
+    LoraConfig,
+    get_peft_model
+)
 
 from src.utils.config import get_train_ds_config, get_eval_ds_config
 # from utils.module.lora import convert_linear_layer_to_lora, only_optimize_lora_parameters
@@ -70,6 +75,17 @@ def create_hf_model(model_class,
     # model.resize_token_embeddings(int(
     #     8 *
     #     math.ceil(len(tokenizer) / 8.0)))  # make the vocab size multiple of 8
+    if "pangu" in model_name_or_path:
+        model.config.target_modules = "q_proj,k_proj,v_proj"
+        model.config.task_type = "CAUSAL_LM"
+    elif "chatglm" in model_name_or_path:
+        model.config.target_modules = "query_key_value"
+        model.config.task_type = "SEQ_2_SEQ_LM"
+    elif "glm" in model_name_or_path:
+        model.config.target_modules = "query_key_value"
+        model.config.task_type = "SEQ_2_SEQ_LM"
+    else:
+        raise ValueError(f"Unsupported model type: {model_name_or_path}")
 
     return model
 
@@ -99,8 +115,8 @@ def create_critic_model(model_name_or_path,
     critic_model.config.lora_train_bias = lora_train_bias
     if "pangu" in model_name_or_path or "chatglm" in model_name_or_path:
         critic_model = RewardModel(critic_model.config, critic_model.transformer, tokenizer,
-            # num_padding_at_beginning=num_padding_at_beginning
-         )
+                                   # num_padding_at_beginning=num_padding_at_beginning
+                                   )
     else:
         critic_model = RewardModel(critic_model.config, critic_model.glm, tokenizer)
 
@@ -168,11 +184,20 @@ class DeepSpeedRLHFEngine:
 
         # LoRA
         if self.args.actor_lora_rank > 0:
-            actor_model = convert_linear_layer_to_lora(
-                actor_model, self.args.actor_lora_module_name,
-                self.args.actor_lora_rank)
-            if self.args.only_optimize_lora:
-                actor_model = only_optimize_lora_parameters(actor_model)
+            config = LoraConfig(
+                r=self.args.actor_lora_rank,
+                lora_alpha=self.args.actor_lora_alpha,
+                target_modules=actor_model.config.target_modules.split(","),
+                lora_dropout=0.05,
+                task_type=actor_model.config.task_type
+            )
+            actor_model.enable_input_require_grads()
+            actor_model = get_peft_model(actor_model, config)
+            # actor_model = convert_linear_layer_to_lora(
+            #     actor_model, self.args.actor_lora_module_name,
+            #     self.args.actor_lora_rank)
+            # if self.args.only_optimize_lora:
+            #     actor_model = only_optimize_lora_parameters(actor_model)
 
         # Optimizer
         AdamOptimizer = DeepSpeedCPUAdam if self.args.offload else FusedAdam
@@ -240,9 +265,18 @@ class DeepSpeedRLHFEngine:
                                           actor_model_name_or_path,
                                           self.tokenizer, ds_config)
         if self.args.actor_lora_rank > 0:
-            actor_model_ema = convert_linear_layer_to_lora(
-                actor_model_ema, self.args.actor_lora_module_name,
-                self.args.actor_lora_rank)
+            config = LoraConfig(
+                r=self.args.actor_lora_rank,
+                lora_alpha=self.args.actor_lora_alpha,
+                target_modules=actor_model_ema.config.target_modules.split(","),
+                lora_dropout=0.05,
+                task_type=actor_model_ema.config.task_type
+            )
+            actor_model_ema.enable_input_require_grads()
+            actor_model_ema = get_peft_model(actor_model_ema, config)
+            # actor_model_ema = convert_linear_layer_to_lora(
+            #     actor_model_ema, self.args.actor_lora_module_name,
+            #     self.args.actor_lora_rank)
 
         ema_engine, *_ = deepspeed.initialize(model=actor_model_ema,
                                               config=ds_config)
@@ -281,11 +315,20 @@ class DeepSpeedRLHFEngine:
 
         # LoRA
         if self.args.critic_lora_rank > 0:
-            critic_model = convert_linear_layer_to_lora(
-                critic_model, self.args.critic_lora_module_name,
-                self.args.critic_lora_rank)
-            if self.args.only_optimize_lora:
-                critic_model = only_optimize_lora_parameters(critic_model)
+            config = LoraConfig(
+                r=self.args.critic_lora_rank,
+                lora_alpha=self.args.critic_lora_alpha,
+                target_modules=critic_model.config.target_modules.split(","),
+                lora_dropout=0.05,
+                task_type=critic_model.config.task_type
+            )
+            critic_model.enable_input_require_grads()
+            critic_model = get_peft_model(critic_model, config)
+            # critic_model = convert_linear_layer_to_lora(
+            #     critic_model, self.args.critic_lora_module_name,
+            #     self.args.critic_lora_rank)
+            # if self.args.only_optimize_lora:
+            #     critic_model = only_optimize_lora_parameters(critic_model)
 
         # Optimizer
         AdamOptimizer = DeepSpeedCPUAdam if self.args.offload else FusedAdam

@@ -144,6 +144,8 @@ def main():
         # model.config.pad_token_id = tokenizer.pad_token_id
         # model.config.bos_token_id = tokenizer.bos_token_id
         # model.config.eos_token_id = tokenizer.eos_token_id
+        target_modules = ["q_proj", "k_proj", "v_proj"]
+        task_type = "CAUSAL_LM"
     elif "glm" in args.model_name_or_path:
         model = AutoModelForSeq2SeqLM.from_pretrained(
             args.model_name_or_path, trust_remote_code=True,
@@ -151,6 +153,8 @@ def main():
         )
         if "chatglm" in args.model_name_or_path and args.bits not in [4, 8]:
             model = model.half()
+        target_modules = ["query_key_value"]
+        task_type = "SEQ_2_SEQ_LM"
     else:
         raise ValueError(f"Unsupported model name: {args.model_name_or_path}")
     # assert model.config.pad_token_id == tokenizer.pad_token_id
@@ -170,11 +174,12 @@ def main():
         config = LoraConfig(
             r=args.lora_rank,
             lora_alpha=args.lora_alpha,
-            target_modules=["query_key_value"],
+            target_modules=target_modules,
             lora_dropout=0.05,
             bias=args.lora_train_bias,
-            task_type="CAUSAL_LM"
+            task_type=task_type
         )
+        model.enable_input_require_grads()
         model = get_peft_model(model, config)
         print_trainable_parameters(model)
 

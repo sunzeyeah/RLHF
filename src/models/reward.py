@@ -36,6 +36,7 @@ class RewardModel(PreTrainedModel):
                 bias=config.lora_train_bias,
                 task_type=config.task_type
             )
+            model.enable_input_require_grads()
             self.transformer = get_peft_model(model, config)
             # convert_to_lora_recursively(model, config.lora_rank, config.lora_alpha)
             # lora.mark_only_lora_as_trainable(model, config.lora_train_bias)

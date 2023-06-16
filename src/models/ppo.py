@@ -409,6 +409,7 @@ class AutoModelForCausalLMWithHydraValueHead(AutoModelForCausalLMWithValueHead):
                 bias=base_model.config.lora_train_bias,
                 task_type=config.task_type
             )
+            self.base_model.enable_input_require_grads()
             self.base_model = get_peft_model(base_model, config)
             # convert_to_lora_recursively(base_model, base_model.config.lora_rank, base_model.config.lora_alpha)
             # lora.mark_only_lora_as_trainable(base_model, base_model.config.lora_train_bias)

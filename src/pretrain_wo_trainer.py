@@ -80,7 +80,7 @@ def get_parser():
                         help="If True, use gradient checkpointing to save memory at the expense of slower backward pass.")
     parser.add_argument("--deepspeed_config", type=str, default=None)
     parser.add_argument("--lora_rank", type=int, default=0)
-    parser.add_argument("--lora_alpha", type=int, default=1)
+    parser.add_argument("--lora_alpha", type=int, default=16)
     parser.add_argument("--lora_train_bias", type=str, default="none")
     # eval
     parser.add_argument("--do_eval", action="store_true")

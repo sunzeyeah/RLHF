@@ -103,7 +103,9 @@ def get_parser():
     parser.add_argument('--enable_ema', action='store_true', help='Enable EMA checkpoint for the model.')
     # lora
     parser.add_argument("--actor_lora_rank", type=int, default=0)
+    parser.add_argument("--actor_lora_alpha", type=int, default=16)
     parser.add_argument("--critic_lora_rank", type=int, default=0)
+    parser.add_argument("--critic_lora_alpha", type=int, default=16)
     parser.add_argument("--lora_alpha", type=int, default=1)
     parser.add_argument("--lora_train_bias", type=str, default="none")
     # eval
@@ -348,13 +350,12 @@ def main():
         if args.local_rank <= 0:
             logger.info('saving model ...')
 
-        if args.actor_lora_rank > 0:
-            rlhf_engine.actor = convert_lora_to_linear_layer(rlhf_engine.actor)
-            if args.enable_ema:
-                rlhf_engine.actor_ema = convert_lora_to_linear_layer(
-                    rlhf_engine.actor_ema)
-        if args.critic_lora_rank > 0:
-            rlhf_engine.critic = convert_lora_to_linear_layer(rlhf_engine.critic)
+        # if args.actor_lora_rank > 0:
+        #     rlhf_engine.actor = convert_lora_to_linear_layer(rlhf_engine.actor)
+        #     if args.enable_ema:
+        #         rlhf_engine.actor_ema = convert_lora_to_linear_layer(rlhf_engine.actor_ema)
+        # if args.critic_lora_rank > 0:
+        #     rlhf_engine.critic = convert_lora_to_linear_layer(rlhf_engine.critic)
 
         if args.local_rank == 0:
             save_hf_format(rlhf_engine.actor, tokenizer_padding_from_right, args, sub_folder='actor')

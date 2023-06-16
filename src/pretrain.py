@@ -18,10 +18,14 @@ from transformers import (
     TrainingArguments,
     default_data_collator
 )
+from peft import (
+    LoraConfig,
+    get_peft_model
+)
 
 from src.utils import logger, RESOURCE_PATH
 from src.data.data import PretrainDataset
-from src.utils.file_utils import set_seed
+from src.utils.file_utils import set_seed, print_trainable_parameters
 from src.models.llama import LlamaForCausalLM
 
 
@@ -67,11 +71,14 @@ def get_parser():
     parser.add_argument("--gradient_checkpointing", action="store_true",
                         help="If True, use gradient checkpointing to save memory at the expense of slower backward pass.")
     parser.add_argument("--deepspeed_config", type=str, default=None)
+    parser.add_argument("--lora_rank", type=int, default=0)
+    parser.add_argument("--lora_alpha", type=int, default=16)
+    parser.add_argument("--lora_train_bias", type=str, default="none")
     # eval
     parser.add_argument("--do_eval", action="store_true")
     parser.add_argument("--eval_filename", type=str, default=None)
     parser.add_argument("--eval_batch_size", type=int, default=4)
-    parser.add_argument("--evaluation_strategy", type=str, default="epoch",
+    parser.add_argument("--evaluation_strategy", type=str, default="steps",
                         help='- `"no"`: No evaluation is done during training.'
                              '- `"steps"`: Evaluation is done (and logged) every `eval_steps`.'
                              '- `"epoch"`: Evaluation is done at the end of each epoch.')
@@ -106,23 +113,37 @@ def main():
     # load model
     if "llama" in args.model_name_or_path:
         model = LlamaForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True).half()
+        target_modules = "q_proj,k_proj,v_proj"
+        task_type = "CAUSAL_LM"
     elif "pangu" in args.model_name_or_path:
         model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         model.resize_token_embeddings(tokenizer.vocab_size)
         # model.config.pad_token_id = tokenizer.pad_token_id
         # model.config.bos_token_id = tokenizer.bos_token_id
         # model.config.eos_token_id = tokenizer.eos_token_id
+        target_modules = "q_proj,k_proj,v_proj"
+        task_type = "CAUSAL_LM"
     elif "glm" in args.model_name_or_path:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
         if "chatglm" in args.model_name_or_path:
             model = model.half()
+        target_modules = "query_key_value"
+        task_type = "SEQ_2_SEQ_LM"
     else:
         raise ValueError(f"Unsupported model name: {args.model_name_or_path}")
-    # assert model.config.pad_token_id == tokenizer.pad_token_id
-    # model.config.lora_rank = args.lora_rank
-    # model.config.lora_alpha = args.lora_alpha
-    # model.config.lora_train_bias = args.lora_train_bias
-    # model = SFTModelWithLoRA(model.config, model)
+
+    if args.lora_rank > 0:
+        config = LoraConfig(
+            r=args.lora_rank,
+            lora_alpha=args.lora_alpha,
+            target_modules=target_modules.split(","),
+            lora_dropout=0.05,
+            bias=args.lora_train_bias,
+            task_type=task_type
+        )
+        model.enable_input_require_grads()
+        model = get_peft_model(model, config)
+        print_trainable_parameters(model)
 
     if args.checkpoint is not None:
         st = torch.load(args.checkpoint, map_location="cpu")
