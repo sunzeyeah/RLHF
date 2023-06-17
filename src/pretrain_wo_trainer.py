@@ -99,13 +99,103 @@ def get_parser():
     parser.add_argument("--output_filename", type=str, default=None)
     parser.add_argument("--do_sample", action="store_true")
     parser.add_argument("--num_return_sequences", type=int, default=1)
-    parser.add_argument("--top_k", type=int, default=None)
-    parser.add_argument("--top_p", type=float, default=None)
-    parser.add_argument("--temperature", type=float, default=None)
+    parser.add_argument("--top_k", type=int, default=10)
+    parser.add_argument("--top_p", type=float, default=0.9)
+    parser.add_argument("--temperature", type=float, default=0.8)
+    parser.add_argument("--repetition_penalty", type=float, default=1.0)
 
     args = parser.parse_args()
     
     return args
+
+
+def pred_single_sample(prompt, prefix, model, tokenizer, args, device):
+    max_prompt_length = args.max_length - args.max_length_generation
+    if "llama" in args.model_name_or_path:
+        inputs = tokenizer(prompt, max_length=max_prompt_length, truncation="longest_first", return_tensors="pt")
+        input_ids = inputs['input_ids']
+        inputs = inputs.to(device)
+        outputs = model.generate(inputs=inputs['input_ids'],
+                                 max_new_tokens=args.max_length_generation,
+                                 do_sample=args.do_sample,
+                                 num_return_sequences=args.num_return_sequences,
+                                 top_k=args.top_k,
+                                 top_p=args.top_p,
+                                 temperature=args.temperature,
+                                 repetition_penalty=args.repetition_penalty)
+
+    elif "chatglm" in args.model_name_or_path:
+        encoded_prompt = tokenizer(prompt)
+        prompt_length = len(encoded_prompt['input_ids'])
+        inputs = tokenizer(prompt,
+                           max_length=min(prompt_length, args.max_length),
+                           truncation="only_first",
+                           return_tensors="pt")
+        # max_gen_length = args.max_length - encoded_dict['input_ids'].shape[1]
+        # inputs = tokenizer.build_inputs_for_generation(encoded_dict,
+        #                                                max_gen_length=max_gen_length, padding=True)
+        input_ids = inputs['input_ids']
+        inputs = inputs.to(device)
+        outputs = model.generate(inputs=inputs['input_ids'],
+                                 max_new_tokens=args.max_length_generation,
+                                 eos_token_id=tokenizer.eop_token_id,
+                                 pad_token_id=tokenizer.pad_token_id,
+                                 do_sample=args.do_sample,
+                                 num_return_sequences=args.num_return_sequences,
+                                 top_k=args.top_k,
+                                 top_p=args.top_p,
+                                 temperature=args.temperature)
+    elif "glm" in args.model_name_or_path:
+        encoded_prompt = tokenizer(prompt, prefix + tokenizer.mask_token)
+        prompt_length = len(encoded_prompt['input_ids'])
+        encoded_dict = tokenizer(prompt, prefix + tokenizer.mask_token,
+                                 max_length=min(prompt_length, args.max_length),
+                                 truncation="only_first",
+                                 return_tensors="pt",
+                                 return_token_type_ids=False)
+        input_ids = encoded_dict['input_ids']
+        max_gen_length = args.max_length - encoded_dict['input_ids'].shape[1]
+        inputs = tokenizer.build_inputs_for_generation(encoded_dict,
+                                                       max_gen_length=max_gen_length, padding=True)
+        inputs = inputs.to(device)
+        outputs = model.generate(inputs=inputs['input_ids'],
+                                 max_new_tokens=min(args.max_length_generation, max_gen_length),
+                                 eos_token_id=tokenizer.eop_token_id,
+                                 pad_token_id=tokenizer.pad_token_id,
+                                 do_sample=args.do_sample,
+                                 num_return_sequences=args.num_return_sequences,
+                                 top_k=args.top_k,
+                                 top_p=args.top_p,
+                                 temperature=args.temperature)
+    else:
+        raise ValueError(f"Unsupported model name: {args.model_name_or_path}")
+
+    results = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+    p = tokenizer.decode(input_ids, skip_special_tokens=True)
+    results = [result.replace(p, "").strip() for result in results]
+    answers = []
+    for r in results:
+        print_rank_0(f"\nprompt: {p}\nanswer: {r}")
+        answers.append({"answer": r, "score": None})
+    d = {"prompt": prompt, "prefix": prefix, "answers": answers}
+
+    return d
+
+
+def pred(args, model, tokenizer, device, step=-1):
+    print_rank_0(f"Prediction Result@{step}")
+    with torch.no_grad():
+        with open(os.path.join(args.output_dir, args.output_filename.format(step=step)), "w", encoding="utf-8") as w:
+            with open(os.path.join(args.data_dir, args.test_filename), "r", encoding="utf-8") as r:
+                while True:
+                    line = r.readline()
+                    if not line:
+                        break
+                    item = json.loads(line.strip("\n"))
+                    prompt = item['context']
+                    result = pred_single_sample(prompt, "", model, tokenizer, args, device)
+                    if args.local_rank <= 0:
+                        w.write(json.dumps(result, ensure_ascii=False)+"\n")
 
 
 def main():
@@ -219,11 +309,6 @@ def main():
             return result
     else:
         eval_dataset = None
-    if args.do_pred:
-        test_dataset = PretrainDataset(args, os.path.join(args.data_dir, args.test_filename),
-                                       tokenizer)
-    else:
-        test_dataset = None
 
     if args.do_train:
         # # Optimizer
@@ -272,7 +357,7 @@ def main():
                 sampler=eval_sampler,
                 batch_size=args.eval_batch_size)
 
-            def eval():
+            def eval(step):
                 model_engine.eval()
                 eval_results = dict()
                 with torch.no_grad():
@@ -288,7 +373,9 @@ def main():
                             eval_results[key].append(v)
                         if "eval_loss" not in eval_results:
                             eval_results['eval_loss'] = []
-                        eval_results['eval_loss'].append(output.loss.tolist())
+                        eval_results['eval_loss'].append(eval_output.loss.tolist())
+                if args.do_pred:
+                    pred(args, model_engine, tokenizer, device, step)
                 model_engine.train()
                 for k, v in eval_results.items():
                     eval_results[k] = np.mean(eval_results[k])
@@ -300,6 +387,9 @@ def main():
             model_engine.module.gradient_checkpointing_enable()
         print_gpu_utilization("before training begin", args.local_rank)
         global_step = 0
+        if args.do_eval:
+            eval_results = eval(global_step)
+            print_rank_0(f"Epoch-0, Gloal step-{global_step}, Evaluation result: {eval_results}")
         for epoch in range(args.num_epochs):
             print_rank_0(f"Beginning of Epoch {epoch+1}/{args.num_epochs}")
             for step, batch in enumerate(train_dataloader):
@@ -312,7 +402,7 @@ def main():
                 if global_step % args.logging_steps == 0:
                     print_rank_0(f"Epoch-{epoch+1}, Gloal step-{global_step}, loss: {output.loss}")
                 if args.do_eval and global_step % args.eval_steps == 0:
-                    eval_results = eval()
+                    eval_results = eval(global_step)
                     print_rank_0(f"Epoch-{epoch+1}, Gloal step-{global_step}, Evaluation result: {eval_results}")
                 if global_step % args.save_steps == 0:
                     rotate_checkpoints(args.save_total_limit, use_mtime=True, output_dir=args.output_dir)
@@ -320,7 +410,7 @@ def main():
                     #                       save_dir=os.path.join(args.output_dir, f"checkpoint-{global_step}"),
                     #                       zero_stage=ds_config['zero_optimization']['stage'])
                     model_engine.save_16bit_model(os.path.join(args.output_dir, f"checkpoint-{global_step}"))
-                    # model_engine.save_checkpoint(args.output_dir, global_step)
+                    # model_engine.save_checkpoint(args.output_dir, f"checkpoint-{global_step}")
                     print_rank_0(f"Finished saving checkpoint @Step-{global_step}")
 
         print_rank_0(f"Finished training! epochs: {epoch+1}, steps: {global_step}")
@@ -329,7 +419,7 @@ def main():
         #                       save_dir=os.path.join(args.output_dir, f"checkpoint-{global_step}"),
         #                       zero_stage=ds_config['zero_optimization']['stage'])
         model_engine.save_16bit_model(os.path.join(args.output_dir, f"checkpoint-{global_step}"))
-        # model_engine.save_checkpoint(args.output_dir, global_step)
+        # model_engine.save_checkpoint(args.output_dir, f"checkpoint-{global_step}")
         print_rank_0(f"Finished saving checkpoint @Step-{global_step}")
 
     elif args.do_eval:
@@ -339,72 +429,8 @@ def main():
         model.eval()
         device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
         model = model.to(device)
-        tokenizer.padding_side = "left"
-        with open(os.path.join(args.output_dir, args.output_filename), "w", encoding="utf-8") as w:
-            w.write("\t".join(["prompt"]+[f"model_answer_{i}" for i in range(args.num_return_sequences)])+"\n")
-            for test_data in tqdm(test_dataset.post_list, desc="Prediction"):
-                prompt = test_data['prompt']
-                prefix = test_data['prefix']
-                # label = dev_data['label']
-                if "pangu" in args.model_name_or_path:
-                    inputs = tokenizer(prompt, tokenizer.sep_token + prefix, max_length=args.max_length,
-                                       truncation="longest_first", add_special_tokens=False,
-                                       return_tensors="pt", return_token_type_ids=False)
-                    # inputs = tokenizer(prompt, add_special_tokens=False, return_token_type_ids=False, return_tensors="pt")
-                    inputs = inputs.to(device)
-                    outputs = model.generate(**inputs,
-                                             max_new_tokens=args.max_length_generation,
-                                             pad_token_id=tokenizer.pad_token_id,
-                                             do_sample=args.do_sample,
-                                             num_return_sequences=args.num_return_sequences,
-                                             top_k=args.top_k,
-                                             top_p=args.top_p,
-                                             temperature=args.temperature)
-                elif "chatglm" in args.model_name_or_path:
-                    encoded_prompt = tokenizer(prompt)
-                    prompt_length = len(encoded_prompt['input_ids'])
-                    inputs = tokenizer(prompt,
-                                       max_length=min(prompt_length, args.max_length),
-                                       truncation="only_first",
-                                       return_tensors="pt")
-                    # max_gen_length = args.max_length - encoded_dict['input_ids'].shape[1]
-                    # inputs = tokenizer.build_inputs_for_generation(encoded_dict,
-                    #                                                max_gen_length=max_gen_length, padding=True)
-                    inputs = inputs.to(device)
-                    outputs = model.generate(**inputs,
-                                             max_new_tokens=args.max_length_generation,
-                                             eos_token_id=tokenizer.eop_token_id,
-                                             pad_token_id=tokenizer.pad_token_id,
-                                             do_sample=args.do_sample,
-                                             num_return_sequences=args.num_return_sequences,
-                                             top_k=args.top_k,
-                                             top_p=args.top_p,
-                                             temperature=args.temperature)
-                elif "glm" in args.model_name_or_path:
-                    encoded_prompt = tokenizer(prompt, prefix + tokenizer.mask_token)
-                    prompt_length = len(encoded_prompt['input_ids'])
-                    encoded_dict = tokenizer(prompt, prefix + tokenizer.mask_token,
-                                             max_length=min(prompt_length, args.max_length),
-                                             truncation="only_first",
-                                             return_tensors="pt",
-                                             return_token_type_ids=False)
-                    max_gen_length = args.max_length - encoded_dict['input_ids'].shape[1]
-                    inputs = tokenizer.build_inputs_for_generation(encoded_dict,
-                                                                   max_gen_length=max_gen_length, padding=True)
-                    inputs = inputs.to(device)
-                    outputs = model.generate(**inputs,
-                                             max_new_tokens=min(args.max_length_generation, max_gen_length),
-                                             eos_token_id=tokenizer.eop_token_id,
-                                             pad_token_id=tokenizer.pad_token_id,
-                                             do_sample=args.do_sample,
-                                             num_return_sequences=args.num_return_sequences,
-                                             top_k=args.top_k,
-                                             top_p=args.top_p,
-                                             temperature=args.temperature)
-                else:
-                    raise ValueError(f"Unsupported model name: {args.model_name_or_path}")
-                results = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-                w.write("\t".join([prompt]+[result.split(prefix, maxsplit=1)[1] for result in results])+"\n")
+        # tokenizer.padding_side = "left"
+        pred(args, model, tokenizer, device)
 
     
 if __name__ == "__main__":

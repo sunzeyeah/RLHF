@@ -110,7 +110,7 @@ class PretrainDataset(Dataset):
         elif "chatglm" in self.model_name_or_path:
             # TODO: Temporary solution for chatglm pretraining, non-padding to be implemented
             encoded_dict = self.tokenizer(prompt, label, max_length=self.args.max_length, return_tensors="pt",
-                                          truncation="longest_first")
+                                          truncation="longest_first", padding="max_length")
 
             return {
                 "input_ids": encoded_dict['input_ids'][0],
