@@ -158,14 +158,15 @@ class PretrainDataset(Dataset):
             length = 0
             for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
                 item = json.loads(line)
-                content = item['prompt']
+                prompt = item['prompt']
+                label = item.get('label', None)
+                content = prompt if label is None else "\n".join((prompt, label))
                 # if the length of a sample < max_lengnth, then concat multiple samples until reaching max_length
                 if len(content) <= 0:
                     discard += 1
                     continue
                 if "chatglm" in self.model_name_or_path:
-                    label = item['label']
-                    datasets.append({"prompt": content, "label": label, "eos_ids": None})
+                    datasets.append({"prompt": prompt, "label": label, "eos_ids": None})
                     continue
                 tokens = self.tokenizer.tokenize(content)
                 if length + len(tokens) + 1 < self.args.max_length:
