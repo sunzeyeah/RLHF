@@ -11,8 +11,8 @@ DATR_DIR=$ROOT/Data/chatgpt/processed
 MAIN=$ROOT/Code/RLHF/src/pretrain.py
 MODEL_PATH=$ROOT/Data/models/$MODEL
 #MODEL_PATH=/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/$MODEL
-OUTPUT_DIR=$ROOT/Data/chatgpt/output/pretrain
-CHECKPOINT=$OUTPUT_DIR/$MODEL/checkpoint-2000/pytorch_model.bin
+OUTPUT_DIR=$ROOT/Data/chatgpt/output/pretrain/$MODEL/checkpoint-2000
+CHECKPOINT=$OUTPUT_DIR/pytorch_model.bin
 TEST_FILENAME="test_prompts.jsonl"
 OUTPUT_FILENAME="output_${MODEL}.jsonl"
 

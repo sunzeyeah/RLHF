@@ -15,6 +15,7 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     AutoModelForSeq2SeqLM,
+    LlamaTokenizer,
     Trainer,
     TrainingArguments,
     default_data_collator,
@@ -110,9 +111,6 @@ def main():
 
     set_seed(args.seed)
 
-    # load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-
     # load model
     if torch.cuda.is_available():
         bf16 = torch.cuda.get_device_capability()[0] >= 8
@@ -154,17 +152,21 @@ def main():
         else:
             model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True).half()
 
-    # load peft config
+    # load tokenizer and peft config
     if "llama" in args.model_name_or_path or "vicuna" in args.model_name_or_path or "billa" in args.model_name_or_path or "pangu" in args.model_name_or_path:
+        tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         target_modules = "q_proj,k_proj,v_proj"
         task_type = "CAUSAL_LM"
     elif "baichuan" in args.model_name_or_path:
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         target_modules = "W_pack"
         task_type = "CAUSAL_LM"
     elif "bloom" in args.model_name_or_path or "tigerbot" in args.model_name_or_path:
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         target_modules = "query_key_value"
         task_type = "CAUSAL_LM"
     elif "glm" in args.model_name_or_path:
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         target_modules = "query_key_value"
         task_type = "SEQ_2_SEQ_LM"
     else:
