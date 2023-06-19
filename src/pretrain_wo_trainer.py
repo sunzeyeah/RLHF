@@ -18,6 +18,8 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     AutoModelForSeq2SeqLM,
+    LlamaTokenizer,
+    BitsAndBytesConfig
 )
 from torch.utils.data import RandomSampler, SequentialSampler, DistributedSampler, DataLoader
 from transformers.deepspeed import HfDeepSpeedConfig
@@ -55,7 +57,7 @@ def get_parser():
     parser.add_argument("--local_rank", type=int, default=-1)
     parser.add_argument("--max_length", type=int, default=1024)
     parser.add_argument("--max_length_generation", type=int, default=None)
-    # parser.add_argument("--max_length_label", type=int, default=824)
+    parser.add_argument("--bits", type=int, default=32)
     # train
     parser.add_argument("--do_train", action="store_true")
     parser.add_argument("--train_filename", type=str, default=None)
@@ -111,20 +113,7 @@ def get_parser():
 
 def pred_single_sample(prompt, prefix, model, tokenizer, args, device):
     max_prompt_length = args.max_length - args.max_length_generation
-    if "llama" in args.model_name_or_path:
-        inputs = tokenizer(prompt, max_length=max_prompt_length, truncation="longest_first", return_tensors="pt")
-        input_ids = inputs['input_ids']
-        inputs = inputs.to(device)
-        outputs = model.generate(inputs=inputs['input_ids'],
-                                 max_new_tokens=args.max_length_generation,
-                                 do_sample=args.do_sample,
-                                 num_return_sequences=args.num_return_sequences,
-                                 top_k=args.top_k,
-                                 top_p=args.top_p,
-                                 temperature=args.temperature,
-                                 repetition_penalty=args.repetition_penalty)
-
-    elif "chatglm" in args.model_name_or_path:
+    if "chatglm" in args.model_name_or_path:
         encoded_prompt = tokenizer(prompt)
         prompt_length = len(encoded_prompt['input_ids'])
         inputs = tokenizer(prompt,
@@ -145,30 +134,40 @@ def pred_single_sample(prompt, prefix, model, tokenizer, args, device):
                                  top_k=args.top_k,
                                  top_p=args.top_p,
                                  temperature=args.temperature)
-    elif "glm" in args.model_name_or_path:
-        encoded_prompt = tokenizer(prompt, prefix + tokenizer.mask_token)
-        prompt_length = len(encoded_prompt['input_ids'])
-        encoded_dict = tokenizer(prompt, prefix + tokenizer.mask_token,
-                                 max_length=min(prompt_length, args.max_length),
-                                 truncation="only_first",
-                                 return_tensors="pt",
-                                 return_token_type_ids=False)
-        input_ids = encoded_dict['input_ids']
-        max_gen_length = args.max_length - encoded_dict['input_ids'].shape[1]
-        inputs = tokenizer.build_inputs_for_generation(encoded_dict,
-                                                       max_gen_length=max_gen_length, padding=True)
+    # elif "glm" in args.model_name_or_path:
+    #     encoded_prompt = tokenizer(prompt, prefix + tokenizer.mask_token)
+    #     prompt_length = len(encoded_prompt['input_ids'])
+    #     encoded_dict = tokenizer(prompt, prefix + tokenizer.mask_token,
+    #                              max_length=min(prompt_length, args.max_length),
+    #                              truncation="only_first",
+    #                              return_tensors="pt",
+    #                              return_token_type_ids=False)
+    #     input_ids = encoded_dict['input_ids']
+    #     max_gen_length = args.max_length - encoded_dict['input_ids'].shape[1]
+    #     inputs = tokenizer.build_inputs_for_generation(encoded_dict,
+    #                                                    max_gen_length=max_gen_length, padding=True)
+    #     inputs = inputs.to(device)
+    #     outputs = model.generate(inputs=inputs['input_ids'],
+    #                              max_new_tokens=min(args.max_length_generation, max_gen_length),
+    #                              eos_token_id=tokenizer.eop_token_id,
+    #                              pad_token_id=tokenizer.pad_token_id,
+    #                              do_sample=args.do_sample,
+    #                              num_return_sequences=args.num_return_sequences,
+    #                              top_k=args.top_k,
+    #                              top_p=args.top_p,
+    #                              temperature=args.temperature)
+    else:
+        inputs = tokenizer(prompt, max_length=max_prompt_length, truncation="longest_first", return_tensors="pt")
+        input_ids = inputs['input_ids']
         inputs = inputs.to(device)
         outputs = model.generate(inputs=inputs['input_ids'],
-                                 max_new_tokens=min(args.max_length_generation, max_gen_length),
-                                 eos_token_id=tokenizer.eop_token_id,
-                                 pad_token_id=tokenizer.pad_token_id,
+                                 max_new_tokens=args.max_length_generation,
                                  do_sample=args.do_sample,
                                  num_return_sequences=args.num_return_sequences,
                                  top_k=args.top_k,
                                  top_p=args.top_p,
-                                 temperature=args.temperature)
-    else:
-        raise ValueError(f"Unsupported model name: {args.model_name_or_path}")
+                                 temperature=args.temperature,
+                                 repetition_penalty=args.repetition_penalty)
 
     results = tokenizer.batch_decode(outputs, skip_special_tokens=True)
     p = tokenizer.decode(input_ids, skip_special_tokens=True)
@@ -211,6 +210,27 @@ def main():
 
     set_seed(args.seed)
 
+    # load quantization config
+    if torch.cuda.is_available():
+        bf16 = torch.cuda.get_device_capability()[0] >= 8
+        if bf16:
+            fp16 = False
+            bnb_4bit_compute_dtype = torch.bfloat16
+        else:
+            fp16 = True
+            bnb_4bit_compute_dtype = torch.float16
+    else:
+        fp16 = False
+        bf16 = False
+        bnb_4bit_compute_dtype = None
+    bnb_config = BitsAndBytesConfig(
+        load_in_8bit=args.bits == 8,
+        load_in_4bit=args.bits == 4,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=bnb_4bit_compute_dtype
+    )
+
     # create HfDeepSpeedConfig [must be called before instantiating model]
     if args.deepspeed_config is not None:
         ds_config_filename = os.path.join(RESOURCE_PATH, "config", "deepspeed", args.deepspeed_config)
@@ -225,12 +245,6 @@ def main():
         ds_config["zero_optimization"]["reduce_bucket_size"] = 4096 * 4096
         ds_config["zero_optimization"]["stage3_prefetch_bucket_size"] = 0.9 * 4096 * 4096
         ds_config["zero_optimization"]["stage3_param_persistence_threshold"] = 10 * 4096
-        if torch.cuda.is_available():
-            bf16 = torch.cuda.get_device_capability()[0] >= 8
-            fp16 = not bf16
-        else:
-            fp16 = False
-            bf16 = False
         ds_config["fp16"]["enabled"] = fp16
         ds_config["bf16"]["enabled"] = bf16
         ds_config["optimizer"]["params"] = {
@@ -249,26 +263,49 @@ def main():
         ds_config['tensorboard']['job_name'] = f"deepspeed-{current_time}"
         dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
 
-    # load tokenizer and model
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-    if "llama" in args.model_name_or_path:
-        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True).half()
-        # model.resize_token_embeddings(tokenizer.vocab_size)
-        # model.config.pad_token_id = tokenizer.pad_token_id
-        # model.config.bos_token_id = tokenizer.bos_token_id
-        # model.config.eos_token_id = tokenizer.eos_token_id
+    # load model
+    if "glm" in args.model_name_or_path:
+        # encoder model structure
+        if args.bits in [4, 8]:
+            model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path,
+                                                          use_cache=False,
+                                                          trust_remote_code=True,
+                                                          quantization_config=bnb_config,
+                                                          device_map={"": args.local_rank})
+        else:
+            model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True).half()
+    else:
+        # decoder model sturcture
+        if args.bits in [4, 8]:
+            model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path,
+                                                         use_cache=False,
+                                                         trust_remote_code=True,
+                                                         quantization_config=bnb_config,
+                                                         device_map={"": args.local_rank})
+        else:
+            model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True).half()
+    print_gpu_utilization("after from_pretrained()", args.local_rank)
+
+    # load tokenizer and peft config
+    if "llama" in args.model_name_or_path or "vicuna" in args.model_name_or_path or "billa" in args.model_name_or_path \
+            or "pangu" in args.model_name_or_path:
+        tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         target_modules = "q_proj,k_proj,v_proj"
         task_type = "CAUSAL_LM"
+    elif "baichuan" in args.model_name_or_path:
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+        target_modules = "W_pack"
+        task_type = "CAUSAL_LM"
+    elif "bloom" in args.model_name_or_path or "tigerbot" in args.model_name_or_path:
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+        target_modules = "query_key_value"
+        task_type = "CAUSAL_LM"
     elif "glm" in args.model_name_or_path:
-        model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
-        if "chatglm" in args.model_name_or_path:
-            model = model.half()
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         target_modules = "query_key_value"
         task_type = "SEQ_2_SEQ_LM"
     else:
         raise ValueError(f"Unsupported model name: {args.model_name_or_path}")
-    print_gpu_utilization("after from_pretrained()", args.local_rank)
-
     if args.lora_rank > 0:
         config = LoraConfig(
             r=args.lora_rank,
@@ -285,7 +322,7 @@ def main():
 
     if args.checkpoint is not None:
         st = torch.load(args.checkpoint, map_location="cpu")
-        res = model.load_state_dict(st, strict=False)
+        model.load_state_dict(st)
 
     print_rank_0(f"Finished loading model and tokenizer")
 

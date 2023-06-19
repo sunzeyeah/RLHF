@@ -78,7 +78,8 @@ class PretrainDataset(Dataset):
         prompt = data['prompt']
         label = data.get('label', None)
         eos_ids = data.get('eos_ids', None)
-        if "llama" in self.model_name_or_path:
+        if "llama" in self.model_name_or_path or "tigerbot" in self.model_name_or_path \
+                or "billa" in self.model_name_or_path or "baichuan" in self.model_name_or_path:
             encoded_dict = self.tokenizer(prompt,  max_length=self.args.max_length, return_tensors="pt",
                                           truncation="longest_first", #return_attention_mask=False,
                                           return_token_type_ids=False)
@@ -97,6 +98,26 @@ class PretrainDataset(Dataset):
                         "attention_mask": encoded_dict['attention_mask'][0],
                         # "attention_mask": combined_attention_mask,
                         "labels": encoded_dict['input_ids'][0],
+            }
+        elif "vicuna" in self.model_name_or_path:
+            encoded_dict = self.tokenizer(prompt + "\n" + label,  max_length=self.args.max_length, return_tensors="pt",
+                                          truncation="longest_first", #return_attention_mask=False,
+                                          return_token_type_ids=False)
+            # # construct attention mask so that different samples cannot attend to each other
+            # combined_attention_mask = torch.full((self.args.max_length, self.args.max_length),
+            #                                      torch.tensor(torch.finfo(torch.float16).min))
+            # for i in range(len(eos_ids)-1):
+            #     attention_mask = torch.ones((1, eos_ids[i+1]-eos_ids[i]), dtype=torch.long)
+            #     attention_mask = _prepare_decoder_attention_mask(attention_mask, attention_mask.shape,
+            #                                                      torch.float16, "cpu", 0)
+            #     logger.debug(f"{i}-th sample, shape: {attention_mask.shape}, attention_mask: {attention_mask}")
+            #     combined_attention_mask[eos_ids[i]:eos_ids[i+1], eos_ids[i]:eos_ids[i+1]] = attention_mask
+            # logger.debug(f"shape: {combined_attention_mask.shape}, combined_attention_mask: {combined_attention_mask}")
+            return {
+                "input_ids": encoded_dict['input_ids'][0],
+                "attention_mask": encoded_dict['attention_mask'][0],
+                # "attention_mask": combined_attention_mask,
+                "labels": encoded_dict['input_ids'][0],
             }
         elif "pangu" in self.model_name_or_path:
             encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length, return_tensors="pt",

@@ -153,7 +153,8 @@ def main():
             model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True).half()
 
     # load tokenizer and peft config
-    if "llama" in args.model_name_or_path or "vicuna" in args.model_name_or_path or "billa" in args.model_name_or_path or "pangu" in args.model_name_or_path:
+    if "llama" in args.model_name_or_path or "vicuna" in args.model_name_or_path or "billa" in args.model_name_or_path \
+            or "pangu" in args.model_name_or_path:
         tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         target_modules = "q_proj,k_proj,v_proj"
         task_type = "CAUSAL_LM"
@@ -210,12 +211,6 @@ def main():
     if args.do_train:
         # training arguments
         deepspeed_config = os.path.join(RESOURCE_PATH, "config", "deepspeed", args.deepspeed_config) if args.deepspeed_config is not None else None
-        if torch.cuda.is_available():
-            bf16 = torch.cuda.get_device_capability()[0] >= 8
-            fp16 = not bf16
-        else:
-            fp16 = False
-            bf16 = False
         training_args = TrainingArguments(
             output_dir=args.output_dir,
             no_cuda=not torch.cuda.is_available(),
@@ -356,7 +351,7 @@ def main():
                                                      temperature=args.temperature,
                                                      repetition_penalty=args.repetition_penalty)
                         results = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-                        p = tokenizer.batch_decode(encoded_prompt['input_ids'], skip_special_tokens=True)
+                        p = tokenizer.decode(encoded_prompt['input_ids'], skip_special_tokens=True)
                         answers = []
                         for r in results:
                             answer = r.replace(p, "").strip()
