@@ -93,6 +93,7 @@ def get_parser():
     parser.add_argument("--checkpoint", type=str, default=None)
     parser.add_argument("--test_filename", type=str, default=None)
     parser.add_argument("--output_filename", type=str, default=None)
+    parser.add_argument("--data_types", type=str, default=None)
     parser.add_argument("--do_sample", action="store_true")
     parser.add_argument("--num_return_sequences", type=int, default=1)
     parser.add_argument("--top_k", type=int, default=None)
@@ -289,75 +290,86 @@ def main():
             test_file = os.path.join(args.data_dir, args.test_filename)
         else:
             test_file = os.path.join(RESOURCE_PATH, "test_prompts.jsonl")
+        data_types = args.data_types.split(",") if args.data_types is not None else None
         with torch.no_grad():
-            with open(os.path.join(args.output_dir, args.output_filename), "w", encoding="utf-8") as w:
-                with open(test_file, "r", encoding="utf-8") as r:
-                    for line in tqdm(r.readlines(), desc="Prediction"):
-                        test_data = json.loads(line.strip("\n"))
-                        prompt = test_data['prompt']
-                        prefix = test_data.get('prefix', None)
-                        label = test_data.get('label', None)
-                        encoded_prompt = tokenizer(prompt)
-                        if "chatglm" in args.model_name_or_path:
-                            inputs = tokenizer(prompt, max_length=args.max_length-args.max_length_generation,
-                                               truncation="only_first",
-                                               return_tensors="pt")
-                            inputs = inputs.to(device)
-                            outputs = model.generate(inputs=inputs['input_ids'],
-                                                     max_new_tokens=args.max_length_generation,
-                                                     eos_token_id=tokenizer.eop_token_id,
-                                                     pad_token_id=tokenizer.pad_token_id,
-                                                     do_sample=args.do_sample,
-                                                     num_return_sequences=args.num_return_sequences,
-                                                     top_k=args.top_k,
-                                                     top_p=args.top_p,
-                                                     temperature=args.temperature,
-                                                     repetition_penalty=args.repetition_penalty)
-                        # elif "glm" in args.model_name_or_path:
-                        #     encoded_prompt = tokenizer(prompt, prefix + tokenizer.mask_token)
-                        #     prompt_length = len(encoded_prompt['input_ids'])
-                        #     encoded_dict = tokenizer(prompt, prefix + tokenizer.mask_token,
-                        #                              max_length=min(prompt_length, args.max_length),
-                        #                              truncation="only_first",
-                        #                              return_tensors="pt",
-                        #                              return_token_type_ids=False)
-                        #     max_gen_length = args.max_length - encoded_dict['input_ids'].shape[1]
-                        #     inputs = tokenizer.build_inputs_for_generation(encoded_dict,
-                        #                                                    max_gen_length=max_gen_length, padding=True)
-                        #     inputs = inputs.to(device)
-                        #     outputs = model.generate(**inputs,
-                        #                              max_new_tokens=min(args.max_length_generation, max_gen_length),
-                        #                              eos_token_id=tokenizer.eop_token_id,
-                        #                              pad_token_id=tokenizer.pad_token_id,
-                        #                              do_sample=args.do_sample,
-                        #                              num_return_sequences=args.num_return_sequences,
-                        #                              top_k=args.top_k,
-                        #                              top_p=args.top_p,
-                        #                              temperature=args.temperature)
-                        else:
-                            if prefix is not None and len(prefix) > 0:
-                                prompt += prefix
-                            inputs = tokenizer(prompt, max_length=args.max_length-args.max_length_generation,
-                                               truncation="only_first",
-                                               return_tensors="pt")
-                            inputs = inputs.to(device)
-                            outputs = model.generate(inputs=inputs['input_ids'],
-                                                     max_new_tokens=args.max_length_generation,
-                                                     eos_token_id=tokenizer.bos_token_id,
-                                                     do_sample=args.do_sample,
-                                                     num_return_sequences=args.num_return_sequences,
-                                                     top_k=args.top_k,
-                                                     top_p=args.top_p,
-                                                     temperature=args.temperature,
-                                                     repetition_penalty=args.repetition_penalty)
-                        results = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-                        p = tokenizer.decode(encoded_prompt['input_ids'], skip_special_tokens=True)
-                        answers = []
-                        for r in results:
-                            answer = r.replace(p, "").strip()
-                            logger.info(f"\nprompt: {prompt}\nanswer: {answer}")
-                            answers.append({"answer": answer, "score": None})
-                        w.write(json.dumps({"prompt": prompt, "prefix": prefix, "answers": answer, "label": label}, ensure_ascii=False)+"\n")
+            if args.output_filename is not None:
+                w = open(os.path.join(args.output_dir, args.output_filename), "w", encoding="utf-8")
+            else:
+                w = None
+            # for line in tqdm(open(test_file, "r", encoding="utf-8"), desc="Prediction"):
+            for line in open(test_file, "r", encoding="utf-8"):
+                test_data = json.loads(line.strip("\n"))
+                data_type = test_data['data_type']
+                if data_types is not None and data_type not in data_types:
+                    continue
+                prompt = test_data['prompt']
+                prefix = test_data.get('prefix', None)
+                label = test_data.get('label', None)
+                encoded_prompt = tokenizer(prompt)
+                if "chatglm" in args.model_name_or_path:
+                    inputs = tokenizer(prompt, max_length=args.max_length-args.max_length_generation,
+                                       truncation="only_first",
+                                       return_tensors="pt")
+                    inputs = inputs.to(device)
+                    outputs = model.generate(inputs=inputs['input_ids'],
+                                             max_new_tokens=args.max_length_generation,
+                                             eos_token_id=tokenizer.eop_token_id,
+                                             pad_token_id=tokenizer.pad_token_id,
+                                             do_sample=args.do_sample,
+                                             num_return_sequences=args.num_return_sequences,
+                                             top_k=args.top_k,
+                                             top_p=args.top_p,
+                                             temperature=args.temperature,
+                                             repetition_penalty=args.repetition_penalty)
+                # elif "glm" in args.model_name_or_path:
+                #     encoded_prompt = tokenizer(prompt, prefix + tokenizer.mask_token)
+                #     prompt_length = len(encoded_prompt['input_ids'])
+                #     encoded_dict = tokenizer(prompt, prefix + tokenizer.mask_token,
+                #                              max_length=min(prompt_length, args.max_length),
+                #                              truncation="only_first",
+                #                              return_tensors="pt",
+                #                              return_token_type_ids=False)
+                #     max_gen_length = args.max_length - encoded_dict['input_ids'].shape[1]
+                #     inputs = tokenizer.build_inputs_for_generation(encoded_dict,
+                #                                                    max_gen_length=max_gen_length, padding=True)
+                #     inputs = inputs.to(device)
+                #     outputs = model.generate(**inputs,
+                #                              max_new_tokens=min(args.max_length_generation, max_gen_length),
+                #                              eos_token_id=tokenizer.eop_token_id,
+                #                              pad_token_id=tokenizer.pad_token_id,
+                #                              do_sample=args.do_sample,
+                #                              num_return_sequences=args.num_return_sequences,
+                #                              top_k=args.top_k,
+                #                              top_p=args.top_p,
+                #                              temperature=args.temperature)
+                else:
+                    if prefix is not None and len(prefix) > 0:
+                        prompt += prefix
+                    inputs = tokenizer(prompt, max_length=args.max_length-args.max_length_generation,
+                                       truncation="only_first",
+                                       return_tensors="pt")
+                    inputs = inputs.to(device)
+                    outputs = model.generate(inputs=inputs['input_ids'],
+                                             max_new_tokens=args.max_length_generation,
+                                             eos_token_id=tokenizer.bos_token_id,
+                                             do_sample=args.do_sample,
+                                             num_return_sequences=args.num_return_sequences,
+                                             top_k=args.top_k,
+                                             top_p=args.top_p,
+                                             temperature=args.temperature,
+                                             repetition_penalty=args.repetition_penalty)
+                results = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+                p = tokenizer.decode(encoded_prompt['input_ids'], skip_special_tokens=True)
+                answers = []
+                for r in results:
+                    answer = r.replace(p, "").strip()
+                    logger.info(f"\nprompt: {prompt}\nanswer: {answer}")
+                    answers.append({"answer": answer, "score": None})
+                if w is not None:
+                    w.write(json.dumps({"prompt": prompt, "prefix": prefix, "answers": answers, "label": label}, ensure_ascii=False)+"\n")
+
+            if w is not None:
+                w.close()
 
 
 if __name__ == "__main__":
