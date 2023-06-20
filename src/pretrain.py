@@ -96,9 +96,10 @@ def get_parser():
     parser.add_argument("--data_types", type=str, default=None)
     parser.add_argument("--do_sample", action="store_true")
     parser.add_argument("--num_return_sequences", type=int, default=1)
-    parser.add_argument("--top_k", type=int, default=None)
-    parser.add_argument("--top_p", type=float, default=None)
-    parser.add_argument("--temperature", type=float, default=None)
+    parser.add_argument("--top_k", type=int, default=10)
+    parser.add_argument("--top_p", type=float, default=0.9)
+    parser.add_argument("--temperature", type=float, default=0.8)
+    parser.add_argument("--repetition_penalty", type=float, default=1.0)
 
     args = parser.parse_args()
     
@@ -283,7 +284,8 @@ def main():
 
     if args.do_pred:
         device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
-        model = model.to(device)
+        if args.bits not in [4, 8]:
+            model = model.to(device)
         model.eval()
         # tokenizer.padding_side = "left"
         if args.test_filename is not None:
