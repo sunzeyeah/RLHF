@@ -323,6 +323,7 @@ def main():
     if args.checkpoint is not None:
         st = torch.load(args.checkpoint, map_location="cpu")
         model.load_state_dict(st)
+        del st
 
     print_rank_0(f"Finished loading model and tokenizer")
 
