@@ -34,5 +34,6 @@
   "torch_dtype": "float16",
   "transformers_version": "4.27.1",
   "tie_word_embeddings": false,
-  "eos_token_id": 2
+  "eos_token_id": 2,
+  "pad_token_id": 2
 }

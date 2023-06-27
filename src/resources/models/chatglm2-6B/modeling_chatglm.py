@@ -566,6 +566,8 @@ class GLMTransformer(torch.nn.Module):
             self.final_layernorm = LayerNormFunc(config.hidden_size, eps=config.layernorm_epsilon, device=device,
                                                  dtype=config.torch_dtype)
 
+        self.gradient_checkpointing = False
+
     def _get_layer(self, layer_number):
         return self.layers[layer_number]
 
@@ -585,13 +587,24 @@ class GLMTransformer(torch.nn.Module):
 
             layer = self._get_layer(index)
 
-            hidden_states, kv_cache = layer(
-                hidden_states,
-                attention_mask,
-                rotary_pos_emb,
-                kv_cache=kv_caches[index],
-                use_cache=use_cache
-            )
+            if self.gradient_checkpointing and self.training:
+                hidden_states, kv_cache = torch.utils.checkpoint.checkpoint(
+                    layer,
+                    hidden_states,
+                    attention_mask,
+                    rotary_pos_emb,
+                    kv_caches[index],
+                    use_cache
+                )
+            else:
+                hidden_states, kv_cache = layer(
+                    hidden_states,
+                    attention_mask,
+                    rotary_pos_emb,
+                    kv_cache=kv_caches[index],
+                    use_cache=use_cache
+                )
+
             if use_cache:
                 presents = presents + (kv_cache,)
 
@@ -647,6 +660,9 @@ class ChatGLMPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, ChatGLMModel):
             module.gradient_checkpointing = value
+            if hasattr(module, "encoder"):
+                encoder = getattr(module, "encoder")
+                encoder.gradient_checkpointing = value
 
 
 class Embedding(torch.nn.Module):
@@ -719,6 +735,13 @@ class ChatGLMModel(ChatGLMPreTrainedModel):
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                # logger.warning_once(
+                #     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                # )
+                use_cache = False
 
         batch_size, seq_length = input_ids.shape
 
