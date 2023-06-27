@@ -129,6 +129,7 @@ class PretrainDataset(Dataset):
                 "labels": encoded_dict['input_ids'],
             }
         elif "chatglm" in self.model_name_or_path:
+            prompt = f"[Round {1}]\n问：{prompt}\n答："
             # TODO: Temporary solution for chatglm pretraining, non-padding to be implemented
             encoded_dict = self.tokenizer(prompt, label, max_length=self.args.max_length, return_tensors="pt",
                                           truncation="longest_first", padding="max_length")
@@ -234,6 +235,7 @@ class SFTDataset(Dataset):
                 "labels": encoded_dict['input_ids'],
             }
         elif "chatglm" in self.model_name_or_path:
+            prompt = f"[Round {1}]\n问：{prompt}\n答："
             encoded_dict = self.tokenizer(prompt, label, max_length=self.args.max_length, return_tensors="pt",
                                           truncation="longest_first", padding="max_length")
 
@@ -329,6 +331,7 @@ class PairwiseDataset(Dataset):
                 "labels": rejected_encodings_dict["input_ids"],
             }
         elif "chatglm" in self.args.model_name_or_path:
+            prompt = f"[Round {1}]\n问：{prompt}\n答："
             chosen_encodings_dict = self.tokenizer(prompt, chosen_answer, max_length=self.args.max_length,
                                                    truncation="longest_first", padding="max_length", return_tensors="pt")
             rejected_encodings_dict = self.tokenizer(prompt, rejected_answer, max_length=self.args.max_length,
@@ -450,6 +453,7 @@ class RLHFDataset(Dataset):
                 # "labels": encoded_dict['input_ids'],
             }
         elif "chatglm" in self.args.actor_model_path:
+            prompt = f"[Round {1}]\n问：{prompt}\n答："
             encoded_dict = self.tokenizer(prompt, max_length=self.args.max_prompt_length, return_tensors="pt",
                                           # padding="max_length",
                                           truncation="only_first")
