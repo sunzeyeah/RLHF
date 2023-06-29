@@ -839,7 +839,7 @@ def sorted_checkpoints(output_dir=None, checkpoint_prefix="checkpoint", use_mtim
     return checkpoints_sorted
 
 
-def rotate_checkpoints(save_total_limit, use_mtime=False, output_dir=None) -> None:
+def rotate_checkpoints(save_total_limit, use_mtime=False, output_dir=None, best_model_checkpoint=None) -> None:
     if save_total_limit is None or save_total_limit <= 0:
         return
 
@@ -848,7 +848,17 @@ def rotate_checkpoints(save_total_limit, use_mtime=False, output_dir=None) -> No
     if len(checkpoints_sorted) <= save_total_limit:
         return
 
-    number_of_checkpoints_to_delete = max(0, len(checkpoints_sorted) - save_total_limit)
+    # If save_total_limit=1 with load_best_model_at_end=True, we could end up deleting the last checkpoint, which
+    # we don't do to allow resuming.
+    save_total_limit_tmp = save_total_limit
+    if (
+            best_model_checkpoint is not None
+            and save_total_limit == 1
+            and checkpoints_sorted[-1] != best_model_checkpoint
+    ):
+        save_total_limit_tmp = 2
+
+    number_of_checkpoints_to_delete = max(0, len(checkpoints_sorted) - save_total_limit_tmp)
     checkpoints_to_be_deleted = checkpoints_sorted[:number_of_checkpoints_to_delete]
     for checkpoint in checkpoints_to_be_deleted:
         print(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")

@@ -76,6 +76,7 @@ def get_parser():
                              '- `"steps"`: Save is done every `save_steps`.')
     parser.add_argument("--save_steps", type=int, default=1000)
     parser.add_argument("--save_total_limit", type=int, default=2)
+    parser.add_argument("--metric_for_best_model", type=str, default=None)
     parser.add_argument("--max_grad_norm", type=float, default=1.0)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
     parser.add_argument("--gradient_checkpointing", action="store_true",
@@ -425,9 +426,17 @@ def main():
             model_engine.module.gradient_checkpointing_enable()
         print_gpu_utilization("before training begin", args.local_rank)
         global_step = 0
+        best_metric = None
+        best_model_checkpoint = None
         if args.do_eval:
+            assert args.eval_steps <= args.save_steps and args.save_steps % args.eval_steps == 0, \
+                f"save steps should be greater than eval steps and be a multiple of eval steps"
             eval_results = eval(global_step)
             print_rank_0(f"Epoch-0, Gloal step-{global_step}, Evaluation result: {eval_results}")
+            if args.metric_for_best_model is not None:
+                assert args.metric_for_best_model in eval_results, \
+                    f"{args.metric_for_best_model} is not a valid metric, " \
+                    f"please choose from the following metrics: {eval_results.keys()}"
         for epoch in range(args.num_epochs):
             print_rank_0(f"Beginning of Epoch {epoch+1}/{args.num_epochs}")
             for step, batch in enumerate(train_dataloader):
@@ -443,21 +452,31 @@ def main():
                     eval_results = eval(global_step)
                     print_rank_0(f"Epoch-{epoch+1}, Gloal step-{global_step}, Evaluation result: {eval_results}")
                 if global_step % args.save_steps == 0:
-                    rotate_checkpoints(args.save_total_limit, use_mtime=True, output_dir=args.output_dir)
+                    output_dir = os.path.join(args.output_dir, f"checkpoint-{global_step}")
+                    if args.do_eval and args.metric_for_best_model is not None:
+                        if (
+                                best_metric is None or
+                                best_model_checkpoint is None or
+                                eval_results[args.metric_for_best_model] > best_metric
+                        ):
+                            best_metric = eval_results[args.metric_for_best_model]
+                            best_model_checkpoint = output_dir
+                    rotate_checkpoints(args.save_total_limit, use_mtime=True, output_dir=args.output_dir,
+                                       best_model_checkpoint=best_model_checkpoint)
                     # save_zero_three_model(model_engine, args.local_rank,
-                    #                       save_dir=os.path.join(args.output_dir, f"checkpoint-{global_step}"),
+                    #                       save_dir=output_dir,
                     #                       zero_stage=ds_config['zero_optimization']['stage'])
-                    model_engine.save_16bit_model(os.path.join(args.output_dir, f"checkpoint-{global_step}"))
-                    # model_engine.save_checkpoint(args.output_dir, f"checkpoint-{global_step}")
+                    # model_engine.save_16bit_model(output_dir)
+                    model_engine.save_checkpoint(args.output_dir, f"checkpoint-{global_step}")
                     print_rank_0(f"Finished saving checkpoint @Step-{global_step}")
 
         print_rank_0(f"Finished training! epochs: {epoch+1}, steps: {global_step}")
-
+        output_dir = os.path.join(args.output_dir, f"checkpoint-{global_step}")
         # save_zero_three_model(model_engine, args.local_rank,
-        #                       save_dir=os.path.join(args.output_dir, f"checkpoint-{global_step}"),
+        #                       save_dir=output_dir,
         #                       zero_stage=ds_config['zero_optimization']['stage'])
-        model_engine.save_16bit_model(os.path.join(args.output_dir, f"checkpoint-{global_step}"))
-        # model_engine.save_checkpoint(args.output_dir, f"checkpoint-{global_step}")
+        # model_engine.save_16bit_model(output_dir)
+        model_engine.save_checkpoint(args.output_dir, f"checkpoint-{global_step}")
         print_rank_0(f"Finished saving checkpoint @Step-{global_step}")
 
     elif args.do_eval:
