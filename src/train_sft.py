@@ -28,7 +28,7 @@ from peft import (
 
 from src.utils import logger, RESOURCE_PATH
 from src.data.data import SFTDataset
-from src.utils.file_utils import set_seed, print_trainable_parameters
+from src.utils.file_utils import set_seed, print_rank_0, print_trainable_parameters
 # from src.models import convert_to_lora_recursively
 
 
@@ -107,8 +107,7 @@ def get_parser():
 
 def main():
     args = get_parser()
-    if args.local_rank <= 0:
-        logger.info(f"Parameters: {args}")
+    print_rank_0(f"Parameters: {args}")
 
     set_seed(args.seed)
 
@@ -187,7 +186,7 @@ def main():
         st = torch.load(args.checkpoint, map_location="cpu")
         res = model.load_state_dict(st, strict=False)
 
-    logger.info(f"Finished loading model and tokenizer")
+    print_rank_0(f"Finished loading model and tokenizer")
 
     # Set up the datasets
     if args.do_train:
@@ -243,8 +242,7 @@ def main():
         do_predict=args.do_pred,
         use_legacy_prediction_loop=args.do_pred,
     )
-    if args.local_rank <= 0:
-        logger.info(f"Training Arguments: {training_args}")
+    print_rank_0(f"Training Arguments: {training_args}")
 
     # Set up the metric
     rouge = evaluate.load("rouge")
@@ -276,7 +274,7 @@ def main():
 
     elif args.do_eval:
         res = trainer.evaluate(eval_dataset=dev_dataset)
-        logger.info(res)
+        print_rank_0(res)
 
     if args.do_pred:
         model.eval()

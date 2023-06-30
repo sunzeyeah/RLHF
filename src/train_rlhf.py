@@ -16,10 +16,9 @@ import numpy as np
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM, default_data_collator
 from torch.utils.data import RandomSampler, DistributedSampler, DataLoader
 
-from src.utils import logger, RESOURCE_PATH
 from src.models.rlhf_engine import DeepSpeedRLHFEngine
 from src.models.trainer import DeepSpeedPPOTrainer, DeepSpeedPPOPTXTrainer
-from src.utils.file_utils import set_seed, print_gpu_utilization_torch, print_gpu_utilization
+from src.utils.file_utils import set_seed, print_rank_0, print_gpu_utilization_torch, print_gpu_utilization
 from src.data.data import SFTDataset, RLHFDataset, PPODataset
 from src.utils.modeling_utils import get_all_reduce_mean, save_hf_format, moving_average, save_zero_three_model
 
@@ -202,8 +201,7 @@ def main():
         # deepspeed.init_distributed()
 
     # args.global_rank = torch.distributed.get_rank()
-    if args.local_rank <= 0:
-        logger.info(f"Parameters: {args}")
+    print_rank_0(f"Parameters: {args}")
 
     set_seed(args.seed)
     # torch.distributed.barrier()
@@ -262,13 +260,10 @@ def main():
         pretrain_mini_dataset = PPODataset(args.ppo_batch_numbers,
                                            args.ppo_train_batch_size)
 
-        if args.local_rank <= 0:
-            logger.info("Start training")
-
+        print_rank_0("Start training")
         for epoch in range(args.num_epochs):
-            if args.local_rank <= 0:
-                logger.info(f"Beginning of Epoch {epoch+1}/{args.num_epochs}, "
-                            f"Total Generation Batches {min(len(prompt_train_dataloader), len(pretrain_dataloader))}")
+            print_rank_0(f"Beginning of Epoch {epoch+1}/{args.num_epochs}, "
+                         f"Total Generation Batches {min(len(prompt_train_dataloader), len(pretrain_dataloader))}")
             prompt_iter = iter(prompt_train_dataloader)
             pretrain_iter = iter(pretrain_dataloader)
             step = 0
@@ -335,20 +330,17 @@ def main():
                         random.shuffle(exp_dataset)
                         random.shuffle(pretrain_dataset)
 
-                    if args.local_rank <= 0:
-                        logger.info(f'epoch: {epoch}, step: {step}, ppo_ep: {ppo_ep+1}, act_loss: {actor_loss/inner_iter},'
-                                    f'cri_loss: {critic_loss/inner_iter}, pretrain_loss: {pretrain_loss/inner_iter}')
+                    print_rank_0(f'epoch: {epoch}, step: {step}, ppo_ep: {ppo_ep+1}, act_loss: {actor_loss/inner_iter},'
+                                 f'cri_loss: {critic_loss/inner_iter}, pretrain_loss: {pretrain_loss/inner_iter}')
                     average_reward = get_all_reduce_mean(average_reward).item()
-                    if args.local_rank <= 0:
-                        logger.info(f"average reward score: {average_reward/inner_iter}")
+                    print_rank_0(f"average reward score: {average_reward/inner_iter}")
 
                 if args.actor_gradient_checkpointing:
                     rlhf_engine.actor.gradient_checkpointing_disable()
 
                 step += 1
 
-        if args.local_rank <= 0:
-            logger.info('saving model ...')
+        print_rank_0('saving model ...')
 
         # if args.actor_lora_rank > 0:
         #     rlhf_engine.actor = convert_lora_to_linear_layer(rlhf_engine.actor)

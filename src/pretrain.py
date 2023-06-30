@@ -28,7 +28,7 @@ from peft import (
 
 from src.utils import logger, RESOURCE_PATH
 from src.data.data import PretrainDataset
-from src.utils.file_utils import set_seed, print_trainable_parameters
+from src.utils.file_utils import set_seed, print_rank_0, print_trainable_parameters
 # from src.models.llama import LlamaForCausalLM
 
 
@@ -109,8 +109,7 @@ def get_parser():
 
 def main():
     args = get_parser()
-    if args.local_rank <= 0:
-        logger.info(f"Parameters: {args}")
+    print_rank_0(f"Parameters: {args}")
 
     set_seed(args.seed)
 
@@ -193,7 +192,7 @@ def main():
         model.load_state_dict(st)
         del st
 
-    logger.info(f"Finished loading model and tokenizer")
+    print_rank_0(f"Finished loading model and tokenizer")
 
     # Set up the datasets
     if args.do_train:
@@ -251,8 +250,7 @@ def main():
             do_predict=args.do_pred,
             use_legacy_prediction_loop=args.do_pred,
         )
-        if args.local_rank <= 0:
-            logger.info(f"Training Arguments: {training_args}")
+        print_rank_0(f"Training Arguments: {training_args}")
 
         # Set up the metric
         rouge = evaluate.load("rouge")
@@ -369,7 +367,7 @@ def main():
                 answers = []
                 for r in results:
                     answer = r.replace(p, "").strip()
-                    logger.info(f"\nprompt: {prompt}\nanswer: {answer}")
+                    print_rank_0(f"\nprompt: {prompt}\nanswer: {answer}")
                     answers.append({"answer": answer, "score": None})
                 if w is not None:
                     w.write(json.dumps({"prompt": prompt, "prefix": prefix, "answers": answers, "label": label}, ensure_ascii=False)+"\n")
@@ -379,4 +377,5 @@ def main():
 
 
 if __name__ == "__main__":
+    from transformers import pipeline
     main()

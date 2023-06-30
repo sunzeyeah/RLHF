@@ -1296,3 +1296,145 @@ class TNEWSDataset(Dataset):
         logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets
+
+
+class CEvalDataset(Dataset):
+    def __init__(self, args, eval_filename, tokenizer, train_filename=None):
+        self.tokenizer = tokenizer
+        self.args = args
+        self.label_dict = {'entailment': 'Yes', 'neutral': 'Maybe', 'contradiction': 'No'}
+
+        dataset = self.load_dataset(eval_filename)
+        if train_filename is not None:
+            self.labelled_list = self.load_dataset(eval_filename)
+        self.post_list = dataset
+
+        for k in range(5):
+            logger.info(f"OCNLIDataset sample-{k}\n: {dataset[k]}")
+
+    def __len__(self):
+        return len(self.post_list)
+
+    def __getitem__(self, idx):
+        data = self.post_list[idx]
+        prompt = data['prompt']
+        label = data['label']
+
+        # Few-Shot example construction
+        if hasattr(self, "labelled_list"):
+            examples = random.sample(self.labelled_list, min(len(self.labelled_list), self.args.max_few_shot))
+            prompts = []
+            prompt_tokens = self.tokenizer.tokenize(prompt)
+            for example in examples:
+                example_prompt = example['prompt']
+                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
+                    break
+                else:
+                    prompts.append(example_prompt)
+                    prompt_tokens.extend(exmample_tokens)
+            prompts.append(prompt)
+            prompt = "\n".join(prompts)
+
+        encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
+                                      padding="max_length", truncation="longest_first", return_tensors="pt")
+
+        return {
+            "input_ids": encoded_dict["input_ids"],
+            "attention_mask": encoded_dict["attention_mask"],
+            "labels": encoded_dict["input_ids"],
+            "label_str": label
+        }
+
+    def load_dataset(self, filename):
+        discard = 0
+        datasets = []
+        with open(filename, "r", encoding="utf-8") as f:
+            for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
+                item = json.loads(line)
+                s1 = item['sentence1']
+                s2 = item['sentence2']
+                label = item['label']
+                # 标注结果有冲突，则忽略
+                if label == "-":
+                    continue
+                for l in self.label_dict.values():
+                    prompt = f'{s1}?{l}，{s2}'
+                    if len(prompt) <= 0:
+                        continue
+                    datasets.append({"prompt": prompt, "label": self.label_dict[label]})
+
+        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+
+        return datasets
+
+
+class MMLUDataset(Dataset):
+    def __init__(self, args, eval_filename, tokenizer, train_filename=None):
+        self.tokenizer = tokenizer
+        self.args = args
+        self.label_dict = {'entailment': 'Yes', 'neutral': 'Maybe', 'contradiction': 'No'}
+
+        dataset = self.load_dataset(eval_filename)
+        if train_filename is not None:
+            self.labelled_list = self.load_dataset(eval_filename)
+        self.post_list = dataset
+
+        for k in range(5):
+            logger.info(f"OCNLIDataset sample-{k}\n: {dataset[k]}")
+
+    def __len__(self):
+        return len(self.post_list)
+
+    def __getitem__(self, idx):
+        data = self.post_list[idx]
+        prompt = data['prompt']
+        label = data['label']
+
+        # Few-Shot example construction
+        if hasattr(self, "labelled_list"):
+            examples = random.sample(self.labelled_list, min(len(self.labelled_list), self.args.max_few_shot))
+            prompts = []
+            prompt_tokens = self.tokenizer.tokenize(prompt)
+            for example in examples:
+                example_prompt = example['prompt']
+                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
+                    break
+                else:
+                    prompts.append(example_prompt)
+                    prompt_tokens.extend(exmample_tokens)
+            prompts.append(prompt)
+            prompt = "\n".join(prompts)
+
+        encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
+                                      padding="max_length", truncation="longest_first", return_tensors="pt")
+
+        return {
+            "input_ids": encoded_dict["input_ids"],
+            "attention_mask": encoded_dict["attention_mask"],
+            "labels": encoded_dict["input_ids"],
+            "label_str": label
+        }
+
+    def load_dataset(self, filename):
+        discard = 0
+        datasets = []
+        with open(filename, "r", encoding="utf-8") as f:
+            for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
+                item = json.loads(line)
+                s1 = item['sentence1']
+                s2 = item['sentence2']
+                label = item['label']
+                # 标注结果有冲突，则忽略
+                if label == "-":
+                    continue
+                for l in self.label_dict.values():
+                    prompt = f'{s1}?{l}，{s2}'
+                    if len(prompt) <= 0:
+                        continue
+                    datasets.append({"prompt": prompt, "label": self.label_dict[label]})
+
+        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+
+        return datasets

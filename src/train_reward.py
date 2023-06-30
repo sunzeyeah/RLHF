@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader, SequentialSampler
 
 from src.models.reward import RewardModel
 from src.utils import logger, RESOURCE_PATH
-from src.utils.file_utils import set_seed
+from src.utils.file_utils import set_seed, print_rank_0
 from src.data.data import SFTDataset, PairwiseDataset, DataCollatorReward
 
 
@@ -82,8 +82,7 @@ def get_parser():
 
 def main():
     args = get_parser()
-    if args.local_rank <= 0:
-        logger.info(f"Parameters: {args}")
+    print_rank_0(f"Parameters: {args}")
 
     set_seed(args.seed)
 
@@ -144,7 +143,7 @@ def main():
         for checkpoint in checkpoints:
             st.update(torch.load(checkpoint, map_location="cpu"))
         res = reward_model.load_state_dict(st, strict=False)
-    logger.info(f"Finished loading model and tokenizer")
+    print_rank_0(f"Finished loading model and tokenizer")
 
     # Set up the datasets
     if args.do_train:
@@ -204,8 +203,7 @@ def main():
         do_predict=args.do_pred,
         use_legacy_prediction_loop=args.do_pred,
     )
-    if args.local_rank <= 0:
-        logger.info(f"Training Arguments: {training_args}")
+    print_rank_0(f"Training Arguments: {training_args}")
 
     # Create the collator to gather batches of pairwise comparisons
     data_collator = DataCollatorReward()
@@ -235,7 +233,7 @@ def main():
 
     elif args.do_eval:
         eval_result = trainer.evaluate(eval_dataset=val_dataset)
-        logger.info(eval_result)
+        print_rank_0(eval_result)
 
     if args.do_pred:
         reward_model.eval()
@@ -256,7 +254,7 @@ def main():
             w.write("\t".join(("prompt", "answer", "score"))+"\n")
             for item, reward in zip(test_dataset.post_list, rewards):
                 w.write("\t".join((item["prompt"], item["label"], str(reward))) + "\n")
-        logger.info(f"Finished prediction and saving into {args.output_filename}")
+        print_rank_0(f"Finished prediction and saving into {args.output_filename}")
 
 
 if __name__ == "__main__":
