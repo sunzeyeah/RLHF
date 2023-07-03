@@ -20,6 +20,8 @@ from transformers import (
     AutoTokenizer,
     TextGenerationPipeline
 )
+from transformers.generation.logits_process import LogitsProcessor
+from transformers.generation.utils import LogitsProcessorList
 
 from src.data.data import (
     OCNLIDataset,
@@ -35,6 +37,7 @@ from src.data.data import (
     CEvalDataset,
     MMLUDataset,
 )
+from src.utils import RESOURCE_PATH
 from src.utils.file_utils import set_seed, print_rank_0
 
 
@@ -76,8 +79,10 @@ def get_parser():
     # eval
     parser.add_argument("--eval_filename", type=str, default=None)
     parser.add_argument("--train_filename", type=str, default=None)
+    parser.add_argument("--submission_filename", type=str, default=None)
     parser.add_argument("--eval_batch_size", type=int, default=4)
     parser.add_argument("--max_few_shot", type=int, default=15, help="Maximum number of examples in few-shot evaulation")
+    parser.add_argument("--cot", action="store_true", help="Whether to use Chain of Thought in evaluation")
     parser.add_argument("--do_sample", action="store_true")
     parser.add_argument("--num_return_sequences", type=int, default=1)
     parser.add_argument("--top_k", type=int, default=10)
@@ -88,6 +93,11 @@ def get_parser():
     args = parser.parse_args()
     
     return args
+
+
+def extract_cot_answer(line, response):
+    #TODO: to be implemented
+    pass
 
 
 def main():
@@ -151,9 +161,10 @@ def main():
     model.to(device)
 
     if args.train_filename is None:
-        output_filename = os.path.join(args.output_dir, f"{args.task}_zeroshot_eval_result.jsonl")
+        output_filename = os.path.join(args.output_dir, f"{args.task}_{args.eval_filename}_zero-shot_eval_result.jsonl")
     else:
-        output_filename = os.path.join(args.output_dir, f"{args.task}_fewshot_eval_result.jsonl")
+        assert args.max_few_shot > 0
+        output_filename = os.path.join(args.output_dir, f"{args.task}_{args.eval_filename}_{args.max_few_shot}-shot_eval_result.jsonl")
 
     if args.task in ["cmrc2018"]:
         # text_generator = TextGenerationPipeline(model, tokenizer, device=device)
@@ -212,6 +223,229 @@ def main():
                     f1s.append(f1_max)
 
         print_rank_0(f"em={np.mean(ems)}, f1={np.mean(f1s)}")
+    elif args.task in ["ceval"]:
+        results = dict()
+        with torch.no_grad():
+            for dev_data in tqdm(dev_dataset.post_list, desc="C-Eval Evaluation"):
+                subject_name_key = dev_data['subject_name_key']
+                if subject_name_key not in results:
+                    results[subject_name_key] = list()
+                if "chatglm" in args.model_name_or_path:
+                    if logits_processor is None:
+                        logits_processor = LogitsProcessorList()
+                    if "chatglm2" in args.model_name_or_path:
+                        class InvalidScoreLogitsProcessor(LogitsProcessor):
+                            def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+                                if torch.isnan(scores).any() or torch.isinf(scores).any():
+                                    scores.zero_()
+                                    scores[..., 5] = 5e4
+                                return scores
+                    else:
+                        class InvalidScoreLogitsProcessor(LogitsProcessor):
+                            def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+                                if torch.isnan(scores).any() or torch.isinf(scores).any():
+                                    scores.zero_()
+                                    scores[..., 20005] = 5e4
+                                return scores
+                    logits_processor.append(InvalidScoreLogitsProcessor())
+                    input_ids = dev_data['input_ids'].to(device)
+
+                    outputs = model.generate(input_ids=input_ids,
+                                             max_new_tokens=args.max_length_generation,
+                                             do_sample=args.do_sample,
+                                             num_return_sequences=args.num_return_sequences,
+                                             top_p=args.top_p,
+                                             temperature=args.temperature,
+                                             repetition_penalty=args.repetition_penalty,
+                                             logits_processor=logits_processor,
+                                             return_logits=not args.cot)
+                else:
+                    input_ids = dev_data['input_ids'].to(device)
+                    attention_mask = dev_data['attention_mask'].to(device)
+                    outputs = model.generate(input_ids=input_ids,
+                                             attention_mask=attention_mask,
+                                             max_new_tokens=args.max_length_generation,
+                                             do_sample=args.do_sample,
+                                             num_return_sequences=args.num_return_sequences,
+                                             top_p=args.top_p,
+                                             temperature=args.temperature,
+                                             repetition_penalty=args.repetition_penalty,
+                                             return_logits=not args.cot)
+
+                # output processing and answer extraction
+                if args.cot > 0:
+                    outputs = outputs.tolist()[0][len(input_ids["input_ids"][0]):]
+                    response = tokenizer.decode(outputs)
+                    # response, _ = model.chat(tokenizer, dev_data['question'], history=dev_data['history'],
+                    #                          do_sample=False, )
+                    response = response.strip()
+                    # ans, direct_extract = extract_cot_answer(dev_data, response)
+                else:
+                    assert outputs.shape[0] == 1
+                    logits = outputs.flatten()
+                    probs = (
+                        torch.nn.functional.softmax(
+                            torch.tensor(
+                                [
+                                    logits[tokenizer.encode(
+                                        "A", bos=False, eos=False)[0]],
+                                    logits[tokenizer.encode(
+                                        "B", bos=False, eos=False)[0]],
+                                    logits[tokenizer.encode(
+                                        "C", bos=False, eos=False)[0]],
+                                    logits[tokenizer.encode(
+                                        "D", bos=False, eos=False)[0]],
+                                ]
+                            ),
+                            dim=0,
+                        )
+                            .detach()
+                            .cpu()
+                            .numpy()
+                    )
+                    pred = {0: "A", 1: "B", 2: "C", 3: "D"}[np.argmax(probs)]
+                    # correct = 1 if pred == label else 0
+                    results[subject_name_key].append((dev_data['id'], dev_data['answer'], pred))
+
+        # metrics calculation
+        subject_mapping = json.load(open(os.path.join(RESOURCE_PATH, "eval", "ceval", "subject_mapping.jsonl")))
+        with open(output_filename, "w", encoding="utf-8") as w:
+            result_dict = dict()
+            acc_dict = dict()
+            for subject_name_key, vals in results.items():
+                if subject_name_key not in result_dict:
+                    result_dict[subject_name_key] = dict()
+                domain = subject_mapping[subject_name_key][2]
+                if domain not in acc_dict:
+                    acc_dict[domain] = {"ct": 0, "correct": 0}
+                for id_, label, pred in vals:
+                    result_dict[subject_name_key][str(id_)] = pred
+                    acc_dict[domain]['correct'] += 1 if pred == label else 0
+                    acc_dict[domain]['ct'] += 1
+                    w.write(json.dumps({"subject_name_key": subject_name_key, "id": id_,
+                                        "pred": pred, "label": label}, ensure_ascii=False)+"\n")
+
+        # if submission file is not none, then there is no label to calculate accuracy
+        if args.submission_filename is not None:
+            json.dump(result_dict, open(os.path.join(args.output_dir, args.submission_filename), "w", encoding="utf-8"),
+                      ensure_ascii=False)
+            print_rank_0(f"Finished saving C-Eval Evaluation Result")
+        else:
+            ct = 0
+            correct = 0
+            for domain, val in acc_dict.items():
+                ct += val['ct']
+                correct += val['correct']
+                print_rank_0(f"[C-Eval Evaluation Result] domain: {domain}, acc: {val['correct'] / val['ct']}")
+            print_rank_0(f"[C-Eval Evaluation Result] total acc: {correct / ct}")
+    elif args.task in ["mmlu"]:
+        results = dict()
+        with torch.no_grad():
+            for dev_data in tqdm(dev_dataset.post_list, desc="MMLU Evaluation"):
+                subject_name_key = dev_data['subject_name_key']
+                if subject_name_key not in results:
+                    results[subject_name_key] = list()
+                if "chatglm" in args.model_name_or_path:
+                    if logits_processor is None:
+                        logits_processor = LogitsProcessorList()
+                    if "chatglm2" in args.model_name_or_path:
+                        class InvalidScoreLogitsProcessor(LogitsProcessor):
+                            def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+                                if torch.isnan(scores).any() or torch.isinf(scores).any():
+                                    scores.zero_()
+                                    scores[..., 5] = 5e4
+                                return scores
+                    else:
+                        class InvalidScoreLogitsProcessor(LogitsProcessor):
+                            def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+                                if torch.isnan(scores).any() or torch.isinf(scores).any():
+                                    scores.zero_()
+                                    scores[..., 20005] = 5e4
+                                return scores
+                    logits_processor.append(InvalidScoreLogitsProcessor())
+                    input_ids = dev_data['input_ids'].to(device)
+
+                    outputs = model.generate(input_ids=input_ids,
+                                             max_new_tokens=args.max_length_generation,
+                                             do_sample=args.do_sample,
+                                             num_return_sequences=args.num_return_sequences,
+                                             top_p=args.top_p,
+                                             temperature=args.temperature,
+                                             repetition_penalty=args.repetition_penalty,
+                                             logits_processor=logits_processor,
+                                             return_logits=not args.cot)
+                else:
+                    input_ids = dev_data['input_ids'].to(device)
+                    attention_mask = dev_data['attention_mask'].to(device)
+                    outputs = model.generate(input_ids=input_ids,
+                                             attention_mask=attention_mask,
+                                             max_new_tokens=args.max_length_generation,
+                                             do_sample=args.do_sample,
+                                             num_return_sequences=args.num_return_sequences,
+                                             top_p=args.top_p,
+                                             temperature=args.temperature,
+                                             repetition_penalty=args.repetition_penalty,
+                                             return_logits=not args.cot)
+
+                # output processing and answer extraction
+                if args.cot > 0:
+                    outputs = outputs.tolist()[0][len(input_ids["input_ids"][0]):]
+                    response = tokenizer.decode(outputs)
+                    # response, _ = model.chat(tokenizer, dev_data['question'], history=dev_data['history'],
+                    #                          do_sample=False, )
+                    response = response.strip()
+                    # ans, direct_extract = extract_cot_answer(dev_data, response)
+                else:
+                    assert outputs.shape[0] == 1
+                    logits = outputs.flatten()
+                    probs = (
+                        torch.nn.functional.softmax(
+                            torch.tensor(
+                                [
+                                    logits[tokenizer.encode(
+                                        "A", bos=False, eos=False)[0]],
+                                    logits[tokenizer.encode(
+                                        "B", bos=False, eos=False)[0]],
+                                    logits[tokenizer.encode(
+                                        "C", bos=False, eos=False)[0]],
+                                    logits[tokenizer.encode(
+                                        "D", bos=False, eos=False)[0]],
+                                ]
+                            ),
+                            dim=0,
+                        )
+                            .detach()
+                            .cpu()
+                            .numpy()
+                    )
+                    pred = {0: "A", 1: "B", 2: "C", 3: "D"}[np.argmax(probs)]
+                    # correct = 1 if pred == label else 0
+                    results[subject_name_key].append((dev_data['answer'], pred))
+
+        # metrics calculation
+        subject_mapping = json.load(open(os.path.join(RESOURCE_PATH, "eval", "mmlu", "subject_mapping.jsonl")))
+        with open(output_filename, "w", encoding="utf-8") as w:
+            # result_dict = dict()
+            acc_dict = dict()
+            for subject_name_key, vals in results.items():
+                # if subject_name_key not in result_dict:
+                #     result_dict[subject_name_key] = dict()
+                subject_name = subject_mapping[subject_name_key][0]
+                if subject_name not in acc_dict:
+                    acc_dict[subject_name] = {"ct": 0, "correct": 0}
+                for label, pred in vals:
+                    # result_dict[subject_name_key] = pred
+                    acc_dict[subject_name]['correct'] += 1 if pred == label else 0
+                    acc_dict[subject_name]['ct'] += 1
+                    w.write(json.dumps({"subject_name_key": subject_name_key,
+                                        "pred": pred, "label": label}, ensure_ascii=False)+"\n")
+        ct = 0
+        correct = 0
+        for domain, val in acc_dict.items():
+            ct += val['ct']
+            correct += val['correct']
+            print_rank_0(f"[MMLU Evaluation Result] subject_name: {subject_name}, acc: {val['correct'] / val['ct']}")
+        print_rank_0(f"[MMLU Evaluation Result] total acc: {correct / ct}")
     else:
         sampler = SequentialSampler(dev_dataset)
         dev_dataloader = DataLoader(dev_dataset, sampler=sampler, batch_size=args.eval_batch_size)

@@ -4,14 +4,16 @@ import json
 import re
 import random
 import torch
+import pandas as pd
 
 from tqdm import tqdm
 from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 import torch.nn.functional as F
 
-from src.utils import logger
+from src.utils import logger, RESOURCE_PATH
 from src.utils.nlp_utils import clean_text
+from src.utils.file_utils import print_rank_0
 from src.models.llama import _prepare_decoder_attention_mask
 
 
@@ -68,7 +70,7 @@ class PretrainDataset(Dataset):
 
         self.post_list = self.load_dataset(filename)
         for k in range(5):
-            logger.info(f"PretrainDataset sample-{k}\n: {self.post_list[k]}")
+            print_rank_0(f"PretrainDataset sample-{k}\n: {self.post_list[k]}")
 
     def __len__(self):
         return len(self.post_list)
@@ -202,7 +204,7 @@ class PretrainDataset(Dataset):
                     data = []
                     eos_ids = [0]
                     length = 0
-        logger.info(f"Finished loading {os.path.basename(filename)}, # samples: {len(datasets)}, # discarded: {discard}")
+        print_rank_0(f"Finished loading {os.path.basename(filename)}, # samples: {len(datasets)}, # discarded: {discard}")
 
         return datasets
 
@@ -215,7 +217,7 @@ class SFTDataset(Dataset):
 
         self.post_list = self.load_dataset(filename)
         for k in range(5):
-            logger.info(f"SFTDataset sample-{k}\n: {self.post_list[k]}")
+            print_rank_0(f"SFTDataset sample-{k}\n: {self.post_list[k]}")
 
     def __len__(self):
         return len(self.post_list)
@@ -292,7 +294,7 @@ class SFTDataset(Dataset):
                     discard += 1
                     continue
                 datasets.append({"prompt": prompt, "label": label, "prefix": prefix})
-        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+        print_rank_0(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets
 
@@ -304,7 +306,7 @@ class PairwiseDataset(Dataset):
         self.tokenizer = tokenizer
 
         for k in range(5):
-            logger.info(f"PairwiseDataset sample-{k}\n: {self.pairs[k]}")
+            print_rank_0(f"PairwiseDataset sample-{k}\n: {self.pairs[k]}")
 
     def __len__(self):
         return len(self.pairs)
@@ -418,7 +420,7 @@ class PairwiseDataset(Dataset):
                     else:
                         discard += 1
 
-        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+        print_rank_0(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return pairs
 
@@ -431,7 +433,7 @@ class RLHFDataset(Dataset):
 
         self.post_list = self.load_dataset(filename)
         for k in range(5):
-            logger.info(f"RLHFDataset sample-{k}\n: {self.post_list[k]}")
+            print_rank_0(f"RLHFDataset sample-{k}\n: {self.post_list[k]}")
 
     def __len__(self):
         return len(self.post_list)
@@ -499,7 +501,7 @@ class RLHFDataset(Dataset):
                     discard += 1
                     continue
                 datasets.append({"prompt": prompt, "label": label, "prefix": prefix})
-        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+        print_rank_0(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets
 
@@ -562,7 +564,7 @@ class OCNLIDataset(Dataset):
         self.post_list = dataset
 
         for k in range(5):
-            logger.info(f"OCNLIDataset sample-{k}\n: {dataset[k]}")
+            print_rank_0(f"OCNLIDataset sample-{k}\n: {dataset[k]}")
 
     def __len__(self):
         return len(self.post_list)
@@ -616,7 +618,7 @@ class OCNLIDataset(Dataset):
                         continue
                     datasets.append({"prompt": prompt, "label": self.label_dict[label]})
 
-        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+        print_rank_0(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets
 
@@ -633,7 +635,7 @@ class CMNLIDataset(Dataset):
         self.post_list = dataset
 
         for k in range(5):
-            logger.info(f"CMNLIDataset sample-{k}\n: {dataset[k]}")
+            print_rank_0(f"CMNLIDataset sample-{k}\n: {dataset[k]}")
 
     def __len__(self):
         return len(self.post_list)
@@ -689,7 +691,7 @@ class CMNLIDataset(Dataset):
                         continue
                     datasets.append({"prompt": prompt, "label": self.label_dict[label]})
 
-        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+        print_rank_0(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets
 
@@ -706,7 +708,7 @@ class CHIDDataset(Dataset):
         self.post_list = dataset
 
         for k in range(5):
-            logger.info(f"CHIDDataset sample-{k}\n: {dataset[k]}")
+            print_rank_0(f"CHIDDataset sample-{k}\n: {dataset[k]}")
 
     def __len__(self):
         return len(self.post_list)
@@ -763,7 +765,7 @@ class CHIDDataset(Dataset):
                                 continue
                             datasets.append({"prompt": prompt, "label": label, "candidates": candidates})
 
-        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+        print_rank_0(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets
 
@@ -771,7 +773,7 @@ class CHIDDataset(Dataset):
         idiom_dict = json.load(open(os.path.join(self.args.data_dir, "dev_answer.json"), "r", encoding="utf-8"))
         idiom_dict.update(json.load(open(os.path.join(self.args.data_dir, "train_answer.json"), "r", encoding="utf-8")))
 
-        logger.info(f"Finished loading idiom dict")
+        print_rank_0(f"Finished loading idiom dict")
 
         return idiom_dict
 
@@ -787,7 +789,7 @@ class CMRCDataset(Dataset):
         self.post_list = dataset
 
         for k in range(5):
-            logger.info(f"CMRCDataset sample-{k}\n: {dataset[k]}")
+            print_rank_0(f"CMRCDataset sample-{k}\n: {dataset[k]}")
 
     def __len__(self):
         return len(self.post_list)
@@ -843,7 +845,7 @@ class CMRCDataset(Dataset):
                     #     prompt = prompt_template.format(context=context[:-idx], question=question)
                     datasets.append({"prompt": prompt, "label": answers})
 
-        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+        print_rank_0(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets
 
@@ -860,7 +862,7 @@ class CLUEWSCDataset(Dataset):
         self.post_list = dataset
 
         for k in range(5):
-            logger.info(f"CLUEWSCDataset sample-{k}\n: {dataset[k]}")
+            print_rank_0(f"CLUEWSCDataset sample-{k}\n: {dataset[k]}")
 
     def __len__(self):
         return len(self.post_list)
@@ -914,7 +916,7 @@ class CLUEWSCDataset(Dataset):
                     continue
                 datasets.append({"prompt": prompt, "label": label})
 
-        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+        print_rank_0(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets
 
@@ -930,7 +932,7 @@ class C3Dataset(Dataset):
         self.post_list = dataset
 
         for k in range(5):
-            logger.info(f"C3Dataset sample-{k}\n: {dataset[k]}")
+            print_rank_0(f"C3Dataset sample-{k}\n: {dataset[k]}")
 
     def __len__(self):
         return len(self.post_list)
@@ -989,7 +991,7 @@ class C3Dataset(Dataset):
                         continue
                     datasets.append({"prompt": prompt, "label": answer, "candidates": choices_padded})
 
-        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+        print_rank_0(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets
 
@@ -1006,7 +1008,7 @@ class AFQMCDataset(Dataset):
         self.post_list = dataset
 
         for k in range(5):
-            logger.info(f"AFQMCDataset sample-{k}\n: {dataset[k]}")
+            print_rank_0(f"AFQMCDataset sample-{k}\n: {dataset[k]}")
 
     def __len__(self):
         return len(self.post_list)
@@ -1059,7 +1061,7 @@ class AFQMCDataset(Dataset):
                         continue
                     datasets.append({"prompt": prompt, "label": label})
 
-        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+        print_rank_0(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets
 
@@ -1076,7 +1078,7 @@ class CSLDataset(Dataset):
         self.post_list = dataset
 
         for k in range(5):
-            logger.info(f"CSLDataset sample-{k}\n: {dataset[k]}")
+            print_rank_0(f"CSLDataset sample-{k}\n: {dataset[k]}")
 
     def __len__(self):
         return len(self.post_list)
@@ -1129,7 +1131,7 @@ class CSLDataset(Dataset):
                         continue
                     datasets.append({"prompt": prompt, "label": label})
 
-        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+        print_rank_0(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets
 
@@ -1146,7 +1148,7 @@ class IFLYTEKDataset(Dataset):
         self.post_list = dataset
 
         for k in range(5):
-            logger.info(f"IFLYTEKDataset sample-{k}\n: {dataset[k]}")
+            print_rank_0(f"IFLYTEKDataset sample-{k}\n: {dataset[k]}")
 
     def __len__(self):
         return len(self.post_list)
@@ -1204,7 +1206,7 @@ class IFLYTEKDataset(Dataset):
                         continue
                     datasets.append({"prompt": prompt, "label": label, "candidates": candidates})
 
-        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+        print_rank_0(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets
 
@@ -1235,7 +1237,7 @@ class TNEWSDataset(Dataset):
         self.post_list = dataset
 
         for k in range(5):
-            logger.info(f"TNEWSDataset sample-{k}\n: {dataset[k]}")
+            print_rank_0(f"TNEWSDataset sample-{k}\n: {dataset[k]}")
 
     def __len__(self):
         return len(self.post_list)
@@ -1293,7 +1295,7 @@ class TNEWSDataset(Dataset):
                         continue
                     datasets.append({"prompt": prompt, "label": label, "candidates": candidates})
 
-        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+        print_rank_0(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
 
         return datasets
 
@@ -1302,69 +1304,131 @@ class CEvalDataset(Dataset):
     def __init__(self, args, eval_filename, tokenizer, train_filename=None):
         self.tokenizer = tokenizer
         self.args = args
-        self.label_dict = {'entailment': 'Yes', 'neutral': 'Maybe', 'contradiction': 'No'}
+        self.model_name_or_path = args.model_name_or_path if hasattr(args, "model_name_or_path") else args.actor_model_path
+        self.subject_mapping = json.load(open(os.path.join(RESOURCE_PATH, "eval", "ceval", "subject_mapping.jsonl")))
+        self.choices = ["A", "B", "C", "D"]
 
-        dataset = self.load_dataset(eval_filename)
+        self.post_list = self.load_dataset(eval_filename)
         if train_filename is not None:
-            self.labelled_list = self.load_dataset(eval_filename)
-        self.post_list = dataset
+            self.dev_list = self.load_dataset(train_filename, "dict")
 
         for k in range(5):
-            logger.info(f"OCNLIDataset sample-{k}\n: {dataset[k]}")
+            print_rank_0(f"CEvalDataset sample-{k}\n: {self.post_list[k]}")
 
     def __len__(self):
         return len(self.post_list)
 
+    def format_example(self, line, include_answer=True, cot=False):
+        example = line['question']
+        for choice in self.choices:
+            example += f'\n{choice}. {line[f"{choice}"]}'
+        example += '\n答案：'
+        if "chatglm" in self.model_name_or_path:
+            if include_answer:
+                if cot:
+                    ans = "让我们一步一步思考，\n" + line["explanation"] + f"\n所以答案是{line['answer']}。"
+                else:
+                    ans = line["answer"]
+                m = (example, ans)
+                return m
+            return example
+        else:
+            # example = line['question']
+            # for choice in self.choices:
+            #     example += f'\n{choice}. {line[f"{choice}"]}'
+            if include_answer:
+                if cot:
+                    example += "让我们一步一步思考，\n" + \
+                               line["explanation"] + f"\n所以答案是{line['answer']}。\n\n"
+                else:
+                    example += line["answer"] + '\n\n'
+            else:
+                if cot:
+                    example += "让我们一步一步思考，\n1."
+            return example
+
     def __getitem__(self, idx):
         data = self.post_list[idx]
-        prompt = data['prompt']
-        label = data['label']
+        subject_name = data['subject_name']
+        question = self.format_example(data, include_answer=False, cot=self.args.cot)
+        prefix = f"以下是中国关于{subject_name}考试的单项选择题，请选出其中的正确答案。\n\n"
 
-        # Few-Shot example construction
-        if hasattr(self, "labelled_list"):
-            examples = random.sample(self.labelled_list, min(len(self.labelled_list), self.args.max_few_shot))
-            prompts = []
-            prompt_tokens = self.tokenizer.tokenize(prompt)
-            for example in examples:
-                example_prompt = example['prompt']
-                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
-                if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
-                    break
-                else:
-                    prompts.append(example_prompt)
-                    prompt_tokens.extend(exmample_tokens)
-            prompts.append(prompt)
-            prompt = "\n".join(prompts)
+        if "chatglm" in self.model_name_or_path:
+            history = []
+            # Few-Shot example construction
+            if hasattr(self, "dev_list"):
 
-        encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
-                                      padding="max_length", truncation="longest_first", return_tensors="pt")
+                k = self.args.max_few_shot
+                dev_list = self.dev_list[subject_name]
+                for i in range(min(k, len(dev_list))):
+                    prompt, answer = self.format_example(dev_list[i], include_answer=True, cot=self.args.cot)
+                    if i == 0:
+                        prompt = prefix + prompt
+                    if "chatglm2" in self.model_name_or_path:
+                        prompt = f"[Round {i+1}]\n\n问：{prompt}\n\n答：{answer}"
+                    else:
+                        prompt = f"[Round {i}]\n问：{prompt}\n答：{answer}"
+                    history.append(prompt)
+            # Concat history with question
+            if "chatglm2" in self.model_name_or_path:
+                question = f"[Round {len(history)+1}]\n\n问：{question}\n\n答："
+                full_prompt = "\n\n".join(history+[question])
+            else:
+                question = f"[Round {len(history)}]\n问：{question}\n答："
+                full_prompt = "\n".join(history+[question])
+
+            # return {
+            #     # "question": question,
+            #     # "history": history,
+            #     "input_ids": encoded_dict["input_ids"],
+            #     "subject_name": subject_name,
+            #     "id": data['id'],
+            #     "answer": data.get('answer', None)
+            # }
+        else:
+            # Few-Shot example construction
+            if hasattr(self, "dev_list"):
+                prompt = prefix
+                k = self.args.max_few_shot
+                dev_list = self.dev_list[subject_name]
+                for i in range(min(k, len(dev_list))):
+                    prompt += self.format_example(dev_list[i], include_answer=True, cot=self.args.cot)
+                full_prompt = prompt + question
+            # Zero-Shot example construction
+            else:
+                full_prompt = question
+
+        encoded_dict = self.tokenizer(full_prompt, return_tensors="pt")
 
         return {
             "input_ids": encoded_dict["input_ids"],
-            "attention_mask": encoded_dict["attention_mask"],
-            "labels": encoded_dict["input_ids"],
-            "label_str": label
+            "attention_mask": encoded_dict.get("attention_mask", None),
+            # "labels": encoded_dict["input_ids"],
+            "id": data['id'],
+            "subject_name_key": data['subject_name_key'],
+            "answer": data.get('answer', None)
         }
 
-    def load_dataset(self, filename):
-        discard = 0
-        datasets = []
-        with open(filename, "r", encoding="utf-8") as f:
-            for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
-                item = json.loads(line)
-                s1 = item['sentence1']
-                s2 = item['sentence2']
-                label = item['label']
-                # 标注结果有冲突，则忽略
-                if label == "-":
-                    continue
-                for l in self.label_dict.values():
-                    prompt = f'{s1}?{l}，{s2}'
-                    if len(prompt) <= 0:
-                        continue
-                    datasets.append({"prompt": prompt, "label": self.label_dict[label]})
+    def load_dataset(self, filename, return_format="list"):
+        datasets = list() if return_format == "list" else dict()
+        dt = os.path.basename(filename)
 
-        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+        for subject_name_key, subject in self.subject_mapping.items():
+            subject_name = subject[1]
+            if isinstance(datasets, dict):
+                datasets[subject_name] = list()
+            dev_file_path = os.path.join(filename, f'{subject_name_key}_{dt}.csv')
+            dev_df = pd.read_csv(dev_file_path)
+            for i, val in dev_df.iterrows():
+                d = val.to_dict()
+                if isinstance(datasets, dict):
+                    datasets[subject_name].append(d)
+                else:
+                    d['subject_name'] = subject_name
+                    d['subject_name_key'] = subject_name_key
+                    datasets.append(d)
+
+        print_rank_0(f"Finished loading {dt} dataset")
 
         return datasets
 
@@ -1373,68 +1437,120 @@ class MMLUDataset(Dataset):
     def __init__(self, args, eval_filename, tokenizer, train_filename=None):
         self.tokenizer = tokenizer
         self.args = args
-        self.label_dict = {'entailment': 'Yes', 'neutral': 'Maybe', 'contradiction': 'No'}
+        self.model_name_or_path = args.model_name_or_path if hasattr(args, "model_name_or_path") else args.actor_model_path
+        self.subject_mapping = json.load(open(os.path.join(RESOURCE_PATH, "eval", "mmlu", "subject_mapping.jsonl")))
+        self.choices = ["A", "B", "C", "D"]
 
-        dataset = self.load_dataset(eval_filename)
+        self.post_list = self.load_dataset(eval_filename)
         if train_filename is not None:
-            self.labelled_list = self.load_dataset(eval_filename)
-        self.post_list = dataset
+            self.dev_list = self.load_dataset(train_filename, "dict")
 
         for k in range(5):
-            logger.info(f"OCNLIDataset sample-{k}\n: {dataset[k]}")
+            print_rank_0(f"MMLUDataset sample-{k}\n: {self.post_list[k]}")
 
     def __len__(self):
         return len(self.post_list)
 
+    def format_example(self, line, include_answer=True, cot=False):
+        example = line['question']
+        for choice in self.choices:
+            example += f'\n{choice}. {line[f"{choice}"]}'
+        example += '\nAnswer：'
+        if "chatglm" in self.model_name_or_path:
+            if include_answer:
+                ans = line["answer"]
+                m = (example, ans)
+                return m
+            return example
+        else:
+            # example = line['question']
+            # for choice in self.choices:
+            #     example += f'\n{choice}. {line[f"{choice}"]}'
+            if include_answer:
+                example += line["answer"] + '\n\n'
+            return example
+
     def __getitem__(self, idx):
         data = self.post_list[idx]
-        prompt = data['prompt']
-        label = data['label']
+        subject_name = data['subject_name']
+        question = self.format_example(data, include_answer=False, cot=self.args.cot)
+        prefix = f"The following are multiple choice questions (with answers) about {subject_name}.\n\n"
 
-        # Few-Shot example construction
-        if hasattr(self, "labelled_list"):
-            examples = random.sample(self.labelled_list, min(len(self.labelled_list), self.args.max_few_shot))
-            prompts = []
-            prompt_tokens = self.tokenizer.tokenize(prompt)
-            for example in examples:
-                example_prompt = example['prompt']
-                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
-                if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
-                    break
-                else:
-                    prompts.append(example_prompt)
-                    prompt_tokens.extend(exmample_tokens)
-            prompts.append(prompt)
-            prompt = "\n".join(prompts)
+        if "chatglm" in self.model_name_or_path:
+            history = []
+            # Few-Shot example construction
+            if hasattr(self, "dev_list"):
 
-        encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
-                                      padding="max_length", truncation="longest_first", return_tensors="pt")
+                k = self.args.max_few_shot
+                dev_list = self.dev_list[subject_name]
+                for i in range(min(k, len(dev_list))):
+                    prompt, answer = self.format_example(dev_list[i], include_answer=True, cot=self.args.cot)
+                    if i == 0:
+                        prompt = prefix + prompt
+                    if "chatglm2" in self.model_name_or_path:
+                        prompt = f"[Round {i+1}]\n\n问：{prompt}\n\n答：{answer}"
+                    else:
+                        prompt = f"[Round {i}]\n问：{prompt}\n答：{answer}"
+                    history.append(prompt)
+            # Concat history with question
+            if "chatglm2" in self.model_name_or_path:
+                question = f"[Round {len(history)+1}]\n\n问：{question}\n\n答："
+                full_prompt = "\n\n".join(history+[question])
+            else:
+                question = f"[Round {len(history)}]\n问：{question}\n答："
+                full_prompt = "\n".join(history+[question])
+
+            # return {
+            #     # "question": question,
+            #     # "history": history,
+            #     "input_ids": encoded_dict["input_ids"],
+            #     "subject_name": subject_name,
+            #     "id": data['id'],
+            #     "answer": data.get('answer', None)
+            # }
+        else:
+            # Few-Shot example construction
+            if hasattr(self, "dev_list"):
+                prompt = prefix
+                k = self.args.max_few_shot
+                dev_list = self.dev_list[subject_name]
+                for i in range(min(k, len(dev_list))):
+                    prompt += self.format_example(dev_list[i], include_answer=True, cot=self.args.cot)
+                full_prompt = prompt + question
+            # Zero-Shot example construction
+            else:
+                full_prompt = question
+
+        encoded_dict = self.tokenizer(full_prompt, return_tensors="pt")
 
         return {
             "input_ids": encoded_dict["input_ids"],
-            "attention_mask": encoded_dict["attention_mask"],
-            "labels": encoded_dict["input_ids"],
-            "label_str": label
+            "attention_mask": encoded_dict.get("attention_mask", None),
+            # "labels": encoded_dict["input_ids"],
+            "subject_name_key": data['subject_name_key'],
+            "answer": data.get('answer', None)
         }
 
-    def load_dataset(self, filename):
-        discard = 0
-        datasets = []
-        with open(filename, "r", encoding="utf-8") as f:
-            for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
-                item = json.loads(line)
-                s1 = item['sentence1']
-                s2 = item['sentence2']
-                label = item['label']
-                # 标注结果有冲突，则忽略
-                if label == "-":
-                    continue
-                for l in self.label_dict.values():
-                    prompt = f'{s1}?{l}，{s2}'
-                    if len(prompt) <= 0:
-                        continue
-                    datasets.append({"prompt": prompt, "label": self.label_dict[label]})
+    def load_dataset(self, filename, return_format="list"):
+        datasets = list() if return_format == "list" else dict()
+        dt = os.path.basename(filename)
 
-        logger.info(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+        for subject_name_key, subject in self.subject_mapping.items():
+            subject_name = subject[0]
+            if isinstance(datasets, dict):
+                datasets[subject_name] = list()
+            dev_file_path = os.path.join(filename, f'{subject_name_key}_{dt}.csv')
+            dev_df = pd.read_csv(dev_file_path)
+            for i, val in dev_df.iterrows():
+                d = val.to_dict()
+                if isinstance(datasets, dict):
+                    datasets[subject_name].append(d)
+                else:
+                    d['subject_name'] = subject_name
+                    d['subject_name_key'] = subject_name_key
+                    datasets.append(d)
+
+        print_rank_0(f"Finished loading {dt} dataset")
 
         return datasets
+
