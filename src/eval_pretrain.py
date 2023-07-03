@@ -75,6 +75,7 @@ def get_parser():
     parser.add_argument("--local_rank", type=int, default=-1)
     parser.add_argument("--max_length", type=int, default=1024)
     parser.add_argument("--max_length_generation", type=int, default=100, help="Maximum number of newly generated tokens")
+    parser.add_argument("--checkpoint", type=str)
 
     # eval
     parser.add_argument("--eval_filename", type=str, default=None)
@@ -118,6 +119,12 @@ def main():
             # model.config.pad_token_id = tokenizer.pad_token_id
             # model.config.bos_token_id = tokenizer.bos_token_id
             # model.config.eos_token_id = tokenizer.eos_token_id
+
+    if args.checkpoint is not None:
+        st = torch.load(args.checkpoint, map_location="cpu")
+        model.load_state_dict(st)
+        del st
+
     print_rank_0(f"Finished loading model and tokenizer")
 
     # Set up the datasets

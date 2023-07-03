@@ -15,6 +15,7 @@ MODEL_PATH=$ROOT/Data/models/$MODEL
 OUTPUT_DIR=$ROOT/Data/chatgpt/output/pretrain/$MODEL
 EVAL_FILENAME="val"
 TRAIN_FILENAME="dev"
+CHECKPOINT=$ROOT/Data/chatgpt/output/pretrain/$MODEL
 
 cd $ROOT/Code/RLHF || exit
 #    cd $ROOT/Code/chatgpt || exit
@@ -28,9 +29,10 @@ python $MAIN \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_PATH \
   --task $TASK \
-  --max_length 2048 \
   --train_filename $TRAIN_FILENAME \
   --eval_filename $EVAL_FILENAME \
+  --checkpoint $CHECKPOINT \
+  --max_length 2048 \
   --max_few_shot 5 \
   --max_length_generation 100 \
   > out/eval_pretrain_${MODEL}_${TASK}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1
