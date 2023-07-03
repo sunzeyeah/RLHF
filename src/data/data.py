@@ -1305,7 +1305,7 @@ class CEvalDataset(Dataset):
         self.tokenizer = tokenizer
         self.args = args
         self.model_name_or_path = args.model_name_or_path if hasattr(args, "model_name_or_path") else args.actor_model_path
-        self.subject_mapping = json.load(open(os.path.join(RESOURCE_PATH, "eval", "ceval", "subject_mapping.jsonl")))
+        self.subject_mapping = json.load(open(os.path.join(RESOURCE_PATH, "eval", "ceval", "subject_mapping.json")))
         self.choices = ["A", "B", "C", "D"]
 
         self.post_list = self.load_dataset(eval_filename)
@@ -1438,7 +1438,7 @@ class MMLUDataset(Dataset):
         self.tokenizer = tokenizer
         self.args = args
         self.model_name_or_path = args.model_name_or_path if hasattr(args, "model_name_or_path") else args.actor_model_path
-        self.subject_mapping = json.load(open(os.path.join(RESOURCE_PATH, "eval", "mmlu", "subject_mapping.jsonl")))
+        self.subject_mapping = json.load(open(os.path.join(RESOURCE_PATH, "eval", "mmlu", "subject_mapping.json")))
         self.choices = ["A", "B", "C", "D"]
 
         self.post_list = self.load_dataset(eval_filename)

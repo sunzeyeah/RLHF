@@ -165,7 +165,7 @@ def main():
 
     device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
     model.eval()
-    model.to(device)
+    model.half().to(device)
 
     if args.train_filename is None:
         output_filename = os.path.join(args.output_dir, f"{args.task}_{args.eval_filename}_zero-shot_eval_result.jsonl")
@@ -233,7 +233,7 @@ def main():
     elif args.task in ["ceval"]:
         results = dict()
         with torch.no_grad():
-            for dev_data in tqdm(dev_dataset.post_list, desc="C-Eval Evaluation"):
+            for dev_data in tqdm(dev_dataset, desc="C-Eval Evaluation"):
                 subject_name_key = dev_data['subject_name_key']
                 if subject_name_key not in results:
                     results[subject_name_key] = list()
@@ -265,7 +265,8 @@ def main():
                                              temperature=args.temperature,
                                              repetition_penalty=args.repetition_penalty,
                                              logits_processor=logits_processor,
-                                             return_logits=not args.cot)
+                                             output_scores=not args.cot,
+                                             return_dict_in_generate=not args.cot)
                 else:
                     input_ids = dev_data['input_ids'].to(device)
                     attention_mask = dev_data['attention_mask'].to(device)
@@ -277,45 +278,33 @@ def main():
                                              top_p=args.top_p,
                                              temperature=args.temperature,
                                              repetition_penalty=args.repetition_penalty,
-                                             return_logits=not args.cot)
+                                             output_scores=not args.cot,
+                                             return_dict_in_generate=not args.cot)
 
                 # output processing and answer extraction
                 if args.cot > 0:
-                    outputs = outputs.tolist()[0][len(input_ids["input_ids"][0]):]
+                    outputs = outputs['sequences'].tolist()[0][len(input_ids["input_ids"][0]):]
                     response = tokenizer.decode(outputs)
                     # response, _ = model.chat(tokenizer, dev_data['question'], history=dev_data['history'],
                     #                          do_sample=False, )
                     response = response.strip()
                     # ans, direct_extract = extract_cot_answer(dev_data, response)
                 else:
-                    assert outputs.shape[0] == 1
-                    logits = outputs.flatten()
-                    probs = (
-                        torch.nn.functional.softmax(
-                            torch.tensor(
+                    logits = outputs['scores'][0].flatten()
+                    pred = torch.tensor(
                                 [
-                                    logits[tokenizer.encode(
-                                        "A", bos=False, eos=False)[0]],
-                                    logits[tokenizer.encode(
-                                        "B", bos=False, eos=False)[0]],
-                                    logits[tokenizer.encode(
-                                        "C", bos=False, eos=False)[0]],
-                                    logits[tokenizer.encode(
-                                        "D", bos=False, eos=False)[0]],
+                                    logits[tokenizer.encode("A", add_special_tokens=False)[0]],
+                                    logits[tokenizer.encode("B", add_special_tokens=False)[0]],
+                                    logits[tokenizer.encode("C", add_special_tokens=False)[0]],
+                                    logits[tokenizer.encode("D", add_special_tokens=False)[0]],
                                 ]
-                            ),
-                            dim=0,
-                        )
-                            .detach()
-                            .cpu()
-                            .numpy()
-                    )
-                    pred = {0: "A", 1: "B", 2: "C", 3: "D"}[np.argmax(probs)]
+                            ).argmax().detach().cpu().tolist()
+                    # pred = {0: "A", 1: "B", 2: "C", 3: "D"}[np.argmax(probs)]
                     # correct = 1 if pred == label else 0
                     results[subject_name_key].append((dev_data['id'], dev_data['answer'], pred))
 
         # metrics calculation
-        subject_mapping = json.load(open(os.path.join(RESOURCE_PATH, "eval", "ceval", "subject_mapping.jsonl")))
+        subject_mapping = json.load(open(os.path.join(RESOURCE_PATH, "eval", "ceval", "subject_mapping.json")))
         with open(output_filename, "w", encoding="utf-8") as w:
             result_dict = dict()
             acc_dict = dict()
@@ -348,7 +337,7 @@ def main():
     elif args.task in ["mmlu"]:
         results = dict()
         with torch.no_grad():
-            for dev_data in tqdm(dev_dataset.post_list, desc="MMLU Evaluation"):
+            for dev_data in tqdm(dev_dataset, desc="MMLU Evaluation"):
                 subject_name_key = dev_data['subject_name_key']
                 if subject_name_key not in results:
                     results[subject_name_key] = list()
@@ -380,7 +369,8 @@ def main():
                                              temperature=args.temperature,
                                              repetition_penalty=args.repetition_penalty,
                                              logits_processor=logits_processor,
-                                             return_logits=not args.cot)
+                                             output_scores=True,
+                                             return_dict_in_generate=True)
                 else:
                     input_ids = dev_data['input_ids'].to(device)
                     attention_mask = dev_data['attention_mask'].to(device)
@@ -392,45 +382,25 @@ def main():
                                              top_p=args.top_p,
                                              temperature=args.temperature,
                                              repetition_penalty=args.repetition_penalty,
-                                             return_logits=not args.cot)
+                                             output_scores=True,
+                                             return_dict_in_generate=True)
 
                 # output processing and answer extraction
-                if args.cot > 0:
-                    outputs = outputs.tolist()[0][len(input_ids["input_ids"][0]):]
-                    response = tokenizer.decode(outputs)
-                    # response, _ = model.chat(tokenizer, dev_data['question'], history=dev_data['history'],
-                    #                          do_sample=False, )
-                    response = response.strip()
-                    # ans, direct_extract = extract_cot_answer(dev_data, response)
-                else:
-                    assert outputs.shape[0] == 1
-                    logits = outputs.flatten()
-                    probs = (
-                        torch.nn.functional.softmax(
-                            torch.tensor(
-                                [
-                                    logits[tokenizer.encode(
-                                        "A", bos=False, eos=False)[0]],
-                                    logits[tokenizer.encode(
-                                        "B", bos=False, eos=False)[0]],
-                                    logits[tokenizer.encode(
-                                        "C", bos=False, eos=False)[0]],
-                                    logits[tokenizer.encode(
-                                        "D", bos=False, eos=False)[0]],
-                                ]
-                            ),
-                            dim=0,
-                        )
-                            .detach()
-                            .cpu()
-                            .numpy()
-                    )
-                    pred = {0: "A", 1: "B", 2: "C", 3: "D"}[np.argmax(probs)]
-                    # correct = 1 if pred == label else 0
-                    results[subject_name_key].append((dev_data['answer'], pred))
+                logits = outputs['scores'][0].flatten()
+                pred = torch.tensor(
+                    [
+                        logits[tokenizer.encode("A", add_special_tokens=False)[0]],
+                        logits[tokenizer.encode("B", add_special_tokens=False)[0]],
+                        logits[tokenizer.encode("C", add_special_tokens=False)[0]],
+                        logits[tokenizer.encode("D", add_special_tokens=False)[0]],
+                    ]
+                ).argmax().detach().cpu().tolist()
+                # pred = {0: "A", 1: "B", 2: "C", 3: "D"}[np.argmax(probs)]
+                # correct = 1 if pred == label else 0
+                results[subject_name_key].append((dev_data['answer'], pred))
 
         # metrics calculation
-        subject_mapping = json.load(open(os.path.join(RESOURCE_PATH, "eval", "mmlu", "subject_mapping.jsonl")))
+        subject_mapping = json.load(open(os.path.join(RESOURCE_PATH, "eval", "mmlu", "subject_mapping.json")))
         with open(output_filename, "w", encoding="utf-8") as w:
             # result_dict = dict()
             acc_dict = dict()
