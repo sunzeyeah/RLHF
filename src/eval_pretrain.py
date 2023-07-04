@@ -263,8 +263,7 @@ def main():
                 if subject_name_key not in results:
                     results[subject_name_key] = list()
                 if "chatglm" in args.model_name_or_path:
-                    if logits_processor is None:
-                        logits_processor = LogitsProcessorList()
+                    logits_processor = LogitsProcessorList()
                     if "chatglm2" in args.model_name_or_path:
                         class InvalidScoreLogitsProcessor(LogitsProcessor):
                             def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -367,8 +366,7 @@ def main():
                 if subject_name_key not in results:
                     results[subject_name_key] = list()
                 if "chatglm" in args.model_name_or_path:
-                    if logits_processor is None:
-                        logits_processor = LogitsProcessorList()
+                    logits_processor = LogitsProcessorList()
                     if "chatglm2" in args.model_name_or_path:
                         class InvalidScoreLogitsProcessor(LogitsProcessor):
                             def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
