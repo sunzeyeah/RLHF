@@ -16,6 +16,8 @@ OUTPUT_DIR=$ROOT/Data/chatgpt/output/pretrain/$MODEL
 EVAL_FILENAME="val"
 TRAIN_FILENAME="dev"
 CHECKPOINT=$ROOT/Data/chatgpt/output/pretrain/$MODEL
+SHOTS=5
+MAX_LENGTH=1280
 
 cd $ROOT/Code/RLHF || exit
 #    cd $ROOT/Code/chatgpt || exit
@@ -32,10 +34,10 @@ python $MAIN \
   --train_filename $TRAIN_FILENAME \
   --eval_filename $EVAL_FILENAME \
   --checkpoint $CHECKPOINT \
-  --max_length 2048 \
-  --max_few_shot 5 \
+  --max_length $MAX_LENGTH \
+  --max_few_shot $SHOTS \
   --max_length_generation 1 \
-  > out/eval_pretrain_${MODEL}_${TASK}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1 &
+  > out/eval_pretrain_${TASK}_${MODEL}_${EVAL_FILENAME}_${SHOTS}-shots_${MAX_LENGTH}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1 &
 
 ## Traditional NLP benchmark Evaluations
 #for TASK in  "cluewsc2020" "afqmc" "csl" "iflytek" "ocnli" "cmnli" "tnews" "c3" "cmrc2018" "chid"

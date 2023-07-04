@@ -18,7 +18,7 @@ from transformers import (
     AutoModelForCausalLM,
     AutoModelForSeq2SeqLM,
     AutoTokenizer,
-    TextGenerationPipeline
+    BitsAndBytesConfig
 )
 from transformers.generation.logits_process import LogitsProcessor
 from transformers.generation.utils import LogitsProcessorList
@@ -73,6 +73,7 @@ def get_parser():
 
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--local_rank", type=int, default=-1)
+    parser.add_argument("--bits", type=int, default=16)
     parser.add_argument("--max_length", type=int, default=2048)
     parser.add_argument("--max_length_generation", type=int, default=1, help="Maximum number of newly generated tokens")
     parser.add_argument("--checkpoint", type=str)
@@ -109,16 +110,40 @@ def main():
 
     # load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-    if "glm" in args.model_name_or_path:
-        model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
+    if torch.cuda.is_available():
+        bf16 = torch.cuda.get_device_capability()[0] >= 8
+        bnb_4bit_compute_dtype = torch.bfloat16 if bf16 else torch.float16
     else:
-        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
+        bnb_4bit_compute_dtype = None
+    bnb_config = BitsAndBytesConfig(
+        load_in_8bit=args.bits == 8,
+        load_in_4bit=args.bits == 4,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=bnb_4bit_compute_dtype
+    )
+    if "glm" in args.model_name_or_path:
+        # encoder model structure
+        if args.bits in [4, 8]:
+            model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path,
+                                                          # use_cache=False,
+                                                          trust_remote_code=True,
+                                                          quantization_config=bnb_config,
+                                                          device_map={"": args.local_rank})
+        else:
+            model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True).half()
+    else:
+        # decoder model sturcture
+        if args.bits in [4, 8]:
+            model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path,
+                                                         # use_cache=False,
+                                                         trust_remote_code=True,
+                                                         quantization_config=bnb_config,
+                                                         device_map={"": args.local_rank})
+        else:
+            model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, trust_remote_code=True).half()
         if "pangu" in args.model_name_or_path:
             model.resize_token_embeddings(tokenizer.vocab_size)
-            # model.config.end_token_id = tokenizer.eos_token_id
-            # model.config.pad_token_id = tokenizer.pad_token_id
-            # model.config.bos_token_id = tokenizer.bos_token_id
-            # model.config.eos_token_id = tokenizer.eos_token_id
 
     if args.checkpoint is not None:
         st = torch.load(args.checkpoint, map_location="cpu")
@@ -164,14 +189,14 @@ def main():
         return f1
 
     device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
-    model = model.half().to(device)
+    model = model.to(device)
     model.eval()
 
     if args.train_filename is None:
-        output_filename = os.path.join(args.output_dir, f"{args.task}_{args.eval_filename}_zero-shot_eval_result.jsonl")
+        output_filename = os.path.join(args.output_dir, f"{args.task}_{args.eval_filename}_zero-shot_{args.max_length}_eval_result.jsonl")
     else:
         assert args.max_few_shot > 0
-        output_filename = os.path.join(args.output_dir, f"{args.task}_{args.eval_filename}_{args.max_few_shot}-shot_eval_result.jsonl")
+        output_filename = os.path.join(args.output_dir, f"{args.task}_{args.eval_filename}_{args.max_few_shot}-shot_{args.max_length}_eval_result.jsonl")
 
     if args.task in ["cmrc2018"]:
         # text_generator = TextGenerationPipeline(model, tokenizer, device=device)

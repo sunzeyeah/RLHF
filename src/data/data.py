@@ -1400,14 +1400,14 @@ class CEvalDataset(Dataset):
                 else:
                     history.pop(-1)
 
-        logger.debug(f"full prompt: {full_prompt}")
+        logger.debug(f"number of shots: {len(history)-1}, full prompt: {full_prompt}")
         encoded_dict = self.tokenizer(full_prompt, max_length=self.max_length, return_tensors="pt",
                                       truncation="longest_first")
 
         return {
             "input_ids": encoded_dict["input_ids"],
             "attention_mask": encoded_dict.get("attention_mask", None),
-            # "labels": encoded_dict["input_ids"],
+            "number_of_shots": max(len(history)-1, 0),
             "id": data['id'],
             "subject_name_key": data['subject_name_key'],
             "answer": data.get('answer', None)
@@ -1534,7 +1534,7 @@ class MMLUDataset(Dataset):
         return {
             "input_ids": encoded_dict["input_ids"],
             "attention_mask": encoded_dict.get("attention_mask", None),
-            # "labels": encoded_dict["input_ids"],
+            "number_of_shots": max(len(history)-1, 0),
             "subject_name_key": data['subject_name_key'],
             "answer": data.get('answer', None)
         }
@@ -1548,7 +1548,7 @@ class MMLUDataset(Dataset):
             if isinstance(datasets, dict):
                 datasets[subject_name] = list()
             dev_file_path = os.path.join(filename, f'{subject_name_key}_{dt}.csv')
-            dev_df = pd.read_csv(dev_file_path)
+            dev_df = pd.read_csv(dev_file_path, names=["question", "A", "B", "C", "D", "answer"])
             for i, val in dev_df.iterrows():
                 d = val.to_dict()
                 if isinstance(datasets, dict):
