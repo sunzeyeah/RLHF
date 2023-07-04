@@ -146,9 +146,12 @@ def main():
             model.resize_token_embeddings(tokenizer.vocab_size)
 
     if args.checkpoint is not None:
+        suffix = args.checkpoint.split(os.sep)[-2] + "_"
         st = torch.load(args.checkpoint, map_location="cpu")
         model.load_state_dict(st)
         del st
+    else:
+        suffix = ""
 
     print_rank_0(f"Finished loading model and tokenizer")
 
@@ -189,14 +192,15 @@ def main():
         return f1
 
     device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
-    model = model.to(device)
+    if args.bits not in [4, 8]:
+        model = model.to(device)
     model.eval()
 
     if args.train_filename is None:
-        output_filename = os.path.join(args.output_dir, f"{args.task}_{args.eval_filename}_zero-shot_{args.max_length}_eval_result.jsonl")
+        output_filename = os.path.join(args.output_dir, f"{args.task}_{args.eval_filename}_zero-shot_{args.max_length}_{suffix}eval_result.jsonl")
     else:
         assert args.max_few_shot > 0
-        output_filename = os.path.join(args.output_dir, f"{args.task}_{args.eval_filename}_{args.max_few_shot}-shot_{args.max_length}_eval_result.jsonl")
+        output_filename = os.path.join(args.output_dir, f"{args.task}_{args.eval_filename}_{args.max_few_shot}-shot_{args.max_length}_{suffix}eval_result.jsonl")
 
     if args.task in ["cmrc2018"]:
         # text_generator = TextGenerationPipeline(model, tokenizer, device=device)
