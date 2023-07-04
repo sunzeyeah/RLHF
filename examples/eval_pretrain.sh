@@ -34,7 +34,7 @@ python $MAIN \
   --checkpoint $CHECKPOINT \
   --max_length 2048 \
   --max_few_shot 5 \
-  --max_length_generation 100 \
+  --max_length_generation 1 \
   > out/eval_pretrain_${MODEL}_${TASK}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1 &
 
 ## Traditional NLP benchmark Evaluations

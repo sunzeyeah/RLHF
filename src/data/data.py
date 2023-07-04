@@ -1398,7 +1398,8 @@ class CEvalDataset(Dataset):
             else:
                 full_prompt = question
 
-        encoded_dict = self.tokenizer(full_prompt, return_tensors="pt")
+        encoded_dict = self.tokenizer(full_prompt, max_length=self.args.max_length, return_tensors="pt",
+                                      truncation="longest_first")
 
         return {
             "input_ids": encoded_dict["input_ids"],
@@ -1521,7 +1522,8 @@ class MMLUDataset(Dataset):
             else:
                 full_prompt = question
 
-        encoded_dict = self.tokenizer(full_prompt, return_tensors="pt")
+        encoded_dict = self.tokenizer(full_prompt, max_length=self.args.max_length, return_tensors="pt",
+                                      truncation="longest_first")
 
         return {
             "input_ids": encoded_dict["input_ids"],
