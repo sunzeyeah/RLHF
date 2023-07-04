@@ -112,7 +112,7 @@ def main():
     if "glm" in args.model_name_or_path:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
     else:
-        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
         if "pangu" in args.model_name_or_path:
             model.resize_token_embeddings(tokenizer.vocab_size)
             # model.config.end_token_id = tokenizer.eos_token_id
@@ -164,8 +164,8 @@ def main():
         return f1
 
     device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
+    model = model.half().to(device)
     model.eval()
-    model.half().to(device)
 
     if args.train_filename is None:
         output_filename = os.path.join(args.output_dir, f"{args.task}_{args.eval_filename}_zero-shot_eval_result.jsonl")
@@ -299,7 +299,7 @@ def main():
                                     logits[tokenizer.encode("D", add_special_tokens=False)[0]],
                                 ]
                             ).argmax().detach().cpu().tolist()
-                    # pred = {0: "A", 1: "B", 2: "C", 3: "D"}[np.argmax(probs)]
+                    pred = {0: "A", 1: "B", 2: "C", 3: "D"}[pred]
                     # correct = 1 if pred == label else 0
                     results[subject_name_key].append((dev_data['id'], dev_data['answer'], pred))
 
@@ -395,7 +395,7 @@ def main():
                         logits[tokenizer.encode("D", add_special_tokens=False)[0]],
                     ]
                 ).argmax().detach().cpu().tolist()
-                # pred = {0: "A", 1: "B", 2: "C", 3: "D"}[np.argmax(probs)]
+                pred = {0: "A", 1: "B", 2: "C", 3: "D"}[pred]
                 # correct = 1 if pred == label else 0
                 results[subject_name_key].append((dev_data['answer'], pred))
 
