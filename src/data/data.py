@@ -1306,6 +1306,7 @@ class CEvalDataset(Dataset):
         self.args = args
         self.model_name_or_path = args.model_name_or_path if hasattr(args, "model_name_or_path") else args.actor_model_path
         self.subject_mapping = json.load(open(os.path.join(RESOURCE_PATH, "eval", "ceval", "subject_mapping.json")))
+        self.max_length = args.max_length - args.max_length_generation
         self.choices = ["A", "B", "C", "D"]
 
         self.post_list = self.load_dataset(eval_filename)
@@ -1338,10 +1339,9 @@ class CEvalDataset(Dataset):
             #     example += f'\n{choice}. {line[f"{choice}"]}'
             if include_answer:
                 if cot:
-                    example += "让我们一步一步思考，\n" + \
-                               line["explanation"] + f"\n所以答案是{line['answer']}。\n\n"
+                    example += "让我们一步一步思考，\n" + line["explanation"] + f"\n所以答案是{line['answer']}。"
                 else:
-                    example += line["answer"] + '\n\n'
+                    example += line["answer"]
             else:
                 if cot:
                     example += "让我们一步一步思考，\n1."
@@ -1351,54 +1351,57 @@ class CEvalDataset(Dataset):
         data = self.post_list[idx]
         subject_name = data['subject_name']
         question = self.format_example(data, include_answer=False, cot=self.args.cot)
-        prefix = f"以下是中国关于{subject_name}考试的单项选择题，请选出其中的正确答案。\n\n"
+        prefix = f"以下是中国关于{subject_name}考试的单项选择题，请选出其中的正确答案。"
 
+        history = []
         if "chatglm" in self.model_name_or_path:
-            history = []
+            sep = "\n\n" if "chatglm2" in self.model_name_or_path else "\n"
+            offset = 1 if "chatglm2" in self.model_name_or_path else 0
             # Few-Shot example construction
             if hasattr(self, "dev_list"):
-
+                history.append(prefix)
                 k = self.args.max_few_shot
                 dev_list = self.dev_list[subject_name]
                 for i in range(min(k, len(dev_list))):
                     prompt, answer = self.format_example(dev_list[i], include_answer=True, cot=self.args.cot)
-                    if i == 0:
-                        prompt = prefix + prompt
-                    if "chatglm2" in self.model_name_or_path:
-                        prompt = f"[Round {i+1}]\n\n问：{prompt}\n\n答：{answer}"
-                    else:
-                        prompt = f"[Round {i}]\n问：{prompt}\n答：{answer}"
+                    prompt = f"[Round {i+offset}]{sep}问：{prompt}{sep}答：{answer}"
                     history.append(prompt)
-            # Concat history with question
-            if "chatglm2" in self.model_name_or_path:
-                question = f"[Round {len(history)+1}]\n\n问：{question}\n\n答："
-                full_prompt = "\n\n".join(history+[question])
-            else:
-                question = f"[Round {len(history)}]\n问：{question}\n答："
-                full_prompt = "\n".join(history+[question])
-
-            # return {
-            #     # "question": question,
-            #     # "history": history,
-            #     "input_ids": encoded_dict["input_ids"],
-            #     "subject_name": subject_name,
-            #     "id": data['id'],
-            #     "answer": data.get('answer', None)
-            # }
+            # Concat few-shot/zero-shot examples with question.
+            # If length of full prompt exceeds max_length, remove examples until the length is smaller than max_length
+            question = f"[Round {len(history)+offset}]{sep}问：{question}{sep}答："
+            while True:
+                full_prompt = sep.join(history+[question])
+                input_ids = self.tokenizer.encode(full_prompt)
+                if len(input_ids) <= self.max_length:
+                    break
+                elif len(history) <= 1:
+                    full_prompt = question
+                    break
+                else:
+                    history.pop(-1)
         else:
             # Few-Shot example construction
             if hasattr(self, "dev_list"):
-                prompt = prefix
+                history.append(prefix)
                 k = self.args.max_few_shot
                 dev_list = self.dev_list[subject_name]
                 for i in range(min(k, len(dev_list))):
-                    prompt += self.format_example(dev_list[i], include_answer=True, cot=self.args.cot)
-                full_prompt = prompt + question
-            # Zero-Shot example construction
-            else:
-                full_prompt = question
+                    history.append(self.format_example(dev_list[i], include_answer=True, cot=self.args.cot))
+            # Concat few-shot/zero-shot examples with question.
+            # If length of full prompt exceeds max_length, remove examples until the length is smaller than max_length
+            while True:
+                full_prompt = "\n\n".join(history+[question])
+                input_ids = self.tokenizer.encode(full_prompt)
+                if len(input_ids) <= self.max_length:
+                    break
+                elif len(history) <= 1:
+                    full_prompt = question
+                    break
+                else:
+                    history.pop(-1)
 
-        encoded_dict = self.tokenizer(full_prompt, max_length=self.args.max_length, return_tensors="pt",
+        logger.debug(f"full prompt: {full_prompt}")
+        encoded_dict = self.tokenizer(full_prompt, max_length=self.max_length, return_tensors="pt",
                                       truncation="longest_first")
 
         return {
@@ -1441,6 +1444,7 @@ class MMLUDataset(Dataset):
         self.model_name_or_path = args.model_name_or_path if hasattr(args, "model_name_or_path") else args.actor_model_path
         self.subject_mapping = json.load(open(os.path.join(RESOURCE_PATH, "eval", "mmlu", "subject_mapping.json")))
         self.choices = ["A", "B", "C", "D"]
+        self.max_length = args.max_length - args.max_length_generation
 
         self.post_list = self.load_dataset(eval_filename)
         if train_filename is not None:
@@ -1452,7 +1456,7 @@ class MMLUDataset(Dataset):
     def __len__(self):
         return len(self.post_list)
 
-    def format_example(self, line, include_answer=True, cot=False):
+    def format_example(self, line, include_answer=True):
         example = line['question']
         for choice in self.choices:
             example += f'\n{choice}. {line[f"{choice}"]}'
@@ -1468,61 +1472,63 @@ class MMLUDataset(Dataset):
             # for choice in self.choices:
             #     example += f'\n{choice}. {line[f"{choice}"]}'
             if include_answer:
-                example += line["answer"] + '\n\n'
+                example += line["answer"]
             return example
 
     def __getitem__(self, idx):
         data = self.post_list[idx]
         subject_name = data['subject_name']
-        question = self.format_example(data, include_answer=False, cot=self.args.cot)
-        prefix = f"The following are multiple choice questions (with answers) about {subject_name}.\n\n"
+        question = self.format_example(data, include_answer=False)
+        prefix = f"The following are multiple choice questions (with answers) about {subject_name}."
 
+        history = []
         if "chatglm" in self.model_name_or_path:
-            history = []
+            sep = "\n\n" if "chatglm2" in self.model_name_or_path else "\n"
+            offset = 1 if "chatglm2" in self.model_name_or_path else 0
             # Few-Shot example construction
             if hasattr(self, "dev_list"):
-
+                history.append(prefix)
                 k = self.args.max_few_shot
                 dev_list = self.dev_list[subject_name]
                 for i in range(min(k, len(dev_list))):
-                    prompt, answer = self.format_example(dev_list[i], include_answer=True, cot=self.args.cot)
-                    if i == 0:
-                        prompt = prefix + prompt
-                    if "chatglm2" in self.model_name_or_path:
-                        prompt = f"[Round {i+1}]\n\n问：{prompt}\n\n答：{answer}"
-                    else:
-                        prompt = f"[Round {i}]\n问：{prompt}\n答：{answer}"
+                    prompt, answer = self.format_example(dev_list[i], include_answer=True)
+                    prompt = f"[Round {i+offset}]{sep}问：{prompt}{sep}答：{answer}"
                     history.append(prompt)
-            # Concat history with question
-            if "chatglm2" in self.model_name_or_path:
-                question = f"[Round {len(history)+1}]\n\n问：{question}\n\n答："
-                full_prompt = "\n\n".join(history+[question])
-            else:
-                question = f"[Round {len(history)}]\n问：{question}\n答："
-                full_prompt = "\n".join(history+[question])
-
-            # return {
-            #     # "question": question,
-            #     # "history": history,
-            #     "input_ids": encoded_dict["input_ids"],
-            #     "subject_name": subject_name,
-            #     "id": data['id'],
-            #     "answer": data.get('answer', None)
-            # }
+            # Concat few-shot/zero-shot examples with question.
+            # If length of full prompt exceeds max_length, remove examples until the length is smaller than max_length
+            question = f"[Round {len(history)+offset}]{sep}问：{question}{sep}答："
+            while True:
+                full_prompt = sep.join(history+[question])
+                input_ids = self.tokenizer.encode(full_prompt)
+                if len(input_ids) <= self.max_length:
+                    break
+                elif len(history) <= 1:
+                    full_prompt = question
+                    break
+                else:
+                    history.pop(-1)
         else:
             # Few-Shot example construction
             if hasattr(self, "dev_list"):
-                prompt = prefix
+                history.append(prefix)
                 k = self.args.max_few_shot
                 dev_list = self.dev_list[subject_name]
                 for i in range(min(k, len(dev_list))):
-                    prompt += self.format_example(dev_list[i], include_answer=True, cot=self.args.cot)
-                full_prompt = prompt + question
-            # Zero-Shot example construction
-            else:
-                full_prompt = question
+                    history.append(self.format_example(dev_list[i], include_answer=True))
+            # Concat few-shot/zero-shot examples with question.
+            # If length of full prompt exceeds max_length, remove examples until the length is smaller than max_length
+            while True:
+                full_prompt = "\n\n".join(history+[question])
+                input_ids = self.tokenizer.encode(full_prompt)
+                if len(input_ids) <= self.max_length:
+                    break
+                elif len(history) <= 1:
+                    full_prompt = question
+                    break
+                else:
+                    history.pop(-1)
 
-        encoded_dict = self.tokenizer(full_prompt, max_length=self.args.max_length, return_tensors="pt",
+        encoded_dict = self.tokenizer(full_prompt, max_length=self.max_length, return_tensors="pt",
                                       truncation="longest_first")
 
         return {
