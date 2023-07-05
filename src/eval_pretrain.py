@@ -429,18 +429,15 @@ def main():
         # metrics calculation
         subject_mapping = json.load(open(os.path.join(RESOURCE_PATH, "eval", "mmlu", "subject_mapping.json")))
         with open(output_filename, "w", encoding="utf-8") as w:
-            # result_dict = dict()
             acc_dict = dict()
             for subject_name_key, vals in results.items():
-                # if subject_name_key not in result_dict:
-                #     result_dict[subject_name_key] = dict()
-                subject_name = subject_mapping[subject_name_key][0]
-                if subject_name not in acc_dict:
-                    acc_dict[subject_name] = {"ct": 0, "correct": 0}
+                domain = subject_mapping[subject_name_key][1]
+                if domain not in acc_dict:
+                    acc_dict[domain] = {"ct": 0, "correct": 0}
                 for label, pred in vals:
                     # result_dict[subject_name_key] = pred
-                    acc_dict[subject_name]['correct'] += 1 if pred == label else 0
-                    acc_dict[subject_name]['ct'] += 1
+                    acc_dict[domain]['correct'] += 1 if pred == label else 0
+                    acc_dict[domain]['ct'] += 1
                     w.write(json.dumps({"subject_name_key": subject_name_key,
                                         "pred": pred, "label": label}, ensure_ascii=False)+"\n")
         ct = 0
@@ -448,7 +445,7 @@ def main():
         for domain, val in acc_dict.items():
             ct += val['ct']
             correct += val['correct']
-            print_rank_0(f"[MMLU Evaluation Result] subject_name: {subject_name}, acc: {val['correct'] / val['ct']}")
+            print_rank_0(f"[MMLU Evaluation Result] domain: {domain}, acc: {val['correct'] / val['ct']}")
         print_rank_0(f"[MMLU Evaluation Result] total acc: {correct / ct}")
     else:
         sampler = SequentialSampler(dev_dataset)

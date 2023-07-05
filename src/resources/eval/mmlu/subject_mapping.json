@@ -1,59 +1,230 @@
 {
-  "moral_scenarios": ["Moral Scenarios"],
-  "us_foreign_policy": ["US Foreign Policy"],
-  "public_relations": ["Public Relations"],
-  "global_facts": ["Global Facts"],
-  "electrical_engineering": ["Electrical Engineering"],
-  "astronomy": ["Astronomy"],
-  "business_ethics": ["Business Ethics"],
-  "jurisprudence": ["Jurisprudence"],
-  "high_school_chemistry": ["High School Chemistry"],
-  "college_physics": ["College Physics"],
-  "professional_psychology": ["Professional Psychology"],
-  "marketing": ["Marketing"],
-  "management": ["Management"],
-  "virology": ["Virology"],
-  "international_law": ["International Law"],
-  "high_school_macroeconomics": ["High School Macroeconomics"],
-  "prehistory": ["Prehistory"],
-  "abstract_algebra": ["Abstract Algebra"],
-  "high_school_physics": ["High School Physics"],
-  "formal_logic": ["Formal Logic"],
-  "college_medicine": ["College Medicine"],
-  "high_school_us_history": ["High School US History"],
-  "moral_disputes": ["Moral Disputes"],
-  "high_school_european_history": ["High School European History"],
-  "clinical_knowledge": ["Clinical Knowledge"],
-  "world_religions": ["World Religions"],
-  "high_school_microeconomics": ["High School Microeconomics"],
-  "professional_law": ["Professional Law"],
-  "human_aging": ["Human Aging"],
-  "medical_genetics": ["Medical Genetics"],
-  "high_school_geography": ["High School Geography"],
-  "high_school_government_and_politics": ["High School Government and Politics"],
-  "anatomy": ["Anatomy"],
-  "sociology": ["Sociology"],
-  "logical_fallacies": ["Logical Fallacies"],
-  "high_school_computer_science": ["High School Computer Science"],
-  "miscellaneous": ["Miscellaneous"],
-  "high_school_world_history": ["High School World History"],
-  "professional_medicine": ["Professional Medicine"],
-  "high_school_biology": ["High School Biology"],
-  "high_school_statistics": ["High School Statistics"],
-  "college_chemistry": ["College Chemistry"],
-  "nutrition": ["Nutrition"],
-  "econometrics": ["Econometrics"],
-  "human_sexuality": ["Human Sexuality"],
-  "security_studies": ["Security Studies"],
-  "philosophy": ["Philosophy"],
-  "elementary_mathematics": ["Elementary Mathematics"],
-  "college_biology": ["College Biology"],
-  "college_computer_science": ["College Computer Science"],
-  "machine_learning": ["Machine Learning"],
-  "professional_accounting": ["Professional Accounting"],
-  "college_mathematics": ["College Mathematics"],
-  "high_school_mathematics": ["High School Mathematics"],
-  "high_school_psychology": ["High School Psychology"],
-  "conceptual_physics": ["Conceptual Physics"],
-  "computer_security": ["Computer Security"]
+  "moral_scenarios": [
+    "Moral Scenarios",
+    "Humanities"
+  ],
+  "us_foreign_policy": [
+    "US Foreign Policy",
+    "Social Sciences"
+  ],
+  "public_relations": [
+    "Public Relations",
+    "Social Sciences"
+  ],
+  "global_facts": [
+    "Global Facts",
+    "Other"
+  ],
+  "electrical_engineering": [
+    "Electrical Engineering",
+    "STEM "
+  ],
+  "astronomy": [
+    "Astronomy",
+    "STEM "
+  ],
+  "business_ethics": [
+    "Business Ethics",
+    "Other"
+  ],
+  "jurisprudence": [
+    "Jurisprudence",
+    "Humanities"
+  ],
+  "high_school_chemistry": [
+    "High School Chemistry",
+    "STEM"
+  ],
+  "college_physics": [
+    "College Physics",
+    "STEM"
+  ],
+  "professional_psychology": [
+    "Professional Psychology",
+    "Social Sciences"
+  ],
+  "marketing": [
+    "Marketing",
+    "Other"
+  ],
+  "management": [
+    "Management",
+    "Other"
+  ],
+  "virology": [
+    "Virology",
+    "Other"
+  ],
+  "international_law": [
+    "International Law",
+    "Humanities"
+  ],
+  "high_school_macroeconomics": [
+    "High School Macroeconomics",
+    "Social Sciences"
+  ],
+  "prehistory": [
+    "Prehistory",
+    "Humanities"
+  ],
+  "abstract_algebra": [
+    "Abstract Algebra",
+    "STEM"
+  ],
+  "high_school_physics": [
+    "High School Physics",
+    "STEM"
+  ],
+  "formal_logic": [
+    "Formal Logic",
+    "Humanities"
+  ],
+  "college_medicine": [
+    "College Medicine",
+    "Other"
+  ],
+  "high_school_us_history": [
+    "High School US History",
+    "Humanities"
+  ],
+  "moral_disputes": [
+    "Moral Disputes",
+    "Humanities"
+  ],
+  "high_school_european_history": [
+    "High School European History",
+    "Humanities"
+  ],
+  "clinical_knowledge": [
+    "Clinical Knowledge",
+    "Other"
+  ],
+  "world_religions": [
+    "World Religions",
+    "Humanities "
+  ],
+  "high_school_microeconomics": [
+    "High School Microeconomics",
+    "Social Sciences"
+  ],
+  "professional_law": [
+    "Professional Law",
+    "Humanities"
+  ],
+  "human_aging": [
+    "Human Aging",
+    "Other "
+  ],
+  "medical_genetics": [
+    "Medical Genetics",
+    "Other"
+  ],
+  "high_school_geography": [
+    "High School Geography",
+    "Social Sciences"
+  ],
+  "high_school_government_and_politics": [
+    "High School Government and Politics",
+    "Social Sciences"
+  ],
+  "anatomy": [
+    "Anatomy",
+    "STEM"
+  ],
+  "sociology": [
+    "Sociology",
+    "Social Sciences"
+  ],
+  "logical_fallacies": [
+    "Logical Fallacies",
+    "Humanities"
+  ],
+  "high_school_computer_science": [
+    "High School Computer Science",
+    "STEM"
+  ],
+  "miscellaneous": [
+    "Miscellaneous",
+    "Other"
+  ],
+  "high_school_world_history": [
+    "High School World History",
+    "Humanities"
+  ],
+  "professional_medicine": [
+    "Professional Medicine",
+    "Other"
+  ],
+  "high_school_biology": [
+    "High School Biology",
+    "STEM"
+  ],
+  "high_school_statistics": [
+    "High School Statistics",
+    "STEM"
+  ],
+  "college_chemistry": [
+    "College Chemistry",
+    "STEM"
+  ],
+  "nutrition": [
+    "Nutrition",
+    "Other"
+  ],
+  "econometrics": [
+    "Econometrics",
+    "Social Sciences"
+  ],
+  "human_sexuality": [
+    "Human Sexuality",
+    "Social Sciences"
+  ],
+  "security_studies": [
+    "Security Studies",
+    "Social Sciences"
+  ],
+  "philosophy": [
+    "Philosophy",
+    "Humanities"
+  ],
+  "elementary_mathematics": [
+    "Elementary Mathematics",
+    "STEM"
+  ],
+  "college_biology": [
+    "College Biology",
+    "STEM"
+  ],
+  "college_computer_science": [
+    "College Computer Science",
+    "STEM"
+  ],
+  "machine_learning": [
+    "Machine Learning",
+    "STEM"
+  ],
+  "professional_accounting": [
+    "Professional Accounting",
+    "Other"
+  ],
+  "college_mathematics": [
+    "College Mathematics",
+    "STEM"
+  ],
+  "high_school_mathematics": [
+    "High School Mathematics",
+    "STEM"
+  ],
+  "high_school_psychology": [
+    "High School Psychology",
+    "Social Sciences"
+  ],
+  "conceptual_physics": [
+    "Conceptual Physics",
+    "STEM"
+  ],
+  "computer_security": [
+    "Computer Security",
+    "STEM"
+  ]
 }
