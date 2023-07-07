@@ -102,7 +102,7 @@ python setup.py --cpp_ext --cuda_ext bdist_wheel 2>&1 | tee build.log
 
 ### 1. LLM模型预训练
 对开源LLM进行增量预训练，基于deepspeed实现。目前支持2类模型架构：
-- decoder结构：LLaMA、Pangu
+- decoder结构：LLaMA、Baichuan、Pangu
 - encoder结构：GLM、ChatGLM
 
 ```bash
@@ -111,14 +111,20 @@ bash pretrain.sh
 ```
 
 ### 2. LLM模型评测
-对开源中文LLM进行ZeroShot、OneShot或FewShot的评测，评测任务和数据集使用[CLUEBenchmark](https://github.com/CLUEbenchmark/CLUE) ，评测方法和prompt模板参考[Pangu-alpha论文](https://arxiv.org/abs/2104.12369) 。详见[eval_pretrain.py](./src/eval_pretrain.py) 和 [data.py](src/data/data.py)
+对开源中文LLM进行ZeroShot、OneShot或FewShot的评测。详见[eval_pretrain.py](./src/eval_pretrain.py) 和 [data.py](src/data/data.py)。
 
-目前支持5个开源模型: 
-- Pangu-350M
-- Pangu-2.6B
-- Pangu-13B
-- GLM-350M-chinese
-- GLM-10B-chinese
+目前支持的评测任务：
+- [C-Eval](https://github.com/SJTU-LIT/ceval)
+- [MMLU](https://github.com/hendrycks/test)
+- [CLUEBenchmark](https://github.com/CLUEbenchmark/CLUE) ：评测方法和prompt模板参考[Pangu-alpha论文](https://arxiv.org/abs/2104.12369) 
+
+目前支持的开源模型: 
+- LLaMA及相关衍生模型 
+- ChatGLM（1和2）
+- Baichuan
+- Pangu
+- GLM
+
 
 ```bash
 cd examples
@@ -151,7 +157,35 @@ bash train_rlhf.sh
 ### 1. LLM模型评测
 
 <details>
-<summary><b>验证集(dev.json)结果</b></summary>
+<summary><b>C-Eval 5-shot测试集(test)结果</b></summary>
+
+<table>
+    <tr>  <td>Model</td>  <td>Avg</td>  <td>Avg(Hard)</td> <td>STEM</td> <td>Social Science</td> <td>Humanities</td> <td>Other</td> </tr>
+    <tr>  <td>LLaMA-7B</td>  <td>26.80</td>  <td>26.70</td>  <td>26.20</td>  <td>27.60</td>  <td>25.70</td>  <td>28.10</td> </tr>
+    <tr>  <td>Baichuan-7B</td>  <td>44.20</td>  <td>31.70</td>  <td>39.20</td>  <td>53.30</td>  <td>47.30</td>  <td>41.90</td> </tr>
+    <tr>  <td>Ziya-LLaMA-13B-Pretrain-v1</td>  <td>29.30</td>  <td>21.40</td>  <td>26.60</td>  <td>34.80</td>  <td>30.90</td>  <td>28.00</td> </tr>
+    <tr>  <td>ChatGLM-6B</td>  <td>36.30</td>  <td>27.20</td>  <td>32.90</td>  <td>42.80</td>  <td>38.10</td>  <td>34.90</td> </tr>
+    <tr>  <td>ChatGLM1.1-6B</td>  <td>38.10</td>  <td>28.60</td>  <td>33.60</td>  <td>46.70</td>  <td>40.90</td>  <td>35.70</td> </tr>
+    <tr>  <td>ChatGLM2-6B</td>  <td style="color:red"><b>51.20</b></td>  <td style="color:red"><b>33.40</b></td>  <td style="color:red"><b>46.90</b></td>  <td style="color:red"><b>63.00</b></td>  <td style="color:red"><b>51.60</b></td>  <td style="color:red"><b>47.70</b></td> </tr>
+</table>
+</details>
+
+<details>
+<summary><b>MMLU 5-shot测试集(test)结果</b></summary>
+
+<table>
+    <tr>  <td>Model</td>  <td>Avg</td>  <td>STEM</td> <td>Social Science</td> <td>Humanities</td> <td>Other</td> </tr>
+    <tr>  <td>LLaMA-7B</td>  <td>28.53</td>  <td>26.10</td>  <td>28.76</td>  <td>28.52</td>  <td>24.81</td> </tr>
+    <tr>  <td>Baichuan-7B</td>  <td>41.96</td>  <td>36.63</td>  <td>47.77</td>  <td>37.55</td>  <td>48.31</td> </tr>
+    <tr>  <td>Ziya-LLaMA-13B-Pretrain-v1</td>  <td>42.40</td>  <td>33.99</td>  <td>47.41</td>  <td>40.38</td>  <td>49.01</td> </tr>
+    <tr>  <td>ChatGLM-6B</td>  <td>37.87</td>  <td>32.41</td>  <td>43.80</td>  <td>35.60</td>  <td>41.00</td> </tr>
+    <tr>  <td>ChatGLM1.1-6B</td>  <td>40.07</td>  <td>32.95</td>  <td>44.55</td>  <td>39.23</td>  <td>44.12</td> </tr>
+    <tr>  <td>ChatGLM2-6B</td>  <td style="color:red"><b>45.83</b></td>  <td style="color:red"><b>38.75</b></td>  <td style="color:red"><b>52.06</b></td>  <td style="color:red"><b>43.20</b></td>  <td style="color:red"><b>50.82</b></td> </tr>
+</table>
+</details>
+
+<details>
+<summary><b>CLUEBenchmark 验证集(dev.json)结果</b></summary>
 
 <table>
     <tr>  <td rowspan="2">Dataset</td>  <td rowspan="2">Method</td>  <td rowspan="2">Metrics</td>  <td rowspan="2">Task Type</td>  <td colspan="5" style="text-align:center">Zero-shot</td>  <td colspan="5" style="text-align:center">Few-shot</td> </tr>
