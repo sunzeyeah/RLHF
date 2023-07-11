@@ -317,7 +317,8 @@ def main():
                     inputs = inputs.to(device)
                     outputs = model.generate(inputs=inputs['input_ids'],
                                              max_new_tokens=args.max_length_generation,
-                                             eos_token_id=tokenizer.eop_token_id,
+                                             # eos_token_id=tokenizer.get_command("<eos>") if "chatglm2" in args.model_name else tokenizer.eop_token_id,
+                                             eos_token_id=tokenizer.get_command("eop") if "chatglm2" in args.model_name else tokenizer.eop_token_id,
                                              pad_token_id=tokenizer.pad_token_id,
                                              do_sample=args.do_sample,
                                              num_return_sequences=args.num_return_sequences,
