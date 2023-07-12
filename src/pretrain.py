@@ -155,9 +155,12 @@ def main():
             model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True).half()
 
     # load tokenizer and peft config
-    if "llama" in args.model_name_or_path or "vicuna" in args.model_name_or_path or "billa" in args.model_name_or_path \
-            or "pangu" in args.model_name_or_path:
+    if "llama" in args.model_name_or_path or "vicuna" in args.model_name_or_path or "billa" in args.model_name_or_path:
         tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+        target_modules = "q_proj,k_proj,v_proj"
+        task_type = "CAUSAL_LM"
+    elif "pangu" in args.model_name_or_path:
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         target_modules = "q_proj,k_proj,v_proj"
         task_type = "CAUSAL_LM"
     elif "baichuan" in args.model_name_or_path:
@@ -170,6 +173,8 @@ def main():
         task_type = "CAUSAL_LM"
     elif "glm" in args.model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+        if "chatglm2" in args.model_name_or_path:
+            tokenizer.eop_token_id = tokenizer.get_command("eop") if args.checkpoint is not None else tokenizer.get_command("<eos>")
         target_modules = "query_key_value"
         task_type = "SEQ_2_SEQ_LM"
     else:
@@ -317,8 +322,7 @@ def main():
                     inputs = inputs.to(device)
                     outputs = model.generate(inputs=inputs['input_ids'],
                                              max_new_tokens=args.max_length_generation,
-                                             # eos_token_id=tokenizer.get_command("<eos>") if "chatglm2" in args.model_name else tokenizer.eop_token_id,
-                                             eos_token_id=tokenizer.get_command("eop") if "chatglm2" in args.model_name else tokenizer.eop_token_id,
+                                             eos_token_id=tokenizer.eop_token_id,
                                              pad_token_id=tokenizer.pad_token_id,
                                              do_sample=args.do_sample,
                                              num_return_sequences=args.num_return_sequences,

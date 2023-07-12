@@ -303,6 +303,8 @@ def main():
         task_type = "CAUSAL_LM"
     elif "glm" in args.model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+        if "chatglm2" in args.model_name_or_path:
+            tokenizer.eop_token_id = tokenizer.get_command("eop") if args.checkpoint is not None else tokenizer.get_command("<eos>")
         target_modules = "query_key_value"
         task_type = "SEQ_2_SEQ_LM"
     else:
