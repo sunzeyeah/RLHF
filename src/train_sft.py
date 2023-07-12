@@ -112,9 +112,6 @@ def main():
 
     set_seed(args.seed)
 
-    # load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-
     # load model
     if torch.cuda.is_available():
         bf16 = torch.cuda.get_device_capability()[0] >= 8
@@ -141,11 +138,6 @@ def main():
     else:
         model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True,
                                                      quantization_config=bnb_config, device_map={"": args.local_rank})
-        if "pangu" in args.model_name_or_path:
-            model.resize_token_embeddings(tokenizer.vocab_size)
-            # model.config.pad_token_id = tokenizer.pad_token_id
-            # model.config.bos_token_id = tokenizer.bos_token_id
-            # model.config.eos_token_id = tokenizer.eos_token_id
 
     # load tokenizer and peft config
     if "llama" in args.model_name_or_path or "vicuna" in args.model_name_or_path or "billa" in args.model_name_or_path:
@@ -156,6 +148,10 @@ def main():
         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         target_modules = "q_proj,k_proj,v_proj"
         task_type = "CAUSAL_LM"
+        model.resize_token_embeddings(tokenizer.vocab_size)
+        # model.config.pad_token_id = tokenizer.pad_token_id
+        # model.config.bos_token_id = tokenizer.bos_token_id
+        # model.config.eos_token_id = tokenizer.eos_token_id
     elif "baichuan" in args.model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         target_modules = "W_pack"

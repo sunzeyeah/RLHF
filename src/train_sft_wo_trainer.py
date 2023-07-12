@@ -17,9 +17,7 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     AutoModelForSeq2SeqLM,
-    Trainer,
-    TrainingArguments,
-    default_data_collator
+    LlamaTokenizer,
 )
 from torch.utils.data import RandomSampler, DistributedSampler, DataLoader
 from transformers.deepspeed import HfDeepSpeedConfig
@@ -159,20 +157,39 @@ def main():
         }
         dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
 
-    # load tokenizer and model
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-    if "pangu" in args.model_name_or_path:
+    # load model
+    if "glm" in args.model_name_or_path:
+        model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
+        if "chatglm" in args.model_name_or_path:
+            model = model.half()
+    else:
         model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+
+    # load tokenizer and peft config
+    if "llama" in args.model_name_or_path or "vicuna" in args.model_name_or_path or "billa" in args.model_name_or_path:
+        tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+        target_modules = "q_proj,k_proj,v_proj"
+        task_type = "CAUSAL_LM"
+    elif "pangu" in args.model_name_or_path:
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+        target_modules = "q_proj,k_proj,v_proj"
+        task_type = "CAUSAL_LM"
         model.resize_token_embeddings(tokenizer.vocab_size)
         # model.config.pad_token_id = tokenizer.pad_token_id
         # model.config.bos_token_id = tokenizer.bos_token_id
         # model.config.eos_token_id = tokenizer.eos_token_id
-        target_modules = "q_proj,k_proj,v_proj"
+    elif "baichuan" in args.model_name_or_path:
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+        target_modules = "W_pack"
+        task_type = "CAUSAL_LM"
+    elif "bloom" in args.model_name_or_path or "tigerbot" in args.model_name_or_path:
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+        target_modules = "query_key_value"
         task_type = "CAUSAL_LM"
     elif "glm" in args.model_name_or_path:
-        model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
-        if "chatglm" in args.model_name_or_path:
-            model = model.half()
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+        if "chatglm2" in args.model_name_or_path:
+            tokenizer.eop_token_id = tokenizer.get_command("eop") if args.checkpoint is not None else tokenizer.get_command("<eos>")
         target_modules = "query_key_value"
         task_type = "SEQ_2_SEQ_LM"
     else:
@@ -298,21 +315,7 @@ def main():
                 prompt = test_data['prompt']
                 prefix = test_data['prefix']
                 # label = dev_data['label']
-                if "pangu" in args.model_name_or_path:
-                    inputs = tokenizer(prompt, tokenizer.sep_token + prefix, max_length=args.max_length,
-                                       truncation="longest_first", add_special_tokens=False,
-                                       return_tensors="pt", return_token_type_ids=False)
-                    # inputs = tokenizer(prompt, add_special_tokens=False, return_token_type_ids=False, return_tensors="pt")
-                    inputs = inputs.to(device)
-                    outputs = model.generate(**inputs,
-                                             max_new_tokens=args.max_length_generation,
-                                             pad_token_id=tokenizer.pad_token_id,
-                                             do_sample=args.do_sample,
-                                             num_return_sequences=args.num_return_sequences,
-                                             top_k=args.top_k,
-                                             top_p=args.top_p,
-                                             temperature=args.temperature)
-                elif "chatglm" in args.model_name_or_path:
+                if "chatglm" in args.model_name_or_path:
                     encoded_prompt = tokenizer(prompt)
                     prompt_length = len(encoded_prompt['input_ids'])
                     inputs = tokenizer(prompt,
@@ -354,7 +357,19 @@ def main():
                                              top_p=args.top_p,
                                              temperature=args.temperature)
                 else:
-                    raise ValueError(f"Unsupported model name: {args.model_name_or_path}")
+                    inputs = tokenizer(prompt, tokenizer.sep_token + prefix, max_length=args.max_length,
+                                       truncation="longest_first", add_special_tokens=False,
+                                       return_tensors="pt", return_token_type_ids=False)
+                    # inputs = tokenizer(prompt, add_special_tokens=False, return_token_type_ids=False, return_tensors="pt")
+                    inputs = inputs.to(device)
+                    outputs = model.generate(**inputs,
+                                             max_new_tokens=args.max_length_generation,
+                                             pad_token_id=tokenizer.pad_token_id,
+                                             do_sample=args.do_sample,
+                                             num_return_sequences=args.num_return_sequences,
+                                             top_k=args.top_k,
+                                             top_p=args.top_p,
+                                             temperature=args.temperature)
                 results = tokenizer.batch_decode(outputs, skip_special_tokens=True)
                 w.write("\t".join([prompt]+[result.split(prefix, maxsplit=1)[1] for result in results])+"\n")
 
