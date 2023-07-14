@@ -163,10 +163,12 @@ bash train_rlhf.sh
     <tr>  <td>Model</td>  <td>Avg</td>  <td>Avg(Hard)</td> <td>STEM</td> <td>Social Science</td> <td>Humanities</td> <td>Other</td> </tr>
     <tr>  <td>LLaMA-7B</td>  <td>26.80</td>  <td>26.70</td>  <td>26.20</td>  <td>27.60</td>  <td>25.70</td>  <td>28.10</td> </tr>
     <tr>  <td>Baichuan-7B</td>  <td>44.20</td>  <td>31.70</td>  <td>39.20</td>  <td>53.30</td>  <td>47.30</td>  <td>41.90</td> </tr>
+    <tr>  <td>Baichuan-13B-Chat</td>  <td>45.80</td>  <td>31.80</td>  <td>39.90</td>  <td>55.00</td>  <td>51.10</td>  <td>42.80</td> </tr>
+    <tr>  <td>Baichuan-13B-Base</td>  <td style="color:red"><b>52.70</b></td>  <td style="color:red"><b>35.90</b></td>  <td>46.20</td>  <td style="color:red"><b>65.30</b></td>  <td style="color:red"><b>56.50</b></td>  <td style="color:red"><b>49.50</b></td> </tr>    
     <tr>  <td>Ziya-LLaMA-13B-Pretrain-v1</td>  <td>29.30</td>  <td>21.40</td>  <td>26.60</td>  <td>34.80</td>  <td>30.90</td>  <td>28.00</td> </tr>
     <tr>  <td>ChatGLM-6B</td>  <td>36.30</td>  <td>27.20</td>  <td>32.90</td>  <td>42.80</td>  <td>38.10</td>  <td>34.90</td> </tr>
     <tr>  <td>ChatGLM1.1-6B</td>  <td>38.10</td>  <td>28.60</td>  <td>33.60</td>  <td>46.70</td>  <td>40.90</td>  <td>35.70</td> </tr>
-    <tr>  <td>ChatGLM2-6B</td>  <td style="color:red"><b>51.20</b></td>  <td style="color:red"><b>33.40</b></td>  <td style="color:red"><b>46.90</b></td>  <td style="color:red"><b>63.00</b></td>  <td style="color:red"><b>51.60</b></td>  <td style="color:red"><b>47.70</b></td> </tr>
+    <tr>  <td>ChatGLM2-6B</td>  <td>51.20</td>  <td>33.40</td>  <td style="color:red"><b>46.90</b></td>  <td>63.00</td>  <td>51.60</td>  <td>47.70</td> </tr>
 </table>
 </details>
 
@@ -177,10 +179,12 @@ bash train_rlhf.sh
     <tr>  <td>Model</td>  <td>Avg</td>  <td>STEM</td> <td>Social Science</td> <td>Humanities</td> <td>Other</td> </tr>
     <tr>  <td>LLaMA-7B</td>  <td>28.53</td>  <td>26.10</td>  <td>28.76</td>  <td>28.52</td>  <td>24.81</td> </tr>
     <tr>  <td>Baichuan-7B</td>  <td>41.96</td>  <td>36.63</td>  <td>47.77</td>  <td>37.55</td>  <td>48.31</td> </tr>
+    <tr>  <td>Baichuan-13B-Chat</td>  <td>49.90</td>  <td>41.48</td>  <td>57.10</td>  <td>46.60</td>  <td>56.32</td> </tr>
+    <tr>  <td>Baichuan-13B-Base</td>  <td style="color:red"><b>52.37</b></td>  <td style="color:red"><b>43.54</b></td>  <td style="color:red"><b>61.09</b></td>  <td style="color:red"><b>48.26</b></td>  <td style="color:red"><b>58.89</b></td> </tr>
     <tr>  <td>Ziya-LLaMA-13B-Pretrain-v1</td>  <td>42.40</td>  <td>33.99</td>  <td>47.41</td>  <td>40.38</td>  <td>49.01</td> </tr>
     <tr>  <td>ChatGLM-6B</td>  <td>37.87</td>  <td>32.41</td>  <td>43.80</td>  <td>35.60</td>  <td>41.00</td> </tr>
     <tr>  <td>ChatGLM1.1-6B</td>  <td>40.07</td>  <td>32.95</td>  <td>44.55</td>  <td>39.23</td>  <td>44.12</td> </tr>
-    <tr>  <td>ChatGLM2-6B</td>  <td style="color:red"><b>45.83</b></td>  <td style="color:red"><b>38.75</b></td>  <td style="color:red"><b>52.06</b></td>  <td style="color:red"><b>43.20</b></td>  <td style="color:red"><b>50.82</b></td> </tr>
+    <tr>  <td>ChatGLM2-6B</td>  <td>45.83</td>  <td>38.75</td>  <td>52.06</td>  <td>43.20</td>  <td>50.82</td> </tr>
 </table>
 </details>
 
