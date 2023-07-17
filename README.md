@@ -170,6 +170,9 @@ bash train_rlhf.sh
     <tr>  <td>ChatGLM1.1-6B</td>  <td>38.10</td>  <td>28.60</td>  <td>33.60</td>  <td>46.70</td>  <td>40.90</td>  <td>35.70</td> </tr>
     <tr>  <td>ChatGLM2-6B</td>  <td>51.20</td>  <td>33.40</td>  <td style="color:red"><b>46.90</b></td>  <td>63.00</td>  <td>51.60</td>  <td>47.70</td> </tr>
 </table>
+
+**PS**：Baichuan-13B和Ziya-13B均为4-bit下结果
+
 </details>
 
 <details>
@@ -186,6 +189,9 @@ bash train_rlhf.sh
     <tr>  <td>ChatGLM1.1-6B</td>  <td>40.07</td>  <td>32.95</td>  <td>44.55</td>  <td>39.23</td>  <td>44.12</td> </tr>
     <tr>  <td>ChatGLM2-6B</td>  <td>45.83</td>  <td>38.75</td>  <td>52.06</td>  <td>43.20</td>  <td>50.82</td> </tr>
 </table>
+
+**PS**：Baichuan-13B和Ziya-13B均为4-bit下结果
+
 </details>
 
 <details>
