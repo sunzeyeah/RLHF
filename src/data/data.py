@@ -285,6 +285,9 @@ class SFTDataset(Dataset):
         with open(filename, "r", encoding="utf-8") as f:
             for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
                 item = json.loads(line)
+                data_type = item.get('data_type', "human_generated")
+                if data_type != "human_generated":
+                    continue
                 prompt = clean_text(item['prompt'])
                 label = clean_text(item['answers'][0]['answer'])
                 score = item['answers'][0]['score']
@@ -493,6 +496,9 @@ class RLHFDataset(Dataset):
         with open(filename, "r", encoding="utf-8") as f:
             for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
                 item = json.loads(line)
+                data_type = item.get('data_type', "human_generated")
+                if data_type != "human_generated":
+                    continue
                 prompt = clean_text(item['prompt'])
                 label = clean_text(item['answers'][0]['answer'])
                 prefix = item['prefix']
