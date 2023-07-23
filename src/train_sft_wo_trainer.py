@@ -158,19 +158,19 @@ def main():
         dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
 
     # load model
-    if "glm" in args.model_name_or_path:
+    if "glm" in args.model_name_or_path.lower():
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
-        if "chatglm" in args.model_name_or_path:
+        if "chatglm" in args.model_name_or_path.lower():
             model = model.half()
     else:
         model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
 
     # load tokenizer and peft config
-    if "llama" in args.model_name_or_path or "vicuna" in args.model_name_or_path or "billa" in args.model_name_or_path:
+    if "llama" in args.model_name_or_path.lower() or "vicuna" in args.model_name_or_path.lower() or "billa" in args.model_name_or_path.lower():
         tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         target_modules = "q_proj,k_proj,v_proj"
         task_type = "CAUSAL_LM"
-    elif "pangu" in args.model_name_or_path:
+    elif "pangu" in args.model_name_or_path.lower():
         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         target_modules = "q_proj,k_proj,v_proj"
         task_type = "CAUSAL_LM"
@@ -178,17 +178,17 @@ def main():
         # model.config.pad_token_id = tokenizer.pad_token_id
         # model.config.bos_token_id = tokenizer.bos_token_id
         # model.config.eos_token_id = tokenizer.eos_token_id
-    elif "baichuan" in args.model_name_or_path:
+    elif "baichuan" in args.model_name_or_path.lower():
         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         target_modules = "W_pack"
         task_type = "CAUSAL_LM"
-    elif "bloom" in args.model_name_or_path or "tigerbot" in args.model_name_or_path:
+    elif "bloom" in args.model_name_or_path.lower() or "tigerbot" in args.model_name_or_path.lower():
         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         target_modules = "query_key_value"
         task_type = "CAUSAL_LM"
-    elif "glm" in args.model_name_or_path:
+    elif "glm" in args.model_name_or_path.lower():
         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-        if "chatglm2" in args.model_name_or_path:
+        if "chatglm2" in args.model_name_or_path.lower():
             tokenizer.eop_token_id = tokenizer.get_command("eop") if args.checkpoint is not None else tokenizer.get_command("<eos>")
         target_modules = "query_key_value"
         task_type = "SEQ_2_SEQ_LM"
@@ -315,7 +315,7 @@ def main():
                 prompt = test_data['prompt']
                 prefix = test_data['prefix']
                 # label = dev_data['label']
-                if "chatglm" in args.model_name_or_path:
+                if "chatglm" in args.model_name_or_path.lower():
                     encoded_prompt = tokenizer(prompt)
                     prompt_length = len(encoded_prompt['input_ids'])
                     inputs = tokenizer(prompt,
@@ -335,7 +335,7 @@ def main():
                                              top_k=args.top_k,
                                              top_p=args.top_p,
                                              temperature=args.temperature)
-                elif "glm" in args.model_name_or_path:
+                elif "glm" in args.model_name_or_path.lower():
                     encoded_prompt = tokenizer(prompt, prefix + tokenizer.mask_token)
                     prompt_length = len(encoded_prompt['input_ids'])
                     encoded_dict = tokenizer(prompt, prefix + tokenizer.mask_token,

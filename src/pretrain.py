@@ -133,7 +133,7 @@ def main():
         bnb_4bit_quant_type="nf4",
         bnb_4bit_compute_dtype=bnb_4bit_compute_dtype
     )
-    if "glm" in args.model_name_or_path:
+    if "glm" in args.model_name_or_path.lower():
         # encoder model structure
         if args.bits in [4, 8]:
             model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path,
@@ -155,25 +155,25 @@ def main():
             model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True).half()
 
     # load tokenizer and peft config
-    if "llama" in args.model_name_or_path or "vicuna" in args.model_name_or_path or "billa" in args.model_name_or_path:
+    if "llama" in args.model_name_or_path.lower() or "vicuna" in args.model_name_or_path.lower() or "billa" in args.model_name_or_path.lower():
         tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         target_modules = "q_proj,k_proj,v_proj"
         task_type = "CAUSAL_LM"
-    elif "pangu" in args.model_name_or_path:
+    elif "pangu" in args.model_name_or_path.lower():
         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         target_modules = "q_proj,k_proj,v_proj"
         task_type = "CAUSAL_LM"
-    elif "baichuan" in args.model_name_or_path:
+    elif "baichuan" in args.model_name_or_path.lower():
         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         target_modules = "W_pack"
         task_type = "CAUSAL_LM"
-    elif "bloom" in args.model_name_or_path or "tigerbot" in args.model_name_or_path:
+    elif "bloom" in args.model_name_or_path.lower() or "tigerbot" in args.model_name_or_path.lower():
         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         target_modules = "query_key_value"
         task_type = "CAUSAL_LM"
-    elif "glm" in args.model_name_or_path:
+    elif "glm" in args.model_name_or_path.lower():
         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-        if "chatglm2" in args.model_name_or_path:
+        if "chatglm2" in args.model_name_or_path.lower():
             tokenizer.eop_token_id = tokenizer.get_command("eop") if args.checkpoint is not None else tokenizer.get_command("<eos>")
         target_modules = "query_key_value"
         task_type = "SEQ_2_SEQ_LM"
@@ -315,7 +315,7 @@ def main():
                 prefix = test_data.get('prefix', None)
                 label = test_data.get('label', None)
                 encoded_prompt = tokenizer(prompt)
-                if "chatglm" in args.model_name_or_path:
+                if "chatglm" in args.model_name_or_path.lower():
                     inputs = tokenizer(prompt, max_length=args.max_length-args.max_length_generation,
                                        truncation="only_first",
                                        return_tensors="pt")
@@ -330,7 +330,7 @@ def main():
                                              top_p=args.top_p,
                                              temperature=args.temperature,
                                              repetition_penalty=args.repetition_penalty)
-                # elif "glm" in args.model_name_or_path:
+                # elif "glm" in args.model_name_or_path.lower():
                 #     encoded_prompt = tokenizer(prompt, prefix + tokenizer.mask_token)
                 #     prompt_length = len(encoded_prompt['input_ids'])
                 #     encoded_dict = tokenizer(prompt, prefix + tokenizer.mask_token,

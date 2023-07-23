@@ -1,5 +1,5 @@
 {
-  "_name_or_path": "THUDM/chatglm2-6b",
+  "model_type": "chatglm",
   "architectures": [
     "ChatGLMModel"
   ],

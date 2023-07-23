@@ -89,7 +89,7 @@ def main():
     # load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path, use_cache=False, trust_remote_code=True)
 
-    if "pangu" in args.model_name_or_path:
+    if "pangu" in args.model_name_or_path.lower():
         model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
         model.resize_token_embeddings(tokenizer.vocab_size)
         # model.config.end_token_id = tokenizer.eos_token_id
@@ -105,7 +105,7 @@ def main():
         reward_model = RewardModel(model.config, model.transformer, tokenizer)
         # reward_model = RewardModelWithLoRA(model.config, model.transformer, tokenizer)
         layers = reward_model.transformer.h
-    elif "chatglm" in args.model_name_or_path:
+    elif "chatglm" in args.model_name_or_path.lower():
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True).half()
         model.config.lora_rank = args.lora_rank
         model.config.lora_alpha = args.lora_alpha
@@ -115,8 +115,11 @@ def main():
         # Initialize the reward model from the (supervised) fine-tuned SFT model
         reward_model = RewardModel(model.config, model.transformer, tokenizer)
         # reward_model = RewardModelWithLoRA(model.config, model.glm, tokenizer)
-        layers = reward_model.transformer.layers
-    elif "glm" in args.model_name_or_path:
+        if "chatglm2" in args.model_name_or_path.lower():
+            layers = reward_model.transformer.encoder.layers
+        else:
+            layers = reward_model.transformer.layers
+    elif "glm" in args.model_name_or_path.lower():
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
         model.config.lora_rank = args.lora_rank
         model.config.lora_alpha = args.lora_alpha

@@ -122,7 +122,7 @@ def main():
         bnb_4bit_quant_type="nf4",
         bnb_4bit_compute_dtype=bnb_4bit_compute_dtype
     )
-    if "glm" in args.model_name_or_path:
+    if "glm" in args.model_name_or_path.lower():
         # encoder model structure
         if args.bits in [4, 8]:
             model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path,
@@ -142,7 +142,7 @@ def main():
                                                          device_map={"": args.local_rank})
         else:
             model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, trust_remote_code=True).half()
-        if "pangu" in args.model_name_or_path:
+        if "pangu" in args.model_name_or_path.lower():
             model.resize_token_embeddings(tokenizer.vocab_size)
 
     if args.checkpoint is not None:
@@ -211,7 +211,7 @@ def main():
                 for dev_data in tqdm(dev_dataset.post_list, desc="Generation"):
                     prompt = dev_data['prompt']
                     label = dev_data['label']
-                    if "glm" in args.model_name_or_path:
+                    if "glm" in args.model_name_or_path.lower():
                         prompt += tokenizer.mask_token
                         inputs = tokenizer(prompt, return_tensors="pt")
                         inputs = tokenizer.build_inputs_for_generation(inputs, max_gen_length=args.max_length + args.max_length_generation)
@@ -266,9 +266,9 @@ def main():
                 subject_name_key = dev_data['subject_name_key']
                 if subject_name_key not in results:
                     results[subject_name_key] = list()
-                if "chatglm" in args.model_name_or_path:
+                if "chatglm" in args.model_name_or_path.lower():
                     logits_processor = LogitsProcessorList()
-                    if "chatglm2" in args.model_name_or_path:
+                    if "chatglm2" in args.model_name_or_path.lower():
                         class InvalidScoreLogitsProcessor(LogitsProcessor):
                             def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
                                 if torch.isnan(scores).any() or torch.isinf(scores).any():
@@ -369,9 +369,9 @@ def main():
                 subject_name_key = dev_data['subject_name_key']
                 if subject_name_key not in results:
                     results[subject_name_key] = list()
-                if "chatglm" in args.model_name_or_path:
+                if "chatglm" in args.model_name_or_path.lower():
                     logits_processor = LogitsProcessorList()
-                    if "chatglm2" in args.model_name_or_path:
+                    if "chatglm2" in args.model_name_or_path.lower():
                         class InvalidScoreLogitsProcessor(LogitsProcessor):
                             def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
                                 if torch.isnan(scores).any() or torch.isinf(scores).any():
