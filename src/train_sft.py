@@ -46,6 +46,7 @@ def get_parser():
     
     parser.add_argument("--data_dir", type=str, required=True)
     parser.add_argument("--output_dir", type=str, required=True)
+    parser.add_argument("--tokenizer_path", type=str, required=True)
     parser.add_argument("--model_name_or_path", type=str, required=True)
 
     parser.add_argument("--seed", type=int, default=42)
