@@ -9,6 +9,8 @@ ROOT="/mnt/sfevol775196/sunzeye273"
 DATR_DIR=$ROOT/Data/chatgpt/processed
 #MAIN=$ROOT/Code/chatgpt/src/train_sft.py
 MAIN=$ROOT/Code/RLHF/src/train_sft.py
+TOKENIZER_PATH=$ROOT/Data/models/$MODEL
+#TOKENIZER_PATH=/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/$MODEL
 MODEL_PATH=$ROOT/Data/models/$MODEL
 #MODEL_PATH=/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/$MODEL
 OUTPUT_DIR=$ROOT/Data/chatgpt/output/sft/$MODEL
@@ -24,6 +26,7 @@ mkdir -p $OUTPUT_DIR
 CUDA_LAUNCH_BLOCKING=1 deepspeed $MAIN \
   --data_dir $DATR_DIR \
   --output_dir $OUTPUT_DIR \
+  --tokneizer_path $TOKENIZER_PATH \
   --model_name_or_path $MODEL_PATH \
   --max_length 512 \
   --logging_steps 10 \

@@ -133,41 +133,47 @@ def main():
         bnb_4bit_compute_dtype=bnb_4bit_compute_dtype
     )
     if "glm" in args.model_name_or_path.lower():
-        model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True,
-                                                      quantization_config=bnb_config, device_map={"": args.local_rank})
+        if args.bits in [4, 8]:
+            model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True,
+                                                          quantization_config=bnb_config, device_map={"": args.local_rank})
+        else:
+            model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True).half()
     else:
-        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True,
-                                                     quantization_config=bnb_config, device_map={"": args.local_rank})
+        if args.bits in [4, 8]:
+            model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True,
+                                                         quantization_config=bnb_config, device_map={"": args.local_rank})
+        else:
+            model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True).half()
 
     # load tokenizer and peft config
-    if "llama" in args.model_name_or_path.lower() or "vicuna" in args.model_name_or_path.lower() or "billa" in args.model_name_or_path.lower():
-        tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+    if "llama" in args.tokenizer_path.lower() or "vicuna" in args.tokenizer_path.lower() or "billa" in args.tokenizer_path.lower():
+        tokenizer = LlamaTokenizer.from_pretrained(args.tokenizer_path, use_cache=False, trust_remote_code=True)
         target_modules = "q_proj,k_proj,v_proj"
         task_type = "CAUSAL_LM"
-    elif "pangu" in args.model_name_or_path.lower():
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+    elif "pangu" in args.tokenizer_path.lower():
+        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path, use_cache=False, trust_remote_code=True)
         target_modules = "q_proj,k_proj,v_proj"
         task_type = "CAUSAL_LM"
         model.resize_token_embeddings(tokenizer.vocab_size)
         # model.config.pad_token_id = tokenizer.pad_token_id
         # model.config.bos_token_id = tokenizer.bos_token_id
         # model.config.eos_token_id = tokenizer.eos_token_id
-    elif "baichuan" in args.model_name_or_path.lower():
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+    elif "baichuan" in args.tokenizer_path.lower():
+        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path, use_cache=False, trust_remote_code=True)
         target_modules = "W_pack"
         task_type = "CAUSAL_LM"
-    elif "bloom" in args.model_name_or_path.lower() or "tigerbot" in args.model_name_or_path.lower():
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
+    elif "bloom" in args.tokenizer_path.lower() or "tigerbot" in args.tokenizer_path.lower():
+        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path, use_cache=False, trust_remote_code=True)
         target_modules = "query_key_value"
         task_type = "CAUSAL_LM"
-    elif "glm" in args.model_name_or_path.lower():
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-        if "chatglm2" in args.model_name_or_path.lower():
+    elif "glm" in args.tokenizer_path.lower():
+        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path, use_cache=False, trust_remote_code=True)
+        if "chatglm2" in args.tokenizer_path.lower():
             tokenizer.eop_token_id = tokenizer.get_command("eop") if args.checkpoint is not None else tokenizer.get_command("<eos>")
         target_modules = "query_key_value"
         task_type = "SEQ_2_SEQ_LM"
     else:
-        raise ValueError(f"Unsupported model name: {args.model_name_or_path}")
+        raise ValueError(f"Unsupported model name: {args.tokenizer_path}")
 
     if args.bits in [4, 8] and args.do_train:
         if args.gradient_checkpointing:
