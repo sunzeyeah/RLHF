@@ -14,12 +14,6 @@ import collections
 from tqdm import tqdm
 from torch.utils.data import DataLoader, SequentialSampler
 from torchmetrics.text.perplexity import Perplexity
-from transformers import (
-    AutoModelForCausalLM,
-    AutoModelForSeq2SeqLM,
-    AutoTokenizer,
-    BitsAndBytesConfig
-)
 from transformers.generation.logits_process import LogitsProcessor
 from transformers.generation.utils import LogitsProcessorList
 
@@ -37,7 +31,7 @@ from src.data.data import (
     CEvalDataset,
     MMLUDataset,
 )
-from src.utils import RESOURCE_PATH
+from src.utils import RESOURCE_PATH, load_tokenizer_and_model, load_checkpoint
 from src.utils.file_utils import set_seed, print_rank_0
 
 
@@ -73,6 +67,7 @@ def get_parser():
 
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--local_rank", type=int, default=-1)
+    parser.add_argument("--multi_card", action="store_true")
     parser.add_argument("--bits", type=int, default=16)
     parser.add_argument("--max_length", type=int, default=2048)
     parser.add_argument("--max_length_generation", type=int, default=1, help="Maximum number of newly generated tokens")
@@ -109,47 +104,11 @@ def main():
     set_seed(args.seed)
 
     # load model and tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-    if torch.cuda.is_available():
-        bf16 = torch.cuda.get_device_capability()[0] >= 8
-        bnb_4bit_compute_dtype = torch.bfloat16 if bf16 else torch.float16
-    else:
-        bnb_4bit_compute_dtype = None
-    bnb_config = BitsAndBytesConfig(
-        load_in_8bit=args.bits == 8,
-        load_in_4bit=args.bits == 4,
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=bnb_4bit_compute_dtype
-    )
-    if "glm" in args.model_name_or_path.lower():
-        # encoder model structure
-        if args.bits in [4, 8]:
-            model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path,
-                                                          # use_cache=False,
-                                                          trust_remote_code=True,
-                                                          quantization_config=bnb_config,
-                                                          device_map={"": args.local_rank})
-        else:
-            model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True).half()
-    else:
-        # decoder model sturcture
-        if args.bits in [4, 8]:
-            model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path,
-                                                         # use_cache=False,
-                                                         trust_remote_code=True,
-                                                         quantization_config=bnb_config,
-                                                         device_map={"": args.local_rank})
-        else:
-            model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, trust_remote_code=True).half()
-        if "pangu" in args.model_name_or_path.lower():
-            model.resize_token_embeddings(tokenizer.vocab_size)
+    tokenizer, model, eos_token_id = load_tokenizer_and_model(args)
 
     if args.checkpoint is not None:
         suffix = args.checkpoint.split(os.sep)[-2] + "_"
-        st = torch.load(args.checkpoint, map_location="cpu")
-        model.load_state_dict(st)
-        del st
+        load_checkpoint(args, model)
     else:
         suffix = ""
 
@@ -218,7 +177,7 @@ def main():
                         inputs = inputs.to(device)
                         outputs = model.generate(**inputs,
                                                  max_new_tokens=args.max_length_generation,
-                                                 eos_token_id=tokenizer.eop_token_id,
+                                                 eos_token_id=eos_token_id,
                                                  pad_token_id=tokenizer.pad_token_id,
                                                  do_sample=False,
                                                  num_return_sequences=args.num_return_sequences,

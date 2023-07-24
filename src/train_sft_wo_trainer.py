@@ -8,30 +8,17 @@ import os
 import argparse
 import evaluate
 import torch
-import loralib as lora
 import json
 import deepspeed
 
 from tqdm import tqdm
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    AutoModelForSeq2SeqLM,
-    LlamaTokenizer,
-)
 from torch.utils.data import RandomSampler, DistributedSampler, DataLoader
 from transformers.deepspeed import HfDeepSpeedConfig
-# from deepspeed.ops.adam import FusedAdam
-# from deepspeed.ops.adam import DeepSpeedCPUAdam
-from peft import (
-    LoraConfig,
-    get_peft_model
-)
 
 
-from src.utils import logger, RESOURCE_PATH
+from src.utils import logger, RESOURCE_PATH, load_tokenizer_and_model, load_checkpoint
 from src.data.data import SFTDataset
-from src.utils.file_utils import set_seed, print_rank_0, print_trainable_parameters
+from src.utils.file_utils import set_seed, print_rank_0
 from src.utils.modeling_utils import rotate_checkpoints, save_zero_three_model
 # from src.models import convert_to_lora_recursively
 
@@ -54,6 +41,8 @@ def get_parser():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--local_rank", type=int, default=-1)
     parser.add_argument("--max_length", type=int, default=1024)
+    parser.add_argument("--multi_card", action="store_true")
+    parser.add_argument("--bits", type=int, default=16)
     parser.add_argument("--max_length_generation", type=int, default=None)
     # parser.add_argument("--max_length_label", type=int, default=824)
     # train
@@ -157,62 +146,11 @@ def main():
         }
         dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
 
-    # load model
-    if "glm" in args.model_name_or_path.lower():
-        model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
-        if "chatglm" in args.model_name_or_path.lower():
-            model = model.half()
-    else:
-        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-
-    # load tokenizer and peft config
-    if "llama" in args.model_name_or_path.lower() or "vicuna" in args.model_name_or_path.lower() or "billa" in args.model_name_or_path.lower():
-        tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-        target_modules = "q_proj,k_proj,v_proj"
-        task_type = "CAUSAL_LM"
-    elif "pangu" in args.model_name_or_path.lower():
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-        target_modules = "q_proj,k_proj,v_proj"
-        task_type = "CAUSAL_LM"
-        model.resize_token_embeddings(tokenizer.vocab_size)
-        # model.config.pad_token_id = tokenizer.pad_token_id
-        # model.config.bos_token_id = tokenizer.bos_token_id
-        # model.config.eos_token_id = tokenizer.eos_token_id
-    elif "baichuan" in args.model_name_or_path.lower():
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-        target_modules = "W_pack"
-        task_type = "CAUSAL_LM"
-    elif "bloom" in args.model_name_or_path.lower() or "tigerbot" in args.model_name_or_path.lower():
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-        target_modules = "query_key_value"
-        task_type = "CAUSAL_LM"
-    elif "glm" in args.model_name_or_path.lower():
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-        if "chatglm2" in args.model_name_or_path.lower():
-            tokenizer.eop_token_id = tokenizer.get_command("eop") if args.checkpoint is not None else tokenizer.get_command("<eos>")
-        target_modules = "query_key_value"
-        task_type = "SEQ_2_SEQ_LM"
-    else:
-        raise ValueError(f"Unsupported model name: {args.model_name_or_path}")
-
-    if args.lora_rank > 0:
-        config = LoraConfig(
-            r=args.lora_rank,
-            lora_alpha=args.lora_alpha,
-            target_modules=target_modules.split(","),
-            lora_dropout=0.05,
-            bias=args.lora_train_bias,
-            task_type=task_type
-        )
-        model.enable_input_require_grads()
-        model = get_peft_model(model, config)
-        print_trainable_parameters(model)
-        # convert_to_lora_recursively(model, args.lora_rank, args.lora_alpha)
-        # lora.mark_only_lora_as_trainable(model, args.lora_train_bias)
+    # load tokenizer and model
+    tokenizer, model, eos_token_id = load_tokenizer_and_model(args)
 
     if args.checkpoint is not None:
-        st = torch.load(args.checkpoint, map_location="cpu")
-        res = model.load_state_dict(st, strict=False)
+        load_checkpoint(args, model, strict=False)
 
     print_rank_0(f"Finished loading model and tokenizer")
 

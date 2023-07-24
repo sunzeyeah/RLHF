@@ -24,7 +24,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import transformers
-import loralib as lora
 
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -47,8 +46,6 @@ from src.utils.modeling_utils import (
     hf_get_num_hidden_layers,
     make_head
 )
-# from src.models.lora import convert_to_lora_recursively
-from src.models.sft import SFTModelWithLoRA
 
 
 class PreTrainedModelWrapper(nn.Module, transformers.utils.PushToHubMixin):
@@ -499,11 +496,11 @@ class AutoModelForCausalLMWithHydraValueHead(AutoModelForCausalLMWithValueHead):
                 "Expected `str` or `transformers.PreTrainedModel`."
             )
         # TODO: add model.resize_token_embeddings(tokenizer.vocab_size)
-        config = from_pretrained_kwargs.get("config", None)
-        if config is not None:
-            base_model.config.lora_rank = config.train.lora_rank
-            base_model.config.lora_alpha = config.train.lora_alpha
-            base_model.config.lora_train_bias = config.train.lora_train_bias
+        # config = from_pretrained_kwargs.get("config", None)
+        # if config is not None:
+        #     base_model.config.lora_rank = config.train.lora_rank
+        #     base_model.config.lora_alpha = config.train.lora_alpha
+        #     base_model.config.lora_train_bias = config.train.lora_train_bias
 
         if isinstance(pretrained_model_name_or_path, str):
             filename = os.path.join(pretrained_model_name_or_path, "pytorch_model.bin")
@@ -554,7 +551,7 @@ class AutoModelForCausalLMWithHydraValueHead(AutoModelForCausalLMWithValueHead):
                 break
 
         if is_lora_checkpoint:
-            base_model = SFTModelWithLoRA(base_model.config, base_model)
+            # base_model = SFTModelWithLoRA(base_model.config, base_model)
             res = base_model.load_state_dict(state_dict, strict=False)
 
         model = cls(base_model, **wrapped_model_kwargs)
@@ -1099,9 +1096,9 @@ class AutoModelForSeq2SeqLMWithHydraValueHead(AutoModelForSeq2SeqLMWithValueHead
                 num_layers_unfrozen=self.num_layers_unfrozen,
             ).eval()
 
-        if base_model.config.lora_rank > 0:
-            convert_to_lora_recursively(base_model, base_model.config.lora_rank, base_model.config.lora_alpha)
-            lora.mark_only_lora_as_trainable(base_model, base_model.config.lora_train_bias)
+        # if base_model.config.lora_rank > 0:
+        #     convert_to_lora_recursively(base_model, base_model.config.lora_rank, base_model.config.lora_alpha)
+        #     lora.mark_only_lora_as_trainable(base_model, base_model.config.lora_train_bias)
 
     def forward_hydra(
             self,
@@ -1204,10 +1201,10 @@ class AutoModelForSeq2SeqLMWithHydraValueHead(AutoModelForSeq2SeqLMWithValueHead
             )
 
         config = from_pretrained_kwargs.get("config", None)
-        if config is not None:
-            base_model.config.lora_rank = config.train.lora_rank
-            base_model.config.lora_alpha = config.train.lora_alpha
-            base_model.config.lora_train_bias = config.train.lora_train_bias
+        # if config is not None:
+        #     base_model.config.lora_rank = config.train.lora_rank
+        #     base_model.config.lora_alpha = config.train.lora_alpha
+        #     base_model.config.lora_train_bias = config.train.lora_train_bias
 
         if isinstance(pretrained_model_name_or_path, str):
             filename = os.path.join(pretrained_model_name_or_path, "pytorch_model.bin")
@@ -1258,7 +1255,7 @@ class AutoModelForSeq2SeqLMWithHydraValueHead(AutoModelForSeq2SeqLMWithValueHead
                 break
 
         if is_lora_checkpoint:
-            base_model = SFTModelWithLoRA(base_model.config, base_model)
+            # base_model = SFTModelWithLoRA(base_model.config, base_model)
             res = base_model.load_state_dict(state_dict, strict=False)
 
         model = cls(base_model, **wrapped_model_kwargs)

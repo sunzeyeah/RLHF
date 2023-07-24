@@ -4,18 +4,19 @@ sys.path.insert(0, "/root/autodl-tmp/Code/RLHF")
 sys.path.insert(0, "/mnt/sfevol775196/sunzeye273/Code/chatgpt")
 # sys.path.insert(0, "/mnt/share-pa002-vol682688-prd/sunzeye273/Code/chatgpt")
 sys.path.insert(0, "/mnt/pa002-28359-vol543625-private/Code/chatgpt")
-import glob
 import os
 import torch
 import argparse
-import numpy as np
 
 from tqdm import tqdm
-from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments, AutoModelForSeq2SeqLM
+from transformers import (
+    Trainer,
+    TrainingArguments,
+)
 from torch.utils.data import DataLoader, SequentialSampler
 
 from src.models.reward import RewardModel
-from src.utils import logger, RESOURCE_PATH
+from src.utils import logger, RESOURCE_PATH, load_tokenizer_and_model, load_checkpoint
 from src.utils.file_utils import set_seed, print_rank_0
 from src.data.data import SFTDataset, PairwiseDataset, DataCollatorReward
 
@@ -31,6 +32,8 @@ def get_parser():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--local_rank", type=int, default=-1)
     parser.add_argument("--max_length", type=int, default=1024)
+    parser.add_argument("--multi_card", action="store_true")
+    parser.add_argument("--bits", type=int, default=16)
     # train
     parser.add_argument("--do_train", action="store_true")
     parser.add_argument("--train_filename", type=str, default=None)
@@ -87,65 +90,22 @@ def main():
     set_seed(args.seed)
 
     # load model and tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path, use_cache=False, trust_remote_code=True)
+    tokenizer, model, eos_token_id = load_tokenizer_and_model(args)
 
+    # Initialize the reward model from the (supervised) fine-tuned SFT model
     if "pangu" in args.model_name_or_path.lower():
-        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, use_cache=False, trust_remote_code=True)
-        model.resize_token_embeddings(tokenizer.vocab_size)
-        # model.config.end_token_id = tokenizer.eos_token_id
-        # model.config.pad_token_id = tokenizer.pad_token_id
-        # model.config.bos_token_id = tokenizer.bos_token_id
-        # model.config.eos_token_id = tokenizer.eos_token_id
-        model.config.lora_rank = args.lora_rank
-        model.config.lora_alpha = args.lora_alpha
-        model.config.lora_train_bias = args.lora_train_bias
-        model.config.target_modules = "q_proj,k_proj,v_proj"
-        model.config.task_type = "CAUSAL_LM"
-        # Initialize the reward model from the (supervised) fine-tuned SFT model
         reward_model = RewardModel(model.config, model.transformer, tokenizer)
-        # reward_model = RewardModelWithLoRA(model.config, model.transformer, tokenizer)
-        layers = reward_model.transformer.h
     elif "chatglm" in args.model_name_or_path.lower():
-        model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True).half()
-        model.config.lora_rank = args.lora_rank
-        model.config.lora_alpha = args.lora_alpha
-        model.config.lora_train_bias = args.lora_train_bias
-        model.config.target_modules = "query_key_value"
-        model.config.task_type = "SEQ_2_SEQ_LM"
-        # Initialize the reward model from the (supervised) fine-tuned SFT model
         reward_model = RewardModel(model.config, model.transformer, tokenizer)
-        # reward_model = RewardModelWithLoRA(model.config, model.glm, tokenizer)
-        if "chatglm2" in args.model_name_or_path.lower():
-            layers = reward_model.transformer.encoder.layers
-        else:
-            layers = reward_model.transformer.layers
     elif "glm" in args.model_name_or_path.lower():
-        model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path, trust_remote_code=True)
-        model.config.lora_rank = args.lora_rank
-        model.config.lora_alpha = args.lora_alpha
-        model.config.lora_train_bias = args.lora_train_bias
-        model.config.target_modules = "query_key_value"
-        model.config.task_type = "SEQ_2_SEQ_LM"
-        # Initialize the reward model from the (supervised) fine-tuned SFT model
         reward_model = RewardModel(model.config, model.glm, tokenizer)
-        # reward_model = RewardModelWithLoRA(model.config, model.glm, tokenizer)
-        layers = reward_model.transformer.transformer.layers
     else:
         raise ValueError(f"Unsupported model name: {args.model_name_or_path}")
     assert model.config.pad_token_id == tokenizer.pad_token_id
 
-    # Freeze the first 70% of the hidden layers of the reward model backbone
-    num_layers = len(layers)
-    num_frozen = int(args.freeze_ratio * num_layers)
-    for layer in layers[:num_frozen]:
-        layer.requires_grad_(False)
-
     if args.checkpoint is not None:
-        checkpoints = glob.glob(args.checkpoint.replace("star", "*"))
-        st = dict()
-        for checkpoint in checkpoints:
-            st.update(torch.load(checkpoint, map_location="cpu"))
-        res = reward_model.load_state_dict(st, strict=False)
+        load_checkpoint(args, reward_model, strict=False)
+
     print_rank_0(f"Finished loading model and tokenizer")
 
     # Set up the datasets
