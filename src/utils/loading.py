@@ -154,36 +154,37 @@ def load_params_8bit_or_4bit(args, model: PreTrainedModel) -> Dict:
 
 def load_tokenizer_and_model(args) -> Tuple[PreTrainedTokenizer, PreTrainedModel, int]:
     # load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(os.path.join(args.model_path, args.model_name),
-                                              trust_remote_code=True)
+    tokenizer_path = args.tokenizer_path if hasattr(args, "tokenizer_path") else args.model_name_or_path
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, trust_remote_code=True)
+
     # set eop token
-    if "chatglm2" in args.model_name.lower():
+    if "chatglm2" in args.model_name_or_path.lower():
         eos_token_id = tokenizer.get_command("eop") if args.checkpoint is not None else tokenizer.get_command("<eos>")
-    elif "chatglm1_1" in args.model_name.lower():
+    elif "chatglm1_1" in args.model_name_or_path.lower():
         eos_token_id = tokenizer.eos_token_id
-    elif "chatglm" in args.model_name.lower():
+    elif "chatglm" in args.model_name_or_path.lower():
         eos_token_id = tokenizer.eop_token_id
-    elif "baichuan" in args.model_name.lower():
+    elif "baichuan" in args.model_name_or_path.lower():
         eos_token_id = tokenizer.bos_token_id if args.checkpoint is not None else tokenizer.eos_token_id
     else:
         eos_token_id = tokenizer.eos_token_id
 
     # load model and init pipeline
-    if "chatglm" in args.model_name.lower():
+    if "chatglm" in args.model_name_or_path.lower():
         model_class = AutoModelForSeq2SeqLM
     else:
         model_class = AutoModelForCausalLM
     # cpu
     if not torch.cuda.is_available():
-        model = model_class.from_pretrained(os.path.join(args.model_path, args.model_name),
+        model = model_class.from_pretrained(args.model_name_or_path,
                                             # use_cache=False,
                                             trust_remote_code=True)
     # 8bit or 4bit
     elif hasattr(args, "bits") and args.bits in [4, 8]:
-        config = AutoConfig.from_pretrained(os.path.join(args.model_path, args.model_name), trust_remote_code=True)
+        config = AutoConfig.from_pretrained(args.model_name_or_path, trust_remote_code=True)
         model = model_class.from_config(config, trust_remote_code=True)
         params = load_params_8bit_or_4bit(args, model)
-        model = model_class.from_pretrained(os.path.join(args.model_path, args.model_name),
+        model = model_class.from_pretrained(args.model_name_or_path,
                                             # use_cache=False,
                                             trust_remote_code=True,
                                             **params)
@@ -194,13 +195,15 @@ def load_tokenizer_and_model(args) -> Tuple[PreTrainedTokenizer, PreTrainedModel
     # multi gpu card
     elif hasattr(args, "multi_card") and args.multi_card:
         with init_empty_weights():
-            config = AutoConfig.from_pretrained(os.path.join(args.model_path, args.model_name), trust_remote_code=True)
+            config = AutoConfig.from_pretrained(args.model_name_or_path, trust_remote_code=True)
             model = model_class.from_config(config, trust_remote_code=True).half()
         model.tie_weights()
-        if "llama" in args.model_name.lower() or "baichuan" in args.model_name.lower() or "vicuna" in args.model_name.lower():
-            device_map = llama_and_baichuan_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
-        elif "chatglm" in args.model_name.lower():
-            device_map = chatglm_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
+        if "llama" in args.model_name_or_path.lower() or \
+            "baichuan" in args.model_name_or_path.lower() or \
+            "vicuna" in args.model_name_or_path.lower():
+            device_map = llama_and_baichuan_auto_configure_device_map(torch.cuda.device_count(), args.model_name_or_path.lower())
+        elif "chatglm" in args.model_name_or_path.lower():
+            device_map = chatglm_auto_configure_device_map(torch.cuda.device_count(), args.model_name_or_path.lower())
         else:
             #     max_memory = get_balanced_memory(model, dtype=torch.float16, low_zero=False,
             #                                      no_split_module_classes=model._no_split_modules)
@@ -209,13 +212,13 @@ def load_tokenizer_and_model(args) -> Tuple[PreTrainedTokenizer, PreTrainedModel
             device_map = "auto"
 
         model = load_checkpoint_and_dispatch(model,
-                                             checkpoint=os.path.join(args.model_path, args.model_name),
+                                             checkpoint=args.model_name_or_path,
                                              device_map=device_map,
                                              no_split_module_classes=model._no_split_modules)
     # single gpu card
     else:
         device = f"cuda:{args.local_rank}"
-        model = model_class.from_pretrained(os.path.join(args.model_path, args.model_name),
+        model = model_class.from_pretrained(args.model_name_or_path,
                                             # use_cache=False,
                                             trust_remote_code=True,
                                             device_map={"": args.local_rank}).half().to(device)
