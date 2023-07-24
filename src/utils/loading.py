@@ -44,7 +44,7 @@ except ImportError:
     _trainer_unavailble("NeMoILQLTrainer")
 
 
-def chatglm_auto_configure_device_map(num_gpus: int, model_name: str) -> Dict[str, int]:
+def chatglm_auto_configure_device_map(num_gpus: int, model_name: str, local_rank: int = 0) -> Dict[str, int]:
     # transformer.word_embeddings 占用1层
     # transformer.final_layernorm 和 lm_head 占用1层
     # transformer.layers 占用 28 层
@@ -63,31 +63,35 @@ def chatglm_auto_configure_device_map(num_gpus: int, model_name: str) -> Dict[st
     encode = ""
     if 'chatglm2' in model_name:
         device_map = {
-            f"{layer_prefix}.embedding.word_embeddings": 0,
-            f"{layer_prefix}.rotary_pos_emb": 0,
-            f"{layer_prefix}.output_layer": 0,
-            f"{layer_prefix}.encoder.final_layernorm": 0,
-            f"base_model.model.output_layer": 0
+            f"{layer_prefix}.embedding.word_embeddings": local_rank,
+            f"{layer_prefix}.rotary_pos_emb": local_rank,
+            f"{layer_prefix}.output_layer": local_rank,
+            f"{layer_prefix}.encoder.final_layernorm": local_rank,
+            f"base_model.model.output_layer": local_rank,
         }
         encode = ".encoder"
     else:
-        device_map = {f'{layer_prefix}.word_embeddings': 0,
-                      f'{layer_prefix}.final_layernorm': 0, 'lm_head': 0,
-                      f'base_model.model.lm_head': 0, }
+        device_map = {
+            f'{layer_prefix}.word_embeddings': local_rank,
+            f'{layer_prefix}.final_layernorm': local_rank,
+            'lm_head': local_rank,
+            f'base_model.model.lm_head': local_rank,
+        }
     used = 2
     gpu_target = 0
+    # TODO: Assuming CUDA device index is consecutive, e.g. cuda:0, cuda:1, cuda:2
     for i in range(num_hidden_layers):
         if used >= layers_per_gpu + (gpu_target % 2):
             gpu_target += 1
             gpu_target %= num_gpus
             used = 0
-        device_map[f'{layer_prefix}{encode}.layers.{i}'] = gpu_target
+        device_map[f'{layer_prefix}{encode}.layers.{i}'] = gpu_target + local_rank
         used += 1
 
     return device_map
 
 
-def llama_and_baichuan_auto_configure_device_map(num_gpus: int, model_name: str) -> Dict[str, int]:
+def llama_and_baichuan_auto_configure_device_map(num_gpus: int, model_name: str, local_rank: int = 0) -> Dict[str, int]:
     layer_prefix = 'model'
     # model.embed_tokens 占用1层
     # model.norm 和 lm_head 占用1层
@@ -101,18 +105,21 @@ def llama_and_baichuan_auto_configure_device_map(num_gpus: int, model_name: str)
         raise ValueError(f"Only supports baichuan-7B, baichuan-13B, llama-7B and llama-13B, but {model_name} is provided")
 
     layers_per_gpu = (num_hidden_layers+2) // num_gpus
-    device_map = {f'{layer_prefix}.embed_tokens': 0,
-                  f'{layer_prefix}.norm': 0,
-                  'lm_head': 0,
-                  f'base_model.model.lm_head': 0, }
+    device_map = {
+        f'{layer_prefix}.embed_tokens':  local_rank,
+        f'{layer_prefix}.norm': local_rank,
+        'lm_head': local_rank,
+        f'base_model.model.lm_head': local_rank,
+    }
     used = 2
     gpu_target = 0
+    # TODO: Assuming CUDA device index is consecutive, e.g. cuda:0, cuda:1, cuda:2
     for i in range(num_hidden_layers):
         if used >= layers_per_gpu + (gpu_target % 2):
             gpu_target += 1
             gpu_target %= num_gpus
             used = 0
-        device_map[f'{layer_prefix}.layers.{i}'] = gpu_target
+        device_map[f'{layer_prefix}.layers.{i}'] = gpu_target + local_rank
         used += 1
 
     return device_map
@@ -201,9 +208,17 @@ def load_tokenizer_and_model(args) -> Tuple[PreTrainedTokenizer, PreTrainedModel
         if "llama" in args.model_name_or_path.lower() or \
             "baichuan" in args.model_name_or_path.lower() or \
             "vicuna" in args.model_name_or_path.lower():
-            device_map = llama_and_baichuan_auto_configure_device_map(torch.cuda.device_count(), args.model_name_or_path.lower())
+            device_map = llama_and_baichuan_auto_configure_device_map(
+                torch.cuda.device_count(),
+                args.model_name_or_path.lower(),
+                args.local_rank
+            )
         elif "chatglm" in args.model_name_or_path.lower():
-            device_map = chatglm_auto_configure_device_map(torch.cuda.device_count(), args.model_name_or_path.lower())
+            device_map = chatglm_auto_configure_device_map(
+                torch.cuda.device_count(),
+                args.model_name_or_path.lower(),
+                args.local_rank
+            )
         else:
             #     max_memory = get_balanced_memory(model, dtype=torch.float16, low_zero=False,
             #                                      no_split_module_classes=model._no_split_modules)

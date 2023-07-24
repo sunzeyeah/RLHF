@@ -30,7 +30,7 @@ def get_parser():
     parser.add_argument("--tokenizer_path", type=str, required=True)
 
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--local_rank", type=int, default=-1)
+    parser.add_argument("--local_rank", type=int, default=0)
     parser.add_argument("--max_length", type=int, default=1024)
     parser.add_argument("--multi_card", action="store_true")
     parser.add_argument("--bits", type=int, default=16)

@@ -66,7 +66,7 @@ def get_parser():
     parser.add_argument("--task", type=str, required=True)
 
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--local_rank", type=int, default=-1)
+    parser.add_argument("--local_rank", type=int, default=0)
     parser.add_argument("--multi_card", action="store_true")
     parser.add_argument("--bits", type=int, default=16)
     parser.add_argument("--max_length", type=int, default=2048)
@@ -151,8 +151,6 @@ def main():
         return f1
 
     device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
-    if args.bits not in [4, 8]:
-        model = model.to(device)
     model.eval()
 
     if args.train_filename is None:
