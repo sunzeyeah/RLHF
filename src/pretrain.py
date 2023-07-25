@@ -39,8 +39,12 @@ def get_parser():
 
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--local_rank", type=int, default=0)
-    parser.add_argument("--multi_card", action="store_true")
+    # parser.add_argument("--multi_card", action="store_true")
     parser.add_argument("--bits", type=int, default=32)
+    parser.add_argument("--device_map", type=str, default=None, help="device map to allocate model,"
+                                                                     "[None] means cpu"
+                                                                     "[0, 1, 2, ...], number means single-card"
+                                                                     "[auto, balanced, balanced_low_0] means multi-card")
     parser.add_argument("--max_length", type=int, default=1024)
     # train
     parser.add_argument("--do_train", action="store_true")
@@ -210,8 +214,8 @@ def main():
 
     if args.do_pred:
         device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
-        if args.bits not in [4, 8]:
-            model = model.to(device)
+        # if args.bits not in [4, 8]:
+        #     model = model.to(device)
         model.eval()
         # tokenizer.padding_side = "left"
         if args.test_filename is not None:

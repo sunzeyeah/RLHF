@@ -181,66 +181,84 @@ def load_tokenizer_and_model(args) -> Tuple[PreTrainedTokenizer, PreTrainedModel
         model_class = AutoModelForSeq2SeqLM
     else:
         model_class = AutoModelForCausalLM
-    # cpu
-    if not torch.cuda.is_available():
-        model = model_class.from_pretrained(args.model_name_or_path,
-                                            # use_cache=False,
-                                            trust_remote_code=True)
-    # 8bit or 4bit
-    elif hasattr(args, "bits") and args.bits in [4, 8]:
-        config = AutoConfig.from_pretrained(args.model_name_or_path, trust_remote_code=True)
-        model = model_class.from_config(config, trust_remote_code=True)
-        params = load_params_8bit_or_4bit(args, model)
-        model = model_class.from_pretrained(args.model_name_or_path,
-                                            # use_cache=False,
-                                            trust_remote_code=True,
-                                            **params)
-        if args.do_train:
-            if args.gradient_checkpointing:
-                model.gradient_checkpointing_enable()
-            model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=args.gradient_checkpointing)
-    # multi gpu card
-    elif hasattr(args, "multi_card") and args.multi_card:
-        with init_empty_weights():
-            config = AutoConfig.from_pretrained(args.model_name_or_path, trust_remote_code=True)
-            model = model_class.from_config(config, trust_remote_code=True).half()
-        model.tie_weights()
-        if "llama" in args.model_name_or_path.lower() or \
-            "baichuan" in args.model_name_or_path.lower() or \
-            "vicuna" in args.model_name_or_path.lower():
-            device_map = llama_and_baichuan_auto_configure_device_map(
-                torch.cuda.device_count(),
-                args.model_name_or_path.lower(),
-                args.local_rank
-            )
-        elif "chatglm" in args.model_name_or_path.lower():
-            device_map = chatglm_auto_configure_device_map(
-                torch.cuda.device_count(),
-                args.model_name_or_path.lower(),
-                args.local_rank
-            )
-        else:
-            #     max_memory = get_balanced_memory(model, dtype=torch.float16, low_zero=False,
-            #                                      no_split_module_classes=model._no_split_modules)
-            #     device_map = infer_auto_device_map(model, dtype=torch.float16, max_memory=max_memory,
-            #                                        no_split_module_classes=model._no_split_modules)
-            device_map = "auto"
 
-        model = load_checkpoint_and_dispatch(model,
-                                             checkpoint=args.model_name_or_path,
-                                             device_map=device_map,
-                                             no_split_module_classes=model._no_split_modules)
-    # single gpu card
+    if torch.cuda.is_available():
+        dtype = torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch.float16
     else:
-        device = f"cuda:{args.local_rank}"
-        model = model_class.from_pretrained(args.model_name_or_path,
-                                            # use_cache=False,
-                                            trust_remote_code=True,
-                                            device_map={"": args.local_rank}).half().to(device)
+        dtype = torch.float32
+    params = {
+        "trust_remote_code": True,
+        "device_map": args.device_map,
+        "torch_dtype": dtype,
+        "load_in_8bit": hasattr(args, "bits") and args.bits == 8,
+        "load_in_4bit": hasattr(args, "bits") and args.bits == 4,
+        # "quantization_config": bnb_config,
+        "low_cpu_mem_usage": True,
+    }
+    model = model_class.from_pretrained(args.model_name_or_path,
+                                        **params)
+    # # cpu
+    # if not torch.cuda.is_available():
+    #     model = model_class.from_pretrained(args.model_name_or_path,
+    #                                         trust_remote_code=True)
+    # # 8bit or 4bit
+    # elif hasattr(args, "bits") and args.bits in [4, 8]:
+    #     config = AutoConfig.from_pretrained(args.model_name_or_path, trust_remote_code=True)
+    #     model = model_class.from_config(config, trust_remote_code=True)
+    #     params = load_params_8bit_or_4bit(args, model)
+    #     model = model_class.from_pretrained(args.model_name_or_path,
+    #                                         trust_remote_code=True,
+    #                                         **params)
+    #     if args.do_train:
+    #         if args.gradient_checkpointing:
+    #             model.gradient_checkpointing_enable()
+    #         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=args.gradient_checkpointing)
+    # # multi gpu card
+    # elif hasattr(args, "multi_card") and args.multi_card:
+    #     with init_empty_weights():
+    #         config = AutoConfig.from_pretrained(args.model_name_or_path, trust_remote_code=True)
+    #         model = model_class.from_config(config, trust_remote_code=True).half()
+    #     model.tie_weights()
+    #     if "llama" in args.model_name_or_path.lower() or \
+    #         "baichuan" in args.model_name_or_path.lower() or \
+    #         "vicuna" in args.model_name_or_path.lower():
+    #         device_map = llama_and_baichuan_auto_configure_device_map(
+    #             torch.cuda.device_count(),
+    #             args.model_name_or_path.lower(),
+    #             args.local_rank
+    #         )
+    #     elif "chatglm" in args.model_name_or_path.lower():
+    #         device_map = chatglm_auto_configure_device_map(
+    #             torch.cuda.device_count(),
+    #             args.model_name_or_path.lower(),
+    #             args.local_rank
+    #         )
+    #     else:
+    #         #     max_memory = get_balanced_memory(model, dtype=torch.float16, low_zero=False,
+    #         #                                      no_split_module_classes=model._no_split_modules)
+    #         #     device_map = infer_auto_device_map(model, dtype=torch.float16, max_memory=max_memory,
+    #         #                                        no_split_module_classes=model._no_split_modules)
+    #         device_map = "auto"
+    #
+    #     model = load_checkpoint_and_dispatch(model,
+    #                                          checkpoint=args.model_name_or_path,
+    #                                          device_map=device_map,
+    #                                          no_split_module_classes=model._no_split_modules,
+    #                                          dtype=torch.float16)
+    # # single gpu card
+    # else:
+    #     model = model_class.from_pretrained(args.model_name_or_path,
+    #                                         trust_remote_code=True,
+    #                                         torch_dtype=torch.float16,
+    #                                         device_map={"": args.local_rank})
 
     # post-loading operations
     if "pangu" in args.model_name_or_path.lower():
         model.resize_token_embeddings(tokenizer.vocab_size)
+    if hasattr(args, "bits") and args.bits in [4, 8] and args.do_train:
+        if args.gradient_checkpointing:
+            model.gradient_checkpointing_enable()
+        model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=args.gradient_checkpointing)
 
     # init peft model (if necessary)
     if hasattr(args, "lora_rank") and args.lora_rank > 0:

@@ -41,10 +41,13 @@ def get_parser():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--local_rank", type=int, default=0)
     parser.add_argument("--max_length", type=int, default=1024)
-    parser.add_argument("--multi_card", action="store_true")
+    # parser.add_argument("--multi_card", action="store_true")
     parser.add_argument("--bits", type=int, default=16)
+    parser.add_argument("--device_map", type=str, default=None, help="device map to allocate model,"
+                                                                     "[None] means cpu"
+                                                                     "[0, 1, 2, ...], number means single-card"
+                                                                     "[auto, balanced, balanced_low_0] means multi-card")
     parser.add_argument("--max_length_generation", type=int, default=None)
-    # parser.add_argument("--max_length_label", type=int, default=824)
     # train
     parser.add_argument("--do_train", action="store_true")
     parser.add_argument("--train_filename", type=str, default=None)
@@ -99,16 +102,12 @@ def get_parser():
 
 def main():
     args = get_parser()
-
-    if args.local_rank == -1:
-        device = torch.device("cuda")
-    else:
-        torch.cuda.set_device(args.local_rank)
-        device = torch.device("cuda", args.local_rank)
-
     print_rank_0(f"Parameters: {args}")
 
     set_seed(args.seed)
+
+    torch.cuda.set_device(args.local_rank)
+    device = torch.device("cuda", args.local_rank)
 
     # create HfDeepSpeedConfig [must be called before instantiating model]
     if args.deepspeed_config is not None:
@@ -195,10 +194,7 @@ def main():
                                                 # lr_scheduler=lr_scheduler,
                                                 config=ds_config)
         # create data loader
-        if args.local_rank == -1:
-            train_sampler = RandomSampler(train_dataset)
-        else:
-            train_sampler = DistributedSampler(train_dataset)
+        train_sampler = DistributedSampler(train_dataset)
         train_dataloader = DataLoader(
             train_dataset,
             # collate_fn=data_collator,

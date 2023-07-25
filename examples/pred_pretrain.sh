@@ -22,7 +22,7 @@ mkdir -p $OUTPUT_DIR
 
 #CUDA_VISIBLE_DEVICES=1 deepspeed --master_port 5008 $MAIN \
 python $MAIN \
-  --local_rank 0 \
+  --device_map "auto" \
   --data_dir $DATR_DIR \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_PATH \

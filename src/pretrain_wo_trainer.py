@@ -53,8 +53,12 @@ def get_parser():
     parser.add_argument("--local_rank", type=int, default=0)
     parser.add_argument("--max_length", type=int, default=1024)
     parser.add_argument("--max_length_generation", type=int, default=None)
-    parser.add_argument("--multi_card", action="store_true")
+    # parser.add_argument("--multi_card", action="store_true")
     parser.add_argument("--bits", type=int, default=32)
+    parser.add_argument("--device_map", type=str, default=None, help="device map to allocate model,"
+                                                                     "[None] means cpu"
+                                                                     "[0, 1, 2, ...], number means single-card"
+                                                                     "[auto, balanced, balanced_low_0] means multi-card")
     # train
     parser.add_argument("--do_train", action="store_true")
     parser.add_argument("--train_filename", type=str, default=None)
@@ -197,16 +201,12 @@ def pred(args, model, tokenizer, device, eos_token_id, step=-1):
 
 def main():
     args = get_parser()
-
-    if args.local_rank == -1:
-        device = torch.device("cuda")
-    else:
-        torch.cuda.set_device(args.local_rank)
-        device = torch.device("cuda", args.local_rank)
-
     print_rank_0(f"Parameters: {args}")
 
     set_seed(args.seed)
+
+    torch.cuda.set_device(args.local_rank)
+    device = torch.device("cuda", args.local_rank)
 
     # load quantization config
     if torch.cuda.is_available():
@@ -304,10 +304,7 @@ def main():
         print_gpu_utilization("after deepspeed.initialize()", args.local_rank)
 
         # create data loader
-        if args.local_rank == -1:
-            train_sampler = RandomSampler(train_dataset)
-        else:
-            train_sampler = DistributedSampler(train_dataset)
+        train_sampler = DistributedSampler(train_dataset)
         train_dataloader = DataLoader(
             train_dataset,
             # collate_fn=data_collator,
@@ -315,10 +312,7 @@ def main():
             batch_size=args.train_batch_size)
 
         if args.do_eval:
-            if args.local_rank == -1:
-                eval_sampler = SequentialSampler(eval_dataset)
-            else:
-                eval_sampler = DistributedSampler(eval_dataset)
+            eval_sampler = DistributedSampler(eval_dataset)
             eval_dataloader = DataLoader(
                 eval_dataset,
                 # collate_fn=data_collator,
