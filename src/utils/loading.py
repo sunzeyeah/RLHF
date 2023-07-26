@@ -159,12 +159,12 @@ def load_params_8bit_or_4bit(args, model: PreTrainedModel) -> Dict:
     return params
 
 
-def load_tokenizer_and_model(args) -> Tuple[PreTrainedTokenizer, PreTrainedModel, int]:
+def load_tokenizer_and_model(args, with_trainer: bool = True) -> Tuple[PreTrainedTokenizer, PreTrainedModel, int]:
     # load tokenizer
     tokenizer_path = args.tokenizer_path if hasattr(args, "tokenizer_path") else args.model_name_or_path
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, trust_remote_code=True)
 
-    # set eop token
+    # set eos token
     if "chatglm2" in args.model_name_or_path.lower():
         eos_token_id = tokenizer.get_command("eop") if args.checkpoint is not None else tokenizer.get_command("<eos>")
     elif "chatglm1_1" in args.model_name_or_path.lower():
@@ -176,7 +176,7 @@ def load_tokenizer_and_model(args) -> Tuple[PreTrainedTokenizer, PreTrainedModel
     else:
         eos_token_id = tokenizer.eos_token_id
 
-    # load model and init pipeline
+    # load model
     if "chatglm" in args.model_name_or_path.lower():
         model_class = AutoModelForSeq2SeqLM
     else:
@@ -188,13 +188,14 @@ def load_tokenizer_and_model(args) -> Tuple[PreTrainedTokenizer, PreTrainedModel
         dtype = torch.float32
     params = {
         "trust_remote_code": True,
-        "device_map": args.device_map,
         "torch_dtype": dtype,
         "load_in_8bit": hasattr(args, "bits") and args.bits == 8,
         "load_in_4bit": hasattr(args, "bits") and args.bits == 4,
         # "quantization_config": bnb_config,
-        "low_cpu_mem_usage": True,
     }
+    if with_trainer:
+        params["device_map"] = args.device_map
+        params["low_cpu_mem_usage"] = True
     model = model_class.from_pretrained(args.model_name_or_path,
                                         **params)
     # # cpu

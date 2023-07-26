@@ -146,7 +146,7 @@ def main():
         dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
 
     # load tokenizer and model
-    tokenizer, model, eos_token_id = load_tokenizer_and_model(args)
+    tokenizer, model, eos_token_id = load_tokenizer_and_model(args, with_trainer=False)
 
     if args.checkpoint is not None:
         load_checkpoint(args, model, strict=False)
