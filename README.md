@@ -158,40 +158,42 @@ bash train_rlhf.sh
 
 <details>
 <summary><b>C-Eval 5-shot测试集(test)结果</b></summary>
-
 <table>
     <tr>  <td>Model</td>  <td>Avg</td>  <td>Avg(Hard)</td> <td>STEM</td> <td>Social Science</td> <td>Humanities</td> <td>Other</td> </tr>
-    <tr>  <td>LLaMA-7B</td>  <td>26.80</td>  <td>26.70</td>  <td>26.20</td>  <td>27.60</td>  <td>25.70</td>  <td>28.10</td> </tr>
-    <tr>  <td>Baichuan-7B</td>  <td>44.20</td>  <td>31.70</td>  <td>39.20</td>  <td>53.30</td>  <td>47.30</td>  <td>41.90</td> </tr>
-    <tr>  <td>Baichuan-13B-Chat</td>  <td>45.80</td>  <td>31.80</td>  <td>39.90</td>  <td>55.00</td>  <td>51.10</td>  <td>42.80</td> </tr>
-    <tr>  <td>Baichuan-13B-Base</td>  <td style="color:red"><b>52.70</b></td>  <td style="color:red"><b>35.90</b></td>  <td>46.20</td>  <td style="color:red"><b>65.30</b></td>  <td style="color:red"><b>56.50</b></td>  <td style="color:red"><b>49.50</b></td> </tr>    
-    <tr>  <td>Ziya-LLaMA-13B-Pretrain-v1</td>  <td>29.30</td>  <td>21.40</td>  <td>26.60</td>  <td>34.80</td>  <td>30.90</td>  <td>28.00</td> </tr>
-    <tr>  <td>ChatGLM-6B</td>  <td>36.30</td>  <td>27.20</td>  <td>32.90</td>  <td>42.80</td>  <td>38.10</td>  <td>34.90</td> </tr>
-    <tr>  <td>ChatGLM1.1-6B</td>  <td>38.10</td>  <td>28.60</td>  <td>33.60</td>  <td>46.70</td>  <td>40.90</td>  <td>35.70</td> </tr>
+    <tr>  <td>Baichuan-13B-Base</td>  <td style="color:red"><b>53.70</b></td>  <td style="color:red"><b>35.60</b></td>  <td>46.80</td>  <td style="color:red"><b>65.80</b></td>  <td style="color:red"><b>58.00</b></td>  <td style="color:red"><b>50.80</b></td> </tr>    
     <tr>  <td>ChatGLM2-6B</td>  <td>51.20</td>  <td>33.40</td>  <td style="color:red"><b>46.90</b></td>  <td>63.00</td>  <td>51.60</td>  <td>47.70</td> </tr>
+    <tr>  <td>Baichuan-13B-Chat</td>  <td>47.90</td>  <td>31.50</td>  <td>41.40</td>  <td>56.80</td>  <td>53.00</td>  <td>46.50</td> </tr>
+    <tr>  <td>Baichuan-7B</td>  <td>44.20</td>  <td>31.70</td>  <td>39.20</td>  <td>53.30</td>  <td>47.30</td>  <td>41.90</td> </tr>
+    <tr>  <td>Ziya-LLaMA-13B-v1.1</td>  <td>40.10</td>  <td>30.30</td>  <td>35.80</td>  <td>47.30</td>  <td>42.80</td>  <td>38.50</td> </tr>
+    <tr>  <td>ChatGLM1.1-6B</td>  <td>38.10</td>  <td>28.60</td>  <td>33.60</td>  <td>46.70</td>  <td>40.90</td>  <td>35.70</td> </tr>
+    <tr>  <td>AtomGPT-13B-56k</td>  <td>37.60</td>  <td>25.30</td>  <td>32.00</td>  <td>44.70</td>  <td>42.80</td>  <td>36.10</td> </tr>
+    <tr>  <td>LLaMA2-13B-chat</td>  <td>37.10</td>  <td>29.30</td>  <td>34.60</td>  <td>43.60</td>  <td>35.90</td>  <td>37.00</td> </tr>
+    <tr>  <td>ChatGLM-6B</td>  <td>36.30</td>  <td>27.20</td>  <td>32.90</td>  <td>42.80</td>  <td>38.10</td>  <td>34.90</td> </tr>
+    <tr>  <td>LLaMA2-7B-chat</td>  <td>33.50</td>  <td>27.30</td>  <td>31.60</td>  <td>38.10</td>  <td>33.80</td>  <td>32.70</td> </tr>
+    <tr>  <td>Ziya-LLaMA-13B-Pretrain-v1</td>  <td>31.10</td>  <td>22.20</td>  <td>27.40</td>  <td>36.50</td>  <td>33.80</td>  <td>30.40</td> </tr>
+    <tr>  <td>LLaMA-13B</td>  <td>29.8</td>  <td>24.20</td>  <td>28.40</td>  <td>33.70</td>  <td>29.60</td>  <td>29.00</td> </tr>
+    <tr>  <td>LLaMA-7B</td>  <td>26.80</td>  <td>26.70</td>  <td>26.20</td>  <td>27.60</td>  <td>25.70</td>  <td>28.10</td> </tr>
 </table>
-
-**PS**：Baichuan-13B和Ziya-13B均为4-bit下结果
-
 </details>
 
 <details>
 <summary><b>MMLU 5-shot测试集(test)结果</b></summary>
-
 <table>
     <tr>  <td>Model</td>  <td>Avg</td>  <td>STEM</td> <td>Social Science</td> <td>Humanities</td> <td>Other</td> </tr>
-    <tr>  <td>LLaMA-7B</td>  <td>28.53</td>  <td>26.10</td>  <td>28.76</td>  <td>28.52</td>  <td>24.81</td> </tr>
-    <tr>  <td>Baichuan-7B</td>  <td>41.96</td>  <td>36.63</td>  <td>47.77</td>  <td>37.55</td>  <td>48.31</td> </tr>
-    <tr>  <td>Baichuan-13B-Chat</td>  <td>49.90</td>  <td>41.48</td>  <td>57.10</td>  <td>46.60</td>  <td>56.32</td> </tr>
-    <tr>  <td>Baichuan-13B-Base</td>  <td style="color:red"><b>52.37</b></td>  <td style="color:red"><b>43.54</b></td>  <td style="color:red"><b>61.09</b></td>  <td style="color:red"><b>48.26</b></td>  <td style="color:red"><b>58.89</b></td> </tr>
-    <tr>  <td>Ziya-LLaMA-13B-Pretrain-v1</td>  <td>42.40</td>  <td>33.99</td>  <td>47.41</td>  <td>40.38</td>  <td>49.01</td> </tr>
-    <tr>  <td>ChatGLM-6B</td>  <td>37.87</td>  <td>32.41</td>  <td>43.80</td>  <td>35.60</td>  <td>41.00</td> </tr>
-    <tr>  <td>ChatGLM1.1-6B</td>  <td>40.07</td>  <td>32.95</td>  <td>44.55</td>  <td>39.23</td>  <td>44.12</td> </tr>
+    <tr>  <td>LLaMA2-13B-chat</td>  <td style="color:red"><b>53.98</b></td>  <td style="color:red"><b>44.52</b></td>  <td style="color:red"><b>63.40</b></td>  <td>49.37</td>  <td style="color:red"><b>61.21</b></td> </tr>
+    <tr>  <td>Baichuan-13B-Base</td>  <td>53.46</td>  <td>43.86</td>  <td>63.14</td>  <td style="color:red"><b>49.73</b></td>  <td>59.28</td> </tr>
+    <tr>  <td>Baichuan-13B-Chat</td>  <td>51.12</td>  <td>41.61</td>  <td>59.11</td>  <td>47.52</td>  <td>58.31</td> </tr>
+    <tr>  <td>Ziya-LLaMA-13B-v1.1</td>  <td>51.06</td>  <td>41.89</td>  <td>57.71</td>  <td>49.22</td>  <td>56.54</td> </tr>
+    <tr>  <td>LLaMA2-7B-chat</td>  <td>48.10</td>  <td>39.64</td>  <td>56.28</td>  <td>43.61</td>  <td>55.39</td> </tr>
+    <tr>  <td>LLaMA-13B</td>  <td>46.51</td>  <td>37.23</td>  <td>52.71</td>  <td>44.35</td>  <td>53.04</td> </tr>
     <tr>  <td>ChatGLM2-6B</td>  <td>45.83</td>  <td>38.75</td>  <td>52.06</td>  <td>43.20</td>  <td>50.82</td> </tr>
+    <tr>  <td>AtomGPT-13B-56k</td>  <td>42.75</td>  <td>36.02</td>  <td>49.04</td>  <td>38.80</td>  <td>49.30</td> </tr>
+    <tr>  <td>Baichuan-7B</td>  <td>41.96</td>  <td>36.63</td>  <td>47.77</td>  <td>37.55</td>  <td>48.31</td> </tr>
+    <tr>  <td>Ziya-LLaMA-13B-Pretrain-v1</td>  <td>41.61</td>  <td>33.61</td>  <td>46.01</td>  <td>39.85</td>  <td>48.05</td> </tr>
+    <tr>  <td>ChatGLM1.1-6B</td>  <td>40.07</td>  <td>32.95</td>  <td>44.55</td>  <td>39.23</td>  <td>44.12</td> </tr>
+    <tr>  <td>ChatGLM-6B</td>  <td>37.87</td>  <td>32.41</td>  <td>43.80</td>  <td>35.60</td>  <td>41.00</td> </tr>
+    <tr>  <td>LLaMA-7B</td>  <td>28.53</td>  <td>26.10</td>  <td>28.76</td>  <td>28.52</td>  <td>24.81</td> </tr>
 </table>
-
-**PS**：Baichuan-13B和Ziya-13B均为4-bit下结果
-
 </details>
 
 <details>
