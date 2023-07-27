@@ -169,6 +169,7 @@ bash train_rlhf.sh
     <tr>  <td>AtomGPT-13B-56k</td>  <td>37.60</td>  <td>25.30</td>  <td>32.00</td>  <td>44.70</td>  <td>42.80</td>  <td>36.10</td> </tr>
     <tr>  <td>LLaMA2-13B-chat</td>  <td>37.10</td>  <td>29.30</td>  <td>34.60</td>  <td>43.60</td>  <td>35.90</td>  <td>37.00</td> </tr>
     <tr>  <td>ChatGLM-6B</td>  <td>36.30</td>  <td>27.20</td>  <td>32.90</td>  <td>42.80</td>  <td>38.10</td>  <td>34.90</td> </tr>
+    <tr>  <td>LLaMA-30B</td>  <td>35.90</td>  <td>29.90</td>  <td>34.40</td>  <td>42.40</td>  <td>33.30</td>  <td>35.60</td> </tr>
     <tr>  <td>LLaMA2-7B-chat</td>  <td>33.50</td>  <td>27.30</td>  <td>31.60</td>  <td>38.10</td>  <td>33.80</td>  <td>32.70</td> </tr>
     <tr>  <td>Ziya-LLaMA-13B-Pretrain-v1</td>  <td>31.10</td>  <td>22.20</td>  <td>27.40</td>  <td>36.50</td>  <td>33.80</td>  <td>30.40</td> </tr>
     <tr>  <td>LLaMA-13B</td>  <td>29.8</td>  <td>24.20</td>  <td>28.40</td>  <td>33.70</td>  <td>29.60</td>  <td>29.00</td> </tr>
@@ -180,8 +181,9 @@ bash train_rlhf.sh
 <summary><b>MMLU 5-shot测试集(test)结果</b></summary>
 <table>
     <tr>  <td>Model</td>  <td>Avg</td>  <td>STEM</td> <td>Social Science</td> <td>Humanities</td> <td>Other</td> </tr>
-    <tr>  <td>LLaMA2-13B-chat</td>  <td style="color:red"><b>53.98</b></td>  <td style="color:red"><b>44.52</b></td>  <td style="color:red"><b>63.40</b></td>  <td>49.37</td>  <td style="color:red"><b>61.21</b></td> </tr>
-    <tr>  <td>Baichuan-13B-Base</td>  <td>53.46</td>  <td>43.86</td>  <td>63.14</td>  <td style="color:red"><b>49.73</b></td>  <td>59.28</td> </tr>
+    <tr>  <td>LLaMA-30B</td>  <td style="color:red"><b>56.33</b></td>  <td style="color:red"><b>44.68</b></td>  <td style="color:red"><b>65.64</b></td>  <td style="color:red"><b>54.60</b></td>  <td style="color:red"><b>61.57</b></td> </tr>
+    <tr>  <td>LLaMA2-13B-chat</td>  <td>53.98</td>  <td>44.52</td>  <td>63.40</td>  <td>49.37</td>  <td>61.21</td> </tr>
+    <tr>  <td>Baichuan-13B-Base</td>  <td>53.46</td>  <td>43.86</td>  <td>63.14</td>  <td>49.73</td>  <td>59.28</td> </tr>
     <tr>  <td>Baichuan-13B-Chat</td>  <td>51.12</td>  <td>41.61</td>  <td>59.11</td>  <td>47.52</td>  <td>58.31</td> </tr>
     <tr>  <td>Ziya-LLaMA-13B-v1.1</td>  <td>51.06</td>  <td>41.89</td>  <td>57.71</td>  <td>49.22</td>  <td>56.54</td> </tr>
     <tr>  <td>LLaMA2-7B-chat</td>  <td>48.10</td>  <td>39.64</td>  <td>56.28</td>  <td>43.61</td>  <td>55.39</td> </tr>
