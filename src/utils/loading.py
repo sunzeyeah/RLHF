@@ -13,6 +13,7 @@ from transformers import (
     PreTrainedModel,
     PreTrainedTokenizer,
 )
+from transformers.models.llama import LlamaModel
 from accelerate import init_empty_weights, infer_auto_device_map, load_checkpoint_and_dispatch
 from accelerate.utils import get_balanced_memory
 from peft import (
@@ -23,10 +24,9 @@ from peft import (
 
 from src.utils.file_utils import print_trainable_parameters
 from src.data.pipeline import _DATAPIPELINE
-# from trlx.pipeline.offline_pipeline import PromptPipeline
-
-# Register load trainers via module import
 from src.models.trainer import _TRAINERS, register_trainer
+from src.models.llama import _prepare_decoder_attention_mask
+# from trlx.pipeline.offline_pipeline import PromptPipeline
 # from trlx.trainer.accelerate_ilql_trainer import AccelerateILQLTrainer
 # from trlx.trainer.accelerate_ppo_trainer import AcceleratePPOTrainer
 # from trlx.trainer.accelerate_sft_trainer import AccelerateSFTTrainer
@@ -42,6 +42,10 @@ except ImportError:
         return register_trainer(name)(log_error)
 
     _trainer_unavailble("NeMoILQLTrainer")
+
+
+def prepare_decoder_attention_mask(self, **kwargs):
+    return _prepare_decoder_attention_mask(**kwargs)
 
 
 def chatglm_auto_configure_device_map(num_gpus: int, model_name: str, local_rank: int = 0) -> Dict[str, int]:
@@ -254,6 +258,9 @@ def load_tokenizer_and_model(args, with_trainer: bool = True) -> Tuple[PreTraine
     #                                         device_map={"": args.local_rank})
 
     # post-loading operations
+    if hasattr(args, "concat_samples") and args.concat_samples:
+        funcType = type(LlamaModel._prepare_decoder_attention_mask)
+        model.model._prepare_decoder_attention_mask = funcType(prepare_decoder_attention_mask, model.model, LlamaModel)
     if "pangu" in args.model_name_or_path.lower():
         model.resize_token_embeddings(tokenizer.vocab_size)
     if hasattr(args, "bits") and args.bits in [4, 8] and args.do_train:

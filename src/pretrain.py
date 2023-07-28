@@ -49,6 +49,7 @@ def get_parser():
     # train
     parser.add_argument("--do_train", action="store_true")
     parser.add_argument("--train_filename", type=str, default=None)
+    parser.add_argument("--concat_samples", action="store_true")
     parser.add_argument("--num_epochs", type=int, default=1)
     parser.add_argument("--learning_rate", type=float, default=1e-6)
     parser.add_argument("--lr_scheduler_type", type=str, default="cosine",
@@ -119,12 +120,12 @@ def main():
     # Set up the datasets
     if args.do_train:
         train_dataset = PretrainDataset(args, os.path.join(args.data_dir, args.train_filename),
-                                        tokenizer)
+                                        tokenizer, concat_samples=args.concat_sample)
     else:
         train_dataset = None
     if args.do_eval:
         dev_dataset = PretrainDataset(args, os.path.join(args.data_dir, args.eval_filename),
-                                      tokenizer)
+                                      tokenizer, concat_samples=False)
     else:
         dev_dataset = None
     # if args.do_pred:

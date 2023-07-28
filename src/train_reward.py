@@ -125,7 +125,7 @@ def main():
         val_dataset = None
     if args.do_pred:
         test_dataset = SFTDataset(args, os.path.join(args.data_dir, args.test_filename),
-                                  tokenizer)
+                                  tokenizer, concat_samples=False)
     else:
         test_dataset = None
 

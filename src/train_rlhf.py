@@ -135,7 +135,7 @@ def create_datasets(args, tokenizer_padding_from_left, ppo_ptx_enabled, tokenize
 
     if ppo_ptx_enabled:
         pretrain_dataset = SFTDataset(args, os.path.join(args.data_dir, args.pretrain_filename),
-                                      tokenizer_padding_from_right)
+                                      tokenizer_padding_from_right, concat_samples=False)
         iters_pretrain = len(pretrain_dataset) // args.train_batch_size
     else:
         pretrain_dataset = None
