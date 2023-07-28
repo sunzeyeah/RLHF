@@ -825,39 +825,16 @@ class ChatGLMForConditionalGeneration(ChatGLMPreTrainedModel):
         model_kwargs["is_first_forward"] = False
         return model_kwargs
 
-    def prepare_inputs_for_generation(
-            self,
-            input_ids: torch.LongTensor,
-            past_key_values: Optional[torch.Tensor] = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.Tensor] = None,
-            is_first_forward: bool = True,
-            **kwargs
-    ) -> dict:
-        # only last token for input_ids if past is not None
-        if position_ids is None:
-            position_ids = self.get_position_ids(input_ids, device=input_ids.device)
-        if not is_first_forward:
-            position_ids = position_ids[..., -1:]
-            input_ids = input_ids[:, -1:]
-        return {
-            "input_ids": input_ids,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-            "attention_mask": attention_mask,
-            "return_last_logit": True
-        }
-
     def forward(
             self,
             input_ids: Optional[torch.Tensor] = None,
             position_ids: Optional[torch.Tensor] = None,
             attention_mask: Optional[torch.Tensor] = None,
+            full_attention_mask: Optional[torch.Tensor] = None,
             past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
             inputs_embeds: Optional[torch.Tensor] = None,
             labels: Optional[torch.Tensor] = None,
             use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
             return_last_logit: Optional[bool] = False,
@@ -869,6 +846,7 @@ class ChatGLMForConditionalGeneration(ChatGLMPreTrainedModel):
             input_ids=input_ids,
             position_ids=position_ids,
             attention_mask=attention_mask,
+            full_attention_mask=full_attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -907,6 +885,29 @@ class ChatGLMForConditionalGeneration(ChatGLMPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+    def prepare_inputs_for_generation(
+            self,
+            input_ids: torch.LongTensor,
+            past_key_values: Optional[torch.Tensor] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            position_ids: Optional[torch.Tensor] = None,
+            is_first_forward: bool = True,
+            **kwargs
+    ) -> dict:
+        # only last token for input_ids if past is not None
+        if position_ids is None:
+            position_ids = self.get_position_ids(input_ids, device=input_ids.device)
+        if not is_first_forward:
+            position_ids = position_ids[..., -1:]
+            input_ids = input_ids[:, -1:]
+        return {
+            "input_ids": input_ids,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+            "attention_mask": attention_mask,
+            "return_last_logit": True
+        }
 
     @staticmethod
     def _reorder_cache(

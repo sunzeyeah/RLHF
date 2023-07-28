@@ -80,8 +80,8 @@ class PretrainDataset(Dataset):
         prompt = data['prompt']
         label = data.get('label', None)
         eos_ids = data.get('eos_ids', None)
-        if "llama" in self.model_name_or_path or "tigerbot" in self.model_name_or_path \
-                or "billa" in self.model_name_or_path or "baichuan" in self.model_name_or_path:
+        if "llama" in self.model_name_or_path.lower() or "tigerbot" in self.model_name_or_path.lower() \
+                or "billa" in self.model_name_or_path.lower() or "baichuan" in self.model_name_or_path.lower():
             encoded_dict = self.tokenizer(prompt,  max_length=self.args.max_length, return_tensors="pt",
                                           truncation="longest_first", #return_attention_mask=False,
                                           return_token_type_ids=False)
@@ -101,7 +101,7 @@ class PretrainDataset(Dataset):
                         # "attention_mask": combined_attention_mask,
                         "labels": encoded_dict['input_ids'][0],
             }
-        elif "vicuna" in self.model_name_or_path:
+        elif "vicuna" in self.model_name_or_path.lower():
             encoded_dict = self.tokenizer(prompt + "\n" + label,  max_length=self.args.max_length, return_tensors="pt",
                                           truncation="longest_first", #return_attention_mask=False,
                                           return_token_type_ids=False)
@@ -121,7 +121,7 @@ class PretrainDataset(Dataset):
                 # "attention_mask": combined_attention_mask,
                 "labels": encoded_dict['input_ids'][0],
             }
-        elif "pangu" in self.model_name_or_path:
+        elif "pangu" in self.model_name_or_path.lower():
             encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length, return_tensors="pt",
                                           truncation="longest_first", return_token_type_ids=False)
 
@@ -130,8 +130,27 @@ class PretrainDataset(Dataset):
                 "attention_mask": encoded_dict['attention_mask'],
                 "labels": encoded_dict['input_ids'],
             }
-        elif "chatglm" in self.model_name_or_path:
-            prompt = f"[Round {1}]\n问：{prompt}\n答："
+        elif "chatglm2" in self.model_name_or_path.lower():
+            prompt = f"[Round {1}]\n\n问：{prompt}\n\n答："
+            encoded_dict = self.tokenizer(prompt, label, max_length=self.args.max_length, return_tensors="pt",
+                                          truncation="longest_first", padding="max_length")
+            # # construct attention mask so that different samples cannot attend to each other
+            # combined_attention_mask = torch.full((self.args.max_length, self.args.max_length),
+            #                                      torch.tensor(torch.finfo(torch.float16).min))
+            # for i in range(len(eos_ids)-1):
+            #     attention_mask = torch.ones((1, eos_ids[i+1]-eos_ids[i]), dtype=torch.long)
+            #     attention_mask = _prepare_decoder_attention_mask(attention_mask, attention_mask.shape,
+            #                                                      torch.float16, "cpu", 0)
+            #     logger.debug(f"{i}-th sample, shape: {attention_mask.shape}, attention_mask: {attention_mask}")
+            #     combined_attention_mask[eos_ids[i]:eos_ids[i+1], eos_ids[i]:eos_ids[i+1]] = attention_mask
+            # logger.debug(f"shape: {combined_attention_mask.shape}, combined_attention_mask: {combined_attention_mask}")
+            return {
+                "input_ids": encoded_dict['input_ids'][0],
+                "labels": encoded_dict['input_ids'][0],
+                # "full_attention_mask": combined_attention_mask,
+            }
+        elif "chatglm" in self.model_name_or_path.lower():
+            prompt = f"[Round {0}]\n问：{prompt}\n答："
             # TODO: Temporary solution for chatglm pretraining, non-padding to be implemented
             encoded_dict = self.tokenizer(prompt, label, max_length=self.args.max_length, return_tensors="pt",
                                           truncation="longest_first", padding="max_length")
@@ -140,7 +159,7 @@ class PretrainDataset(Dataset):
                 "input_ids": encoded_dict['input_ids'][0],
                 "labels": encoded_dict['input_ids'][0],
             }
-        elif "glm" in self.model_name_or_path:
+        elif "glm" in self.model_name_or_path.lower():
             encoded_prompt = self.tokenizer(prompt, self.tokenizer.mask_token)
             prompt_length = len(encoded_prompt['input_ids'])
             label_length = len(self.tokenizer.tokenize(label)) + 1
@@ -189,7 +208,7 @@ class PretrainDataset(Dataset):
                 if len(content) <= 0:
                     discard += 1
                     continue
-                if "chatglm" in self.model_name_or_path:
+                if "chatglm" in self.model_name_or_path.lower():
                     datasets.append({"prompt": prompt, "label": label, "eos_ids": None})
                     continue
                 tokens = self.tokenizer.tokenize(content)
@@ -227,7 +246,7 @@ class SFTDataset(Dataset):
         prompt = data['prompt']
         label = data['label']
         prefix = data['prefix']
-        if "pangu" in self.model_name_or_path:
+        if "pangu" in self.model_name_or_path.lower():
             encoded_dict = self.tokenizer(prompt, prefix+label, max_length=self.args.max_length, return_tensors="pt",
                                           truncation="longest_first", padding="max_length", return_token_type_ids=False)
 
@@ -236,7 +255,7 @@ class SFTDataset(Dataset):
                 "attention_mask": encoded_dict['attention_mask'],
                 "labels": encoded_dict['input_ids'],
             }
-        elif "chatglm" in self.model_name_or_path:
+        elif "chatglm" in self.model_name_or_path.lower():
             prompt = f"[Round {1}]\n问：{prompt}\n答："
             encoded_dict = self.tokenizer(prompt, label, max_length=self.args.max_length, return_tensors="pt",
                                           truncation="longest_first", padding="max_length")
@@ -245,7 +264,7 @@ class SFTDataset(Dataset):
                 "input_ids": encoded_dict['input_ids'][0],
                 "labels": encoded_dict['input_ids'][0],
             }
-        elif "glm" in self.model_name_or_path:
+        elif "glm" in self.model_name_or_path.lower():
             encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
             prompt_length = len(encoded_prompt['input_ids'])
             label_length = len(self.tokenizer.tokenize(label)) + 1
@@ -1330,7 +1349,7 @@ class CEvalDataset(Dataset):
         for choice in self.choices:
             example += f'\n{choice}. {line[f"{choice}"]}'
         example += '\n答案：'
-        if "chatglm" in self.model_name_or_path:
+        if "chatglm" in self.model_name_or_path.lower():
             if include_answer:
                 if cot:
                     ans = "让我们一步一步思考，\n" + line["explanation"] + f"\n所以答案是{line['answer']}。"
@@ -1360,9 +1379,9 @@ class CEvalDataset(Dataset):
         prefix = f"以下是中国关于{subject_name}考试的单项选择题，请选出其中的正确答案。"
 
         history = []
-        if "chatglm" in self.model_name_or_path:
-            sep = "\n\n" if "chatglm2" in self.model_name_or_path else "\n"
-            offset = 1 if "chatglm2" in self.model_name_or_path else 0
+        if "chatglm" in self.model_name_or_path.lower():
+            sep = "\n\n" if "chatglm2" in self.model_name_or_path.lower() else "\n"
+            offset = 1 if "chatglm2" in self.model_name_or_path.lower() else 0
             # Few-Shot example construction
             if hasattr(self, "dev_list"):
                 history.append(prefix)
@@ -1467,7 +1486,7 @@ class MMLUDataset(Dataset):
         for choice in self.choices:
             example += f'\n{choice}. {line[f"{choice}"]}'
         example += '\nAnswer：'
-        if "chatglm" in self.model_name_or_path:
+        if "chatglm" in self.model_name_or_path.lower():
             if include_answer:
                 ans = line["answer"]
                 m = (example, ans)
@@ -1488,9 +1507,9 @@ class MMLUDataset(Dataset):
         prefix = f"The following are multiple choice questions (with answers) about {subject_name}."
 
         history = []
-        if "chatglm" in self.model_name_or_path:
-            sep = "\n\n" if "chatglm2" in self.model_name_or_path else "\n"
-            offset = 1 if "chatglm2" in self.model_name_or_path else 0
+        if "chatglm" in self.model_name_or_path.lower():
+            sep = "\n\n" if "chatglm2" in self.model_name_or_path.lower() else "\n"
+            offset = 1 if "chatglm2" in self.model_name_or_path.lower() else 0
             # Few-Shot example construction
             if hasattr(self, "dev_list"):
                 history.append(prefix)

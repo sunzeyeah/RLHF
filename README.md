@@ -138,7 +138,7 @@ cd examples
 bash train_sft.sh
 ```
 ### 4. Reward Model
-使用SFT模型 + SFT&Reward数据进行Reward模型训练。训练时，将SFT模型的前70%层固定，不进行梯度更新
+使用SFT模型 + SFT&Reward数据进行Reward模型训练
 ```bash
 cd examples
 bash train_reward.sh
