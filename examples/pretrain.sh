@@ -31,6 +31,7 @@ CUDA_LAUNCH_BLOCKING=1 deepspeed $MAIN \
   --learning_rate 3e-4 \
   --do_train \
   --train_filename $TRAIN_FILENAME \
+  --concat_samples \
   --num_epochs 2 \
   --train_batch_size 8 \
   --gradient_accumulation_steps 8 \
