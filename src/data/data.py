@@ -77,9 +77,10 @@ class PretrainDataset(Dataset):
 
     def __getitem__(self, idx):
         data = self.post_list[idx]
-        prompt = data['prompt']
+        prompt = data.get('prompt', None)
         label = data.get('label', None)
         eos_ids = data.get('eos_ids', None)
+        input_ids = data.get('input_ids', None)
         if "llama" in self.model_name_or_path.lower() or "tigerbot" in self.model_name_or_path.lower() \
                 or "billa" in self.model_name_or_path.lower() or "baichuan" in self.model_name_or_path.lower():
             encoded_dict = self.tokenizer(prompt,  max_length=self.args.max_length, return_tensors="pt",
@@ -131,23 +132,27 @@ class PretrainDataset(Dataset):
                 "labels": encoded_dict['input_ids'],
             }
         elif "chatglm2" in self.model_name_or_path.lower():
-            prompt = f"[Round {1}]\n\n问：{prompt}\n\n答："
-            encoded_dict = self.tokenizer(prompt, label, max_length=self.args.max_length, return_tensors="pt",
-                                          truncation="longest_first", padding="max_length")
-            # # construct attention mask so that different samples cannot attend to each other
-            # combined_attention_mask = torch.full((self.args.max_length, self.args.max_length),
-            #                                      torch.tensor(torch.finfo(torch.float16).min))
-            # for i in range(len(eos_ids)-1):
-            #     attention_mask = torch.ones((1, eos_ids[i+1]-eos_ids[i]), dtype=torch.long)
-            #     attention_mask = _prepare_decoder_attention_mask(attention_mask, attention_mask.shape,
-            #                                                      torch.float16, "cpu", 0)
-            #     logger.debug(f"{i}-th sample, shape: {attention_mask.shape}, attention_mask: {attention_mask}")
-            #     combined_attention_mask[eos_ids[i]:eos_ids[i+1], eos_ids[i]:eos_ids[i+1]] = attention_mask
-            # logger.debug(f"shape: {combined_attention_mask.shape}, combined_attention_mask: {combined_attention_mask}")
+            # prompt = f"[Round {1}]\n\n问：{prompt}\n\n答："
+            # encoded_dict = self.tokenizer(prompt, label, max_length=self.args.max_length, return_tensors="pt",
+            #                               truncation="longest_first", padding="max_length")
+            # return {
+            #     "input_ids": encoded_dict['input_ids'][0],
+            #     "labels": encoded_dict['input_ids'][0],
+            # }
+            # construct attention mask so that different samples cannot attend to each other
+            combined_attention_mask = torch.full((self.args.max_length, self.args.max_length),
+                                                 torch.tensor(torch.finfo(torch.float16).min))
+            for i in range(len(eos_ids)-1):
+                attention_mask = torch.ones((1, eos_ids[i+1]-eos_ids[i]), dtype=torch.long)
+                attention_mask = _prepare_decoder_attention_mask(attention_mask, attention_mask.shape,
+                                                                 torch.float16, "cpu", 0)
+                logger.debug(f"{i}-th sample, shape: {attention_mask.shape}, attention_mask: {attention_mask}")
+                combined_attention_mask[eos_ids[i]:eos_ids[i+1], eos_ids[i]:eos_ids[i+1]] = attention_mask
+            logger.debug(f"shape: {combined_attention_mask.shape}, combined_attention_mask: {combined_attention_mask}")
             return {
-                "input_ids": encoded_dict['input_ids'][0],
-                "labels": encoded_dict['input_ids'][0],
-                # "full_attention_mask": combined_attention_mask,
+                "input_ids": input_ids,
+                "labels": input_ids,
+                "full_attention_mask": combined_attention_mask,
             }
         elif "chatglm" in self.model_name_or_path.lower():
             prompt = f"[Round {0}]\n问：{prompt}\n答："
@@ -203,26 +208,42 @@ class PretrainDataset(Dataset):
                 item = json.loads(line)
                 prompt = item['prompt']
                 label = item.get('label', None)
-                content = prompt if label is None else "\n".join((prompt, label))
-                # if the length of a sample < max_lengnth, then concat multiple samples until reaching max_length
-                if len(content) <= 0:
+                if len(prompt) <= 0:
                     discard += 1
                     continue
-                if "chatglm" in self.model_name_or_path.lower():
+                # if the length of a sample < max_lengnth, then concat multiple samples until reaching max_length
+                if "chatglm2" in self.model_name_or_path.lower():
+                    prompt = f"[Round {1}]\n\n问：{prompt}\n\n答："
+                    token_ids = self.tokenizer.encode(prompt, label,
+                                                      max_length=self.args.max_length-length,
+                                                      truncation="longest_first")
+                    if length + len(token_ids) < self.args.max_length:
+                        data.extend(token_ids)
+                        length += len(token_ids)
+                        eos_ids.append(length)
+                    else:
+                        data.extend(token_ids)
+                        eos_ids.append(self.args.max_length)
+                        datasets.append({"input_ids": data, "eos_ids": eos_ids})
+                        data = []
+                        eos_ids = [0]
+                        length = 0
+                elif "chatglm" in self.model_name_or_path.lower():
                     datasets.append({"prompt": prompt, "label": label, "eos_ids": None})
-                    continue
-                tokens = self.tokenizer.tokenize(content)
-                if length + len(tokens) + 1 < self.args.max_length:
-                    data.append(content)
-                    length += len(tokens) + 1
-                    eos_ids.append(length)
                 else:
-                    data.append(content)
-                    eos_ids.append(self.args.max_length)
-                    datasets.append({"prompt": f" {self.tokenizer.bos_token} ".join(data), "eos_ids": eos_ids})
-                    data = []
-                    eos_ids = [0]
-                    length = 0
+                    content = prompt if label is None else "\n".join((prompt, label))
+                    tokens = self.tokenizer.tokenize(content)
+                    if length + len(tokens) + 1 < self.args.max_length:
+                        data.append(content)
+                        length += len(tokens) + 1
+                        eos_ids.append(length)
+                    else:
+                        data.append(content)
+                        eos_ids.append(self.args.max_length)
+                        datasets.append({"prompt": f" {self.tokenizer.bos_token} ".join(data), "eos_ids": eos_ids})
+                        data = []
+                        eos_ids = [0]
+                        length = 0
         print_rank_0(f"Finished loading {os.path.basename(filename)}, # samples: {len(datasets)}, # discarded: {discard}")
 
         return datasets
