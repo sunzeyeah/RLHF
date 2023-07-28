@@ -192,7 +192,7 @@ class CoreAttention(torch.nn.Module):
                 context_layer = torch.nn.functional.scaled_dot_product_attention(query_layer, key_layer, value_layer,
                                                                                  is_causal=True)
             else:
-                if attention_mask is not None:
+                if attention_mask is not None and attention_mask.dtype == torch.bool:
                     attention_mask = ~attention_mask
                 context_layer = torch.nn.functional.scaled_dot_product_attention(query_layer, key_layer, value_layer,
                                                                                  attention_mask)
@@ -243,7 +243,10 @@ class CoreAttention(torch.nn.Module):
                 attention_mask.tril_()
                 attention_mask = ~attention_mask
             if attention_mask is not None:
-                attention_scores = attention_scores.masked_fill(attention_mask, float("-inf"))
+                if attention_mask.dtype == torch.bool:
+                    attention_scores = attention_scores.masked_fill(attention_mask, float("-inf"))
+                else:
+                    attention_scores = attention_mask
             attention_probs = F.softmax(attention_scores, dim=-1)
             attention_probs = attention_probs.type_as(value_layer)
 
