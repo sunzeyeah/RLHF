@@ -81,7 +81,7 @@ class PretrainDataset(Dataset):
         if not self.concat_samples:
             prompt = data['prompt']
             label = data.get('label', None)
-            if "glm" in self.model_name_or_path.lower():
+            if "glm" in self.model_name_or_path.lower() and "chatglm" not in self.model_name_or_path.lower():
                 encoded_prompt = self.tokenizer(prompt, self.tokenizer.mask_token)
                 prompt_length = len(encoded_prompt['input_ids'])
                 label_length = len(self.tokenizer.tokenize(label)) + 1
@@ -149,7 +149,8 @@ class PretrainDataset(Dataset):
             for i in range(len(eos_ids)-1):
                 attention_mask = torch.ones((1, eos_ids[i+1]-eos_ids[i]), dtype=torch.long)
                 attention_mask = _prepare_decoder_attention_mask(attention_mask, attention_mask.shape,
-                                                                 torch.float16, "cpu", 0)
+                                                                 input_embeds=torch.ones(1, dtype=torch.float16, device="cpu"),
+                                                                 past_key_values_length=0)
                 logger.debug(f"{i}-th sample, shape: {attention_mask.shape}, attention_mask: {attention_mask}")
                 combined_attention_mask[eos_ids[i]:eos_ids[i+1], eos_ids[i]:eos_ids[i+1]] = attention_mask
             logger.debug(f"shape: {combined_attention_mask.shape}, combined_attention_mask: {combined_attention_mask}")
@@ -230,7 +231,7 @@ class SFTDataset(Dataset):
             prompt = data['prompt']
             label = data['label']
             prefix = data['prefix']
-            if "glm" in self.model_name_or_path.lower():
+            if "glm" in self.model_name_or_path.lower() and "chatglm" not in self.model_name_or_path.lower():
                 encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
                 prompt_length = len(encoded_prompt['input_ids'])
                 label_length = len(self.tokenizer.tokenize(label)) + 1
@@ -293,7 +294,8 @@ class SFTDataset(Dataset):
             for i in range(len(eos_ids)-1):
                 attention_mask = torch.ones((1, eos_ids[i+1]-eos_ids[i]), dtype=torch.long)
                 attention_mask = _prepare_decoder_attention_mask(attention_mask, attention_mask.shape,
-                                                                 torch.float16, "cpu", 0)
+                                                                 input_embeds=torch.ones(1, dtype=torch.float16, device="cpu"),
+                                                                 past_key_values_length=0)
                 logger.debug(f"{i}-th sample, shape: {attention_mask.shape}, attention_mask: {attention_mask}")
                 combined_attention_mask[eos_ids[i]:eos_ids[i+1], eos_ids[i]:eos_ids[i+1]] = attention_mask
             logger.debug(f"shape: {combined_attention_mask.shape}, combined_attention_mask: {combined_attention_mask}")

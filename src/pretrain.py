@@ -120,7 +120,7 @@ def main():
     # Set up the datasets
     if args.do_train:
         train_dataset = PretrainDataset(args, os.path.join(args.data_dir, args.train_filename),
-                                        tokenizer, concat_samples=args.concat_sample)
+                                        tokenizer, concat_samples=args.concat_samples)
     else:
         train_dataset = None
     if args.do_eval:

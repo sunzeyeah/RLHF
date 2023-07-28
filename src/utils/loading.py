@@ -1,4 +1,4 @@
-import os
+import types
 import torch
 import glob
 from typing import Callable, Dict, Tuple
@@ -44,8 +44,8 @@ except ImportError:
     _trainer_unavailble("NeMoILQLTrainer")
 
 
-def prepare_decoder_attention_mask(self, **kwargs):
-    return _prepare_decoder_attention_mask(**kwargs)
+def prepare_decoder_attention_mask(self, *args, **kwargs):
+    return _prepare_decoder_attention_mask(*args, **kwargs)
 
 
 def chatglm_auto_configure_device_map(num_gpus: int, model_name: str, local_rank: int = 0) -> Dict[str, int]:
@@ -177,8 +177,11 @@ def load_tokenizer_and_model(args, with_trainer: bool = True) -> Tuple[PreTraine
         eos_token_id = tokenizer.eop_token_id
     elif "baichuan" in args.model_name_or_path.lower():
         eos_token_id = tokenizer.bos_token_id if args.checkpoint is not None else tokenizer.eos_token_id
+        tokenizer.pad_token_id = tokenizer.eos_token_id
     else:
         eos_token_id = tokenizer.eos_token_id
+        if tokenizer.pad_token_id is None:
+            tokenizer.pad_token_id = tokenizer.eos_token_id
 
     # load model
     if "chatglm" in args.model_name_or_path.lower():
@@ -259,8 +262,10 @@ def load_tokenizer_and_model(args, with_trainer: bool = True) -> Tuple[PreTraine
 
     # post-loading operations
     if hasattr(args, "concat_samples") and args.concat_samples and isinstance(model, LlamaForCausalLM):
-        funcType = type(LlamaModel._prepare_decoder_attention_mask)
-        model.model._prepare_decoder_attention_mask = funcType(prepare_decoder_attention_mask, model.model, LlamaModel)
+        prepare_decoder_attention_mask_method = types.MethodType(prepare_decoder_attention_mask, model.model)
+        setattr(model.model, "_prepare_decoder_attention_mask", prepare_decoder_attention_mask_method)
+        # funcType = type(LlamaModel._prepare_decoder_attention_mask)
+        # model.model._prepare_decoder_attention_mask = funcType(prepare_decoder_attention_mask, model.model, LlamaModel)
     if "pangu" in args.model_name_or_path.lower():
         model.resize_token_embeddings(tokenizer.vocab_size)
     if hasattr(args, "bits") and args.bits in [4, 8] and args.do_train:
@@ -270,27 +275,27 @@ def load_tokenizer_and_model(args, with_trainer: bool = True) -> Tuple[PreTraine
 
     # init peft model (if necessary)
     if hasattr(args, "lora_rank") and args.lora_rank > 0:
-        model = get_peft_model(args, model)
+        model = to_peft_model(args, model)
 
     return tokenizer, model, eos_token_id
 
 
-def get_peft_model(args, model: PreTrainedModel) -> PreTrainedModel:
+def to_peft_model(args, model: PreTrainedModel) -> PreTrainedModel:
     if "llama" in args.model_name_or_path.lower() or \
         "vicuna" in args.model_name_or_path.lower() or \
         "billa" in args.model_name_or_path.lower() or \
         "atomgpt" in args.model_name_or_path.lower() or \
         "pangu" in args.model_name_or_path.lower():
-        target_modules = "q_proj,k_proj,v_proj"
+        target_modules = ["q_proj", "k_proj", "v_proj"]
         task_type = "CAUSAL_LM"
     elif "baichuan" in args.model_name_or_path.lower():
-        target_modules = "W_pack"
+        target_modules = ["W_pack"]
         task_type = "CAUSAL_LM"
     elif "bloom" in args.model_name_or_path.lower() or "tigerbot" in args.model_name_or_path.lower():
-        target_modules = "query_key_value"
+        target_modules = ["query_key_value"]
         task_type = "CAUSAL_LM"
     elif "glm" in args.model_name_or_path.lower():
-        target_modules = "query_key_value"
+        target_modules = ["query_key_value"]
         task_type = "SEQ_2_SEQ_LM"
     else:
         raise ValueError(f"Unsupported model name: {args.model_name_or_path}")

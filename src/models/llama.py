@@ -72,27 +72,27 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-def _prepare_decoder_attention_mask(attention_mask, input_shape, dtype, device, past_key_values_length):
+def _prepare_decoder_attention_mask(attention_mask, input_shape, input_embeds, past_key_values_length):
     # create causal mask
     if attention_mask is not None:
         # attention mask is already given in 3d shape
         if len(attention_mask.shape) == 3:
-            return attention_mask.unsqueeze(1).to(device)
+            return attention_mask.unsqueeze(1).to(input_embeds.device)
 
     # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
     combined_attention_mask = None
     if input_shape[-1] > 1:
         combined_attention_mask = _make_causal_mask(
             input_shape,
-            dtype,
-            device=device,
+            input_embeds.dtype,
+            device=input_embeds.device,
             past_key_values_length=past_key_values_length,
         )
 
     if attention_mask is not None:
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        expanded_attn_mask = _expand_mask(attention_mask, dtype, tgt_len=input_shape[-1]).to(
-            device
+        expanded_attn_mask = _expand_mask(attention_mask, input_embeds.dtype, tgt_len=input_shape[-1]).to(
+            input_embeds.device
         )
         combined_attention_mask = (
             expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
