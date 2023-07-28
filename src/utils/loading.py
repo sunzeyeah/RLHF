@@ -13,7 +13,7 @@ from transformers import (
     PreTrainedModel,
     PreTrainedTokenizer,
 )
-from transformers.models.llama import LlamaModel
+from transformers.models.llama import LlamaModel, LlamaForCausalLM
 from accelerate import init_empty_weights, infer_auto_device_map, load_checkpoint_and_dispatch
 from accelerate.utils import get_balanced_memory
 from peft import (
@@ -258,7 +258,7 @@ def load_tokenizer_and_model(args, with_trainer: bool = True) -> Tuple[PreTraine
     #                                         device_map={"": args.local_rank})
 
     # post-loading operations
-    if hasattr(args, "concat_samples") and args.concat_samples:
+    if hasattr(args, "concat_samples") and args.concat_samples and isinstance(model, LlamaForCausalLM):
         funcType = type(LlamaModel._prepare_decoder_attention_mask)
         model.model._prepare_decoder_attention_mask = funcType(prepare_decoder_attention_mask, model.model, LlamaModel)
     if "pangu" in args.model_name_or_path.lower():
