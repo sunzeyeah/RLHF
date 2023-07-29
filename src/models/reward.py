@@ -44,7 +44,7 @@ class RewardModel(PreTrainedModel):
             hidden_states = transformer_outputs[0]
             hidden_states = hidden_states.squeeze(1)
         else:
-            raise ValueError(f"Unsupported model type: {self.model_type}")
+            hidden_states = transformer_outputs[0]
 
         assert len(hidden_states.shape) == 3
 

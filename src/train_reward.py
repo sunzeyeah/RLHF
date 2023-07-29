@@ -104,7 +104,7 @@ def main():
     elif "glm" in args.model_name_or_path.lower():
         reward_model = RewardModel(model.config, model.glm, tokenizer)
     else:
-        raise ValueError(f"Unsupported model name: {args.model_name_or_path}")
+        reward_model = RewardModel(model.config, model.model, tokenizer)
     assert model.config.pad_token_id == tokenizer.pad_token_id
 
     if args.checkpoint is not None:
