@@ -12,9 +12,9 @@ from torch.nn.utils.rnn import pad_sequence
 import torch.nn.functional as F
 
 from src.utils import logger, RESOURCE_PATH
+from src.utils.modeling_utils import _prepare_decoder_attention_mask
 from src.utils.nlp_utils import clean_text
 from src.utils.file_utils import print_rank_0
-from src.models.llama import _prepare_decoder_attention_mask
 
 
 class DataCollatorReward:

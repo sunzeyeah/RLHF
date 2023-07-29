@@ -22,10 +22,10 @@ from peft import (
     get_peft_model
 )
 
-from src.utils.file_utils import print_trainable_parameters
+from src.utils import print_trainable_parameters
+from src.utils.modeling_utils import _prepare_decoder_attention_mask
 from src.data.pipeline import _DATAPIPELINE
 from src.models.trainer import _TRAINERS, register_trainer
-from src.models.llama import _prepare_decoder_attention_mask
 # from trlx.pipeline.offline_pipeline import PromptPipeline
 # from trlx.trainer.accelerate_ilql_trainer import AccelerateILQLTrainer
 # from trlx.trainer.accelerate_ppo_trainer import AcceleratePPOTrainer
