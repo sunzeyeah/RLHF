@@ -484,7 +484,7 @@ class PairwiseDataset(Dataset):
                     else:
                         discard += 1
 
-        print_rank_0(f"Finished loading {os.path.basename(filename)}, # samples: {len(pairs)}, # discarded: {discard}")
+        print_rank_0(f"Finished loading {os.path.basename(filename)}, # pairs: {len(pairs)}, # discarded: {discard}")
 
         return pairs
 
