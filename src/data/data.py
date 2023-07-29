@@ -472,8 +472,9 @@ class PairwiseDataset(Dataset):
                     if answer_1_score > answer_2_score:
                         chosen_answer = answer_1
                     rejected_answer = answer_2
-                    if chosen_answer is not None and rejected_answer is not None and \
-                            len(prompt) > 0 and len(chosen_answer) > 0 and len(rejected_answer) > 0:
+                    if chosen_answer is not None and rejected_answer is not None \
+                            and len(prompt) > 0 and len(chosen_answer) > 0 and len(rejected_answer) > 0 \
+                            and chosen_answer != rejected_answer:
                         pair = {
                             "prompt": prompt,
                             "prefix": prefix,
