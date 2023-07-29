@@ -359,7 +359,7 @@ class SFTDataset(Dataset):
                             eos_ids = [0]
                             length = 0
 
-        print_rank_0(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+        print_rank_0(f"Finished loading {os.path.basename(filename)}, # samples: {len(datasets)}, # discarded: {discard}")
 
         return datasets
 
@@ -485,7 +485,7 @@ class PairwiseDataset(Dataset):
                     else:
                         discard += 1
 
-        print_rank_0(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+        print_rank_0(f"Finished loading {os.path.basename(filename)}, # samples: {len(pairs)}, # discarded: {discard}")
 
         return pairs
 
@@ -569,7 +569,7 @@ class RLHFDataset(Dataset):
                     discard += 1
                     continue
                 datasets.append({"prompt": prompt, "label": label, "prefix": prefix})
-        print_rank_0(f"Finished loading {os.path.basename(filename)}, # discarded: {discard}")
+        print_rank_0(f"Finished loading {os.path.basename(filename)}, # samples: {len(datasets)}, # discarded: {discard}")
 
         return datasets
 
