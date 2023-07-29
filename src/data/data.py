@@ -13,7 +13,6 @@ import torch.nn.functional as F
 
 from src.utils import logger, RESOURCE_PATH
 from src.utils.modeling_utils import _prepare_decoder_attention_mask
-from src.utils.nlp_utils import clean_text
 from src.utils.file_utils import print_rank_0
 
 
@@ -461,14 +460,14 @@ class PairwiseDataset(Dataset):
         with open(filename, "r", encoding="utf-8") as f:
             for line in tqdm(f, desc=f"Loading {os.path.basename(filename)}"):
                 item = json.loads(line)
-                prompt = clean_text(item['prompt'])
+                prompt = item['prompt']
                 answers = item['answers']
                 prefix = item['prefix']
                 chosen_answer, rejected_answer = None, None
                 for i in range(len(answers)-1):
-                    answer_1 = clean_text(answers[i]["answer"])
+                    answer_1 = answers[i]["answer"]
                     answer_1_score = answers[i]["score"]
-                    answer_2 = clean_text(answers[i+1]["answer"])
+                    answer_2 = answers[i+1]["answer"]
                     answer_2_score = answers[i+1]["score"]
                     if answer_1_score > answer_2_score:
                         chosen_answer = answer_1
@@ -561,8 +560,8 @@ class RLHFDataset(Dataset):
                 data_type = item.get('data_type', "human_generated")
                 if data_type != "human_generated":
                     continue
-                prompt = clean_text(item['prompt'])
-                label = clean_text(item['answers'][0]['answer'])
+                prompt = item['prompt']
+                label = item['answers'][0]['answer']
                 prefix = item['prefix']
 
                 if len(prompt) <= 0 or len(label) <= 0:
