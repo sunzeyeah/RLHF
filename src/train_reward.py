@@ -1,8 +1,7 @@
 
 import sys
-sys.path.insert(0, "/root/autodl-tmp/Code/RLHF")
 sys.path.insert(0, "/mnt/sfevol775196/sunzeye273/Code/chatgpt")
-# sys.path.insert(0, "/mnt/share-pa002-vol682688-prd/sunzeye273/Code/chatgpt")
+sys.path.insert(0, "/Users/zeyesun/Documents/Code/RLHF")
 sys.path.insert(0, "/mnt/pa002-28359-vol543625-private/Code/chatgpt")
 import os
 import torch
@@ -12,6 +11,7 @@ from tqdm import tqdm
 from transformers import (
     Trainer,
     TrainingArguments,
+    default_data_collator,
 )
 from torch.utils.data import DataLoader, SequentialSampler
 
@@ -167,17 +167,15 @@ def main():
         eval_steps=args.eval_steps,
         eval_accumulation_steps=args.eval_accumulation_steps,
         per_device_eval_batch_size=args.eval_batch_size,
+        label_names=["labels"],
         do_predict=args.do_pred,
         use_legacy_prediction_loop=args.do_pred,
     )
     print_rank_0(f"Training Arguments: {training_args}")
 
-    # Create the collator to gather batches of pairwise comparisons
-    data_collator = DataCollatorReward()
-
     def compute_metrics(eval_preds):
-        chosen_end_scores = eval_preds.predictions[0]  # chosen scores
-        rejected_end_scores = eval_preds.predictions[1]  # rejected scores
+        chosen_end_scores = eval_preds.predictions[1]  # chosen scores
+        rejected_end_scores = eval_preds.predictions[3]  # rejected scores
         result = {}
         acc = sum(chosen_end_scores > rejected_end_scores) / len(rejected_end_scores)
         result["accuracy"] = acc
@@ -191,7 +189,6 @@ def main():
         train_dataset=train_dataset,
         compute_metrics=compute_metrics,
         eval_dataset=val_dataset,
-        # data_collator=data_collator,
     )
 
     if args.do_train:

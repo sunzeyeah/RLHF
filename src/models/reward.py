@@ -72,6 +72,7 @@ class RewardModel(PreTrainedModel):
             rejected_attention_mask=None,
             rejected_position_ids=None,
             use_cache=None,
+            **kwargs
     ):
         bs = chosen_input_ids.shape[0]
         chosen_end_scores = []
