@@ -12,7 +12,7 @@ from torch.nn.utils.rnn import pad_sequence
 import torch.nn.functional as F
 
 from src.utils import logger, RESOURCE_PATH
-from src.utils.modeling_utils import _prepare_decoder_attention_mask
+from src.utils.modeling_utils import _prepare_decoder_attention_mask, qwen_make_context
 from src.utils.file_utils import print_rank_0
 
 
@@ -1392,7 +1392,7 @@ class CEvalDataset(Dataset):
         for choice in self.choices:
             example += f'\n{choice}. {line[f"{choice}"]}'
         example += '\n答案：'
-        if "chatglm" in self.model_name_or_path.lower():
+        if "chatglm" in self.model_name_or_path.lower() or "qwen" in self.model_name_or_path.lower():
             if include_answer:
                 if cot:
                     ans = "让我们一步一步思考，\n" + line["explanation"] + f"\n所以答案是{line['answer']}。"
@@ -1447,6 +1447,18 @@ class CEvalDataset(Dataset):
                     break
                 else:
                     history.pop(-1)
+            encoded_dict = self.tokenizer(full_prompt, max_length=self.max_length, return_tensors="pt",
+                                          truncation="longest_first")
+        elif "qwen" in self.model_name_or_path.lower():
+            # Few-Shot example construction
+            if hasattr(self, "dev_list"):
+                k = self.args.max_few_shot
+                dev_list = self.dev_list[subject_name]
+                for i in range(min(k, len(dev_list))):
+                    history.append(self.format_example(dev_list[i], include_answer=True, cot=self.args.cot))
+            full_prompt, input_ids = qwen_make_context(self.tokenizer, question, history, system=prefix,
+                                                       max_window_size=self.max_length)
+            encoded_dict = {"input_ids": input_ids}
         else:
             # Few-Shot example construction
             if hasattr(self, "dev_list"):
@@ -1467,10 +1479,10 @@ class CEvalDataset(Dataset):
                     break
                 else:
                     history.pop(-1)
+            encoded_dict = self.tokenizer(full_prompt, max_length=self.max_length, return_tensors="pt",
+                                          truncation="longest_first")
 
         logger.debug(f"number of shots: {len(history)-1}, full prompt: {full_prompt}")
-        encoded_dict = self.tokenizer(full_prompt, max_length=self.max_length, return_tensors="pt",
-                                      truncation="longest_first")
 
         return {
             "input_ids": encoded_dict["input_ids"],
@@ -1529,7 +1541,7 @@ class MMLUDataset(Dataset):
         for choice in self.choices:
             example += f'\n{choice}. {line[f"{choice}"]}'
         example += '\nAnswer：'
-        if "chatglm" in self.model_name_or_path.lower():
+        if "chatglm" in self.model_name_or_path.lower() or "qwen" in self.model_name_or_path.lower():
             if include_answer:
                 ans = line["answer"]
                 m = (example, ans)
@@ -1575,6 +1587,19 @@ class MMLUDataset(Dataset):
                     break
                 else:
                     history.pop(-1)
+
+            encoded_dict = self.tokenizer(full_prompt, max_length=self.max_length, return_tensors="pt",
+                                          truncation="longest_first")
+        elif "qwen" in self.model_name_or_path.lower():
+            # Few-Shot example construction
+            if hasattr(self, "dev_list"):
+                k = self.args.max_few_shot
+                dev_list = self.dev_list[subject_name]
+                for i in range(min(k, len(dev_list))):
+                    history.append(self.format_example(dev_list[i], include_answer=True))
+            full_prompt, input_ids = qwen_make_context(self.tokenizer, question, history, system=prefix,
+                                                       max_window_size=self.max_length)
+            encoded_dict = {"input_ids": input_ids}
         else:
             # Few-Shot example construction
             if hasattr(self, "dev_list"):
@@ -1596,8 +1621,8 @@ class MMLUDataset(Dataset):
                 else:
                     history.pop(-1)
 
-        encoded_dict = self.tokenizer(full_prompt, max_length=self.max_length, return_tensors="pt",
-                                      truncation="longest_first")
+            encoded_dict = self.tokenizer(full_prompt, max_length=self.max_length, return_tensors="pt",
+                                          truncation="longest_first")
 
         return {
             "input_ids": encoded_dict["input_ids"],

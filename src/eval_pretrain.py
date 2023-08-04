@@ -245,7 +245,6 @@ def main():
                                 return scores
                     logits_processor.append(InvalidScoreLogitsProcessor())
                     input_ids = dev_data['input_ids'].to(device)
-
                     outputs = model.generate(input_ids=input_ids,
                                              max_new_tokens=args.max_length_generation,
                                              do_sample=args.do_sample,
@@ -254,6 +253,17 @@ def main():
                                              temperature=args.temperature,
                                              repetition_penalty=args.repetition_penalty,
                                              logits_processor=logits_processor,
+                                             output_scores=not args.cot,
+                                             return_dict_in_generate=not args.cot)
+                elif "qwen" in args.model_name_or_path.lower():
+                    input_ids = dev_data['input_ids'].to(device)
+                    outputs = model.generate(input_ids=input_ids,
+                                             max_new_tokens=args.max_length_generation,
+                                             do_sample=args.do_sample,
+                                             num_return_sequences=args.num_return_sequences,
+                                             top_p=args.top_p,
+                                             temperature=args.temperature,
+                                             repetition_penalty=args.repetition_penalty,
                                              output_scores=not args.cot,
                                              return_dict_in_generate=not args.cot)
                 else:
@@ -271,7 +281,7 @@ def main():
                                              return_dict_in_generate=not args.cot)
 
                 # output processing and answer extraction
-                if args.cot > 0:
+                if args.cot:
                     outputs = outputs['sequences'].tolist()[0][len(input_ids["input_ids"][0]):]
                     response = tokenizer.decode(outputs)
                     # response, _ = model.chat(tokenizer, dev_data['question'], history=dev_data['history'],
@@ -357,6 +367,17 @@ def main():
                                              temperature=args.temperature,
                                              repetition_penalty=args.repetition_penalty,
                                              logits_processor=logits_processor,
+                                             output_scores=True,
+                                             return_dict_in_generate=True)
+                elif "qwen" in args.model_name_or_path.lower():
+                    input_ids = dev_data['input_ids'].to(device)
+                    outputs = model.generate(input_ids=input_ids,
+                                             max_new_tokens=args.max_length_generation,
+                                             do_sample=args.do_sample,
+                                             num_return_sequences=args.num_return_sequences,
+                                             top_p=args.top_p,
+                                             temperature=args.temperature,
+                                             repetition_penalty=args.repetition_penalty,
                                              output_scores=True,
                                              return_dict_in_generate=True)
                 else:

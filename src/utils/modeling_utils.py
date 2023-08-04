@@ -21,6 +21,7 @@ from dataclasses import is_dataclass
 from enum import Enum
 from accelerate import Accelerator
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR
+from transformers import PreTrainedTokenizer
 
 try:
     from opendelta import (
@@ -925,3 +926,69 @@ def rotate_checkpoints(save_total_limit, use_mtime=False, output_dir=None, best_
     for checkpoint in checkpoints_to_be_deleted:
         print(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
         shutil.rmtree(checkpoint, ignore_errors=True)
+
+
+def qwen_make_context(
+        tokenizer: PreTrainedTokenizer,
+        query: str,
+        history: List[Tuple[str, str]] = None,
+        system: str = "",
+        max_window_size: int = 6144,
+        chat_format: str = "chatml",
+):
+    if history is None:
+        history = []
+
+    if chat_format == "chatml":
+        im_start, im_end = "<|im_start|>", "<|im_end|>"
+
+        def _tokenize_str(content_1, content_2=None,
+                          add_special_tokens=True,
+                          truncation=False,
+                          max_length=None):
+            # if content_2 is not None:
+            #     content = f"{im_start}{content_1}{im_end}\n{im_start}{content_2}{im_end}\n"
+            # else:
+            #     content = f"{im_start}{content_1}{im_end}\n"
+            token_ids = tokenizer.encode(content_1, content_2,
+                                         add_special_tokens=add_special_tokens,
+                                         max_length=max_length,
+                                         truncation=truncation)
+            content = tokenizer.decode(token_ids)
+            return content, token_ids
+
+        # system message
+        system_text, system_tokens = _tokenize_str(f"system\n{system}")
+        # current-turn user query
+        max_query_length = max_window_size - len(system_tokens) + 2
+        assert max_query_length > 0, f"System message length ({len(system_tokens)}) has exceeded max window size ({max_window_size})"
+        query_text, query_tokens = _tokenize_str(f"user\n{query}", f"assistant\n",
+                                                 truncation=True, max_length=max_query_length)
+        # remove additional "<|im_end|>" and "\n"
+        query_text = query_text.strip("\n").strip(im_end)
+        query_tokens = query_tokens[:-2]
+        # history
+        raw_text = ""
+        context_tokens = []
+
+        for turn_query, turn_response in reversed(history):
+            prev_chat, next_context_tokens = _tokenize_str(f"user\n{turn_query}", f"assistant\n{turn_response}")
+            current_context_size = (
+                    len(system_tokens) + len(query_tokens) + len(next_context_tokens) + len(context_tokens)
+            )
+            if current_context_size < max_window_size:
+                context_tokens = next_context_tokens + context_tokens
+                raw_text = prev_chat + raw_text
+            else:
+                break
+
+        raw_text = system_text + raw_text + query_text
+        context_tokens = system_tokens + context_tokens + query_tokens
+
+    elif chat_format == "raw":
+        raw_text = query
+        context_tokens = tokenizer.encode(raw_text)
+    else:
+        raise NotImplementedError(f"Unknown chat format {chat_format!r}")
+
+    return raw_text, context_tokens
