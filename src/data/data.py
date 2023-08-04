@@ -1458,7 +1458,7 @@ class CEvalDataset(Dataset):
                     history.append(self.format_example(dev_list[i], include_answer=True, cot=self.args.cot))
             full_prompt, input_ids = qwen_make_context(self.tokenizer, question, history, system=prefix,
                                                        max_window_size=self.max_length)
-            encoded_dict = {"input_ids": input_ids}
+            encoded_dict = {"input_ids": torch.tensor(input_ids, dtype=torch.int64)}
         else:
             # Few-Shot example construction
             if hasattr(self, "dev_list"):
@@ -1599,7 +1599,7 @@ class MMLUDataset(Dataset):
                     history.append(self.format_example(dev_list[i], include_answer=True))
             full_prompt, input_ids = qwen_make_context(self.tokenizer, question, history, system=prefix,
                                                        max_window_size=self.max_length)
-            encoded_dict = {"input_ids": input_ids}
+            encoded_dict = {"input_ids": torch.tensor(input_ids, dtype=torch.int64)}
         else:
             # Few-Shot example construction
             if hasattr(self, "dev_list"):
