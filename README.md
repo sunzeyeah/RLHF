@@ -161,7 +161,7 @@ bash train_rlhf.sh
 <summary><b>C-Eval 5-shot测试集(test)结果</b></summary>
 <table>
     <tr>  <td>Model</td>  <td>Avg</td>  <td>Avg(Hard)</td> <td>STEM</td> <td>Social Science</td> <td>Humanities</td> <td>Other</td> </tr>
-    <tr>  <td>Qwen-7B-Chat</td>  <td style="color:red"><b>54.70</b></td>  <td>35.40</td>  <td style="color:red"><b>47.9</b></td>  <td style="color:red"><b>68.30</b></td>  <td style="color:red"><b>58.70</b></td>  <td>50.0</td> </tr>    
+    <tr>  <td>Qwen-7B-Chat</td>  <td style="color:red"><b>54.70</b></td>  <td>35.40</td>  <td style="color:red"><b>47.90</b></td>  <td style="color:red"><b>68.30</b></td>  <td style="color:red"><b>58.70</b></td>  <td>50.00</td> </tr>    
     <tr>  <td>Baichuan-13B-Base</td>  <td >53.70</td>  <td style="color:red"><b>35.60</b></td>  <td>46.80</td>  <td>65.80</td>  <td>58.00</td>  <td style="color:red"><b>50.80</b></td> </tr>    
     <tr>  <td>ChatGLM2-6B</td>  <td>51.20</td>  <td>33.40</td>  <td>46.90</td>  <td>63.00</td>  <td>51.60</td>  <td>47.70</td> </tr>
     <tr>  <td>Baichuan-13B-Chat</td>  <td>47.90</td>  <td>31.50</td>  <td>41.40</td>  <td>56.80</td>  <td>53.00</td>  <td>46.50</td> </tr>
