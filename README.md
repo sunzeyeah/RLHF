@@ -122,6 +122,7 @@ bash pretrain.sh
 - LLaMA及相关衍生模型 
 - ChatGLM（1和2）
 - Baichuan
+- Qwen
 - Pangu
 - GLM
 
@@ -160,8 +161,9 @@ bash train_rlhf.sh
 <summary><b>C-Eval 5-shot测试集(test)结果</b></summary>
 <table>
     <tr>  <td>Model</td>  <td>Avg</td>  <td>Avg(Hard)</td> <td>STEM</td> <td>Social Science</td> <td>Humanities</td> <td>Other</td> </tr>
-    <tr>  <td>Baichuan-13B-Base</td>  <td style="color:red"><b>53.70</b></td>  <td style="color:red"><b>35.60</b></td>  <td>46.80</td>  <td style="color:red"><b>65.80</b></td>  <td style="color:red"><b>58.00</b></td>  <td style="color:red"><b>50.80</b></td> </tr>    
-    <tr>  <td>ChatGLM2-6B</td>  <td>51.20</td>  <td>33.40</td>  <td style="color:red"><b>46.90</b></td>  <td>63.00</td>  <td>51.60</td>  <td>47.70</td> </tr>
+    <tr>  <td>Qwen-7B-Chat</td>  <td style="color:red"><b>54.70</b></td>  <td>35.40</td>  <td style="color:red"><b>47.9</b></td>  <td style="color:red"><b>68.30</b></td>  <td style="color:red"><b>58.70</b></td>  <td>50.0</td> </tr>    
+    <tr>  <td>Baichuan-13B-Base</td>  <td >53.70</td>  <td style="color:red"><b>35.60</b></td>  <td>46.80</td>  <td>65.80</td>  <td>58.00</td>  <td style="color:red"><b>50.80</b></td> </tr>    
+    <tr>  <td>ChatGLM2-6B</td>  <td>51.20</td>  <td>33.40</td>  <td>46.90</td>  <td>63.00</td>  <td>51.60</td>  <td>47.70</td> </tr>
     <tr>  <td>Baichuan-13B-Chat</td>  <td>47.90</td>  <td>31.50</td>  <td>41.40</td>  <td>56.80</td>  <td>53.00</td>  <td>46.50</td> </tr>
     <tr>  <td>Baichuan-7B</td>  <td>44.20</td>  <td>31.70</td>  <td>39.20</td>  <td>53.30</td>  <td>47.30</td>  <td>41.90</td> </tr>
     <tr>  <td>Ziya-LLaMA-13B-v1.1</td>  <td>40.10</td>  <td>30.30</td>  <td>35.80</td>  <td>47.30</td>  <td>42.80</td>  <td>38.50</td> </tr>
@@ -181,7 +183,8 @@ bash train_rlhf.sh
 <summary><b>MMLU 5-shot测试集(test)结果</b></summary>
 <table>
     <tr>  <td>Model</td>  <td>Avg</td>  <td>STEM</td> <td>Social Science</td> <td>Humanities</td> <td>Other</td> </tr>
-    <tr>  <td>LLaMA-30B</td>  <td style="color:red"><b>56.33</b></td>  <td style="color:red"><b>44.68</b></td>  <td style="color:red"><b>65.64</b></td>  <td style="color:red"><b>54.60</b></td>  <td style="color:red"><b>61.57</b></td> </tr>
+    <tr>  <td>LLaMA-30B</td>  <td style="color:red"><b>56.33</b></td>  <td style="color:red"><b>44.68</b></td>  <td style="color:red"><b>65.64</b></td>  <td style="color:red"><b>54.60</b></td>  <td>61.57</td> </tr>
+    <tr>  <td>Qwen-7B-Chat</td>  <td>54.13</td>  <td>41.76</td>  <td>63.43</td>  <td>50.81</td>  <td style="color:red"><b>62.50</b></td> </tr>
     <tr>  <td>LLaMA2-13B-chat</td>  <td>53.98</td>  <td>44.52</td>  <td>63.40</td>  <td>49.37</td>  <td>61.21</td> </tr>
     <tr>  <td>Baichuan-13B-Base</td>  <td>53.46</td>  <td>43.86</td>  <td>63.14</td>  <td>49.73</td>  <td>59.28</td> </tr>
     <tr>  <td>Baichuan-13B-Chat</td>  <td>51.12</td>  <td>41.61</td>  <td>59.11</td>  <td>47.52</td>  <td>58.31</td> </tr>
