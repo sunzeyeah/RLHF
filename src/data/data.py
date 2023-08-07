@@ -327,7 +327,7 @@ class SFTDataset(Dataset):
                 label = item['answers'][0]['answer']
                 score = item['answers'][0]['score']
                 prefix = item.get('prefix', "")
-                if len(prompt) <= 0 or len(label) <= 0 or score <= 0:
+                if len(prompt) <= 0 or len(label) <= 0:
                     discard += 1
                     continue
 
