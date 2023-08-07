@@ -28,6 +28,7 @@ CUDA_LAUNCH_BLOCKING=1 deepspeed $MAIN \
   --max_length 2048 \
   --logging_steps 50 \
   --save_steps 1000 \
+  --metric_for_best_model "eval_rougeLsum" \
   --learning_rate 3e-4 \
   --do_train \
   --train_filename $TRAIN_FILENAME \

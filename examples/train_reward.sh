@@ -30,6 +30,7 @@ CUDA_LAUNCH_BLOCKING=1 deepspeed $MAIN \
   --max_length 512 \
   --logging_steps 10 \
   --save_steps 100 \
+  --metric_for_best_model "eval_accuracy" \
   --learning_rate 1e-5 \
   --do_train \
   --train_filename $TRAIN_FILENAME \

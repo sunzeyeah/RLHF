@@ -69,6 +69,7 @@ def get_parser():
                              '- `"steps"`: Save is done every `save_steps`.')
     parser.add_argument("--save_steps", type=int, default=1000)
     parser.add_argument("--save_total_limit", type=int, default=2)
+    parser.add_argument("--metric_for_best_model", type=str, default=None)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
     parser.add_argument("--gradient_checkpointing", action="store_true",
                         help="If True, use gradient checkpointing to save memory at the expense of slower backward pass.")
@@ -165,6 +166,8 @@ def main():
             save_strategy=args.save_strategy,
             save_steps=args.save_steps,
             save_total_limit=args.save_total_limit,
+            metric_for_best_model=args.metric_for_best_model,
+            greater_is_better=True,
             logging_steps=args.logging_steps,
             report_to=["tensorboard"],
             deepspeed=deepspeed_config,
