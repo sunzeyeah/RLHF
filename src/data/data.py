@@ -397,7 +397,10 @@ class PairwiseDataset(Dataset):
                 "labels": rejected_encodings_dict["input_ids"],
             }
         elif "chatglm" in self.args.model_name_or_path.lower():
-            prompt = f"[Round {1}]\n问：{prompt}\n答："
+            if "chatglm2" in self.args.model_name_or_path.lower():
+                prompt = f"[Round {1}]\n\n问：{prompt}\n\n答："
+            else:
+                prompt = f"[Round {0}]\n问：{prompt}\n答："
             chosen_encodings_dict = self.tokenizer(prompt, chosen_answer, max_length=self.args.max_length,
                                                    truncation="longest_first", padding="max_length", return_tensors="pt")
             rejected_encodings_dict = self.tokenizer(prompt, rejected_answer, max_length=self.args.max_length,
