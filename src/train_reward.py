@@ -133,7 +133,7 @@ def main():
     else:
         test_dataset = None
 
-    if args.do_train:
+    if args.do_train or args.do_eval:
         # training arguments
         deepspeed_config = os.path.join(RESOURCE_PATH, "config", "deepspeed", args.deepspeed_config) if args.deepspeed_config is not None else None
         if torch.cuda.is_available():
@@ -175,8 +175,8 @@ def main():
             eval_accumulation_steps=args.eval_accumulation_steps,
             per_device_eval_batch_size=args.eval_batch_size,
             label_names=["labels"],
-            do_predict=args.do_pred,
-            use_legacy_prediction_loop=args.do_pred,
+            # do_predict=args.do_pred,
+            # use_legacy_prediction_loop=args.do_pred,
         )
         print_rank_0(f"Training Arguments: {training_args}")
 
@@ -198,17 +198,16 @@ def main():
             eval_dataset=val_dataset,
         )
 
-        trainer.train()
-        trainer.save_model(args.output_dir)
-
-    elif args.do_eval:
-        # eval_result = trainer.evaluate(eval_dataset=val_dataset)
-        # print_rank_0(eval_result)
-        pass
+        if args.do_train:
+            trainer.train()
+            trainer.save_model(args.output_dir)
+        elif args.do_eval:
+            eval_result = trainer.evaluate(eval_dataset=val_dataset)
+            print_rank_0(eval_result)
 
     if args.do_pred:
         reward_model.eval()
-        device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
+        device = f"cuda:{args.local_rank}" if torch.cuda.is_available() and args.device_map is not None else "cpu"
         sampler = SequentialSampler(test_dataset)
         test_loader = DataLoader(test_dataset, batch_size=args.eval_batch_size, sampler=sampler)
         rewards = []

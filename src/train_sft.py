@@ -177,8 +177,8 @@ def main():
             eval_steps=args.eval_steps,
             eval_accumulation_steps=args.eval_accumulation_steps,
             per_device_eval_batch_size=args.eval_batch_size,
-            do_predict=args.do_pred,
-            use_legacy_prediction_loop=args.do_pred,
+            # do_predict=args.do_pred,
+            # use_legacy_prediction_loop=args.do_pred,
         )
         print_rank_0(f"Training Arguments: {training_args}")
 
@@ -215,8 +215,7 @@ def main():
 
     if args.do_pred:
         model.eval()
-        device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
-        model = model.to(device)
+        device = f"cuda:{args.local_rank}" if torch.cuda.is_available() and args.device_map is not None else "cpu"
         tokenizer.padding_side = "left"
         with open(os.path.join(args.output_dir, args.output_filename), "w", encoding="utf-8") as w:
             w.write("\t".join(["prompt"]+[f"model_answer_{i}" for i in range(args.num_return_sequences)])+"\n")
