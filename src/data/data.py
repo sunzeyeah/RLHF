@@ -140,11 +140,13 @@ class PretrainDataset(Dataset):
                         "labels": encoded_dict['input_ids'],
                     }
                 else:
-                    return {
+                    result = {
                         "input_ids": encoded_dict['input_ids'][0],
-                        "attention_mask": encoded_dict['attention_mask'][0] if 'attention_mask' in encoded_dict else None,
                         "labels": encoded_dict['input_ids'][0],
                     }
+                    if 'attention_mask' in encoded_dict:
+                        result["attention_mask"] = encoded_dict['attention_mask'][0]
+                    return result
         else:
             eos_ids = data['eos_ids']
             input_ids = data['input_ids']
@@ -285,11 +287,13 @@ class SFTDataset(Dataset):
                         "labels": encoded_dict['input_ids'],
                     }
                 else:
-                    return {
+                    result = {
                         "input_ids": encoded_dict['input_ids'][0],
-                        "attention_mask": encoded_dict['attention_mask'][0] if 'attention_mask' in encoded_dict else None,
                         "labels": encoded_dict['input_ids'][0],
                     }
+                    if 'attention_mask' in encoded_dict:
+                        result["attention_mask"] = encoded_dict['attention_mask'][0]
+                    return result
         else:
             eos_ids = data['eos_ids']
             input_ids = data['input_ids']
