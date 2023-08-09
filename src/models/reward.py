@@ -13,7 +13,12 @@ class RewardModel(PreTrainedModel):
         self.model_type = config.model_type
         self.pad_id = tokenizer.pad_token_id
         self.transformer = model
-        self.v_head = nn.Linear(config.hidden_size, 1, bias=False)
+        # set the device of `v_head` the same as the device of the last component of `model`
+        st = model.state_dict()
+        device = st[list(st.keys())[-1]].device
+        self.v_head = nn.Linear(config.hidden_size, 1,
+                                bias=False,
+                                device=device)
         # self.loss_fn = PairWiseLoss()
 
     def gradient_checkpointing_enable(self):

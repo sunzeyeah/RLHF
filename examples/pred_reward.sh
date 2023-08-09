@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MODEL="pangu-350M"
+MODEL="chatglm2-6B"
 
 ROOT="/mnt/sfevol775196/sunzeye273"
 #ROOT="/mnt/share-pa002-vol682688-prd/sunzeye273"
@@ -21,16 +21,16 @@ CHECKPOINT="${ROOT}/Data/chatgpt/output/reward/${MODEL}/pytorch_modelstar.bin"
 cd $ROOT/Code/RLHF || exit
 mkdir -p $OUTPUT_DIR
 
-#python $MAIN \
-CUDA_LAUNCH_BLOCKING=1 deepspeed --num_gpus 1 $MAIN \
+python $MAIN \
+  --local_rank 0 \
+  --device_map "auto" \
   --data_dir $DATR_DIR \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_PATH \
   --tokenizer_path $TOKENIZER_PATH \
   --checkpoint $CHECKPOINT \
   --max_length 512 \
-  --logging_steps 100 \
-  --deepspeed_config "stage-1.json" \
+  --logging_steps 50 \
   --do_pred \
   --test_filename $TEST_FILENAME \
   --eval_batch_size 256 \

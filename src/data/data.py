@@ -18,9 +18,14 @@ from src.utils.file_utils import print_rank_0
 
 class DataCollatorReward:
     def __call__(self, data):
-        batch = {"input_ids": torch.cat([f[0] for f in data] + [f[2] for f in data]),
-                 "attention_mask": torch.cat([f[1] for f in data] + [f[3] for f in data]),
-                 "labels": torch.tensor([0] * len(data) + [1] * len(data))}
+        has_attention_mask = 'attention_mask' in data[0]
+        batch = {
+            "chosen_input_ids": torch.stack([f['input_ids'] for f in data]),
+            "chosen_attention_mask": torch.stack([f['attention_mask'] for f in data]) if has_attention_mask else None,
+            # "input_ids": torch.cat([f[0] for f in data] + [f[2] for f in data]),
+            # "attention_mask": torch.cat([f[1] for f in data] + [f[3] for f in data]),
+            # "labels": torch.tensor([0] * len(data) + [1] * len(data))
+        }
         return batch
 
 

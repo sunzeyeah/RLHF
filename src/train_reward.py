@@ -111,6 +111,9 @@ def main():
     if args.checkpoint is not None:
         load_checkpoint(args, reward_model, strict=False)
 
+    if args.device_map is not None and args.bits not in [4, 8]:
+        reward_model = reward_model.half()
+
     print_rank_0(f"Finished loading model and tokenizer")
 
     # Set up the datasets
@@ -130,82 +133,82 @@ def main():
     else:
         test_dataset = None
 
-    # training arguments
-    deepspeed_config = os.path.join(RESOURCE_PATH, "config", "deepspeed", args.deepspeed_config) if args.deepspeed_config is not None else None
-    if torch.cuda.is_available():
-        bf16 = torch.cuda.get_device_capability()[0] >= 8
-        fp16 = False if bf16 else True
-    else:
-        fp16 = False
-        bf16 = False
-    training_args = TrainingArguments(
-        output_dir=args.output_dir,
-        no_cuda=not torch.cuda.is_available(),
-        seed=args.seed,
-        data_seed=args.seed,
-        local_rank=args.local_rank,
-        do_train=args.do_train,
-        num_train_epochs=args.num_epochs,
-        learning_rate=args.learning_rate,
-        lr_scheduler_type=args.lr_scheduler_type,
-        per_device_train_batch_size=args.train_batch_size,
-        max_grad_norm=args.max_grad_norm,
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
-        warmup_ratio=args.warmup_ratio,
-        weight_decay=args.weight_decay,
-        half_precision_backend="auto",
-        fp16=fp16,
-        bf16=bf16,
-        save_strategy=args.save_strategy,
-        save_steps=args.save_steps,
-        save_total_limit=args.save_total_limit,
-        metric_for_best_model=args.metric_for_best_model,
-        greater_is_better=True,
-        logging_steps=args.logging_steps,
-        report_to=["tensorboard"],
-        deepspeed=deepspeed_config,
-        gradient_checkpointing=args.gradient_checkpointing,
-        do_eval=args.do_eval,
-        evaluation_strategy=args.evaluation_strategy,
-        eval_steps=args.eval_steps,
-        eval_accumulation_steps=args.eval_accumulation_steps,
-        per_device_eval_batch_size=args.eval_batch_size,
-        label_names=["labels"],
-        do_predict=args.do_pred,
-        use_legacy_prediction_loop=args.do_pred,
-    )
-    print_rank_0(f"Training Arguments: {training_args}")
-
-    def compute_metrics(eval_preds):
-        chosen_end_scores = eval_preds.predictions[1]  # chosen scores
-        rejected_end_scores = eval_preds.predictions[3]  # rejected scores
-        result = {}
-        acc = sum(chosen_end_scores > rejected_end_scores) / len(rejected_end_scores)
-        result["accuracy"] = acc
-
-        return result
-
-    # Prepare the trainer and start training
-    trainer = Trainer(
-        model=reward_model,
-        args=training_args,
-        train_dataset=train_dataset,
-        compute_metrics=compute_metrics,
-        eval_dataset=val_dataset,
-    )
-
     if args.do_train:
+        # training arguments
+        deepspeed_config = os.path.join(RESOURCE_PATH, "config", "deepspeed", args.deepspeed_config) if args.deepspeed_config is not None else None
+        if torch.cuda.is_available():
+            bf16 = torch.cuda.get_device_capability()[0] >= 8
+            fp16 = False if bf16 else True
+        else:
+            fp16 = False
+            bf16 = False
+        training_args = TrainingArguments(
+            output_dir=args.output_dir,
+            no_cuda=not torch.cuda.is_available(),
+            seed=args.seed,
+            data_seed=args.seed,
+            local_rank=args.local_rank,
+            do_train=args.do_train,
+            num_train_epochs=args.num_epochs,
+            learning_rate=args.learning_rate,
+            lr_scheduler_type=args.lr_scheduler_type,
+            per_device_train_batch_size=args.train_batch_size,
+            max_grad_norm=args.max_grad_norm,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+            warmup_ratio=args.warmup_ratio,
+            weight_decay=args.weight_decay,
+            half_precision_backend="auto",
+            fp16=fp16,
+            bf16=bf16,
+            save_strategy=args.save_strategy,
+            save_steps=args.save_steps,
+            save_total_limit=args.save_total_limit,
+            metric_for_best_model=args.metric_for_best_model,
+            greater_is_better=True,
+            logging_steps=args.logging_steps,
+            report_to=["tensorboard"],
+            deepspeed=deepspeed_config,
+            gradient_checkpointing=args.gradient_checkpointing,
+            do_eval=args.do_eval,
+            evaluation_strategy=args.evaluation_strategy,
+            eval_steps=args.eval_steps,
+            eval_accumulation_steps=args.eval_accumulation_steps,
+            per_device_eval_batch_size=args.eval_batch_size,
+            label_names=["labels"],
+            do_predict=args.do_pred,
+            use_legacy_prediction_loop=args.do_pred,
+        )
+        print_rank_0(f"Training Arguments: {training_args}")
+
+        def compute_metrics(eval_preds):
+            chosen_end_scores = eval_preds.predictions[1]  # chosen scores
+            rejected_end_scores = eval_preds.predictions[3]  # rejected scores
+            result = {}
+            acc = sum(chosen_end_scores > rejected_end_scores) / len(rejected_end_scores)
+            result["accuracy"] = acc
+
+            return result
+
+        # Prepare the trainer and start training
+        trainer = Trainer(
+            model=reward_model,
+            args=training_args,
+            train_dataset=train_dataset,
+            compute_metrics=compute_metrics,
+            eval_dataset=val_dataset,
+        )
+
         trainer.train()
         trainer.save_model(args.output_dir)
 
     elif args.do_eval:
-        eval_result = trainer.evaluate(eval_dataset=val_dataset)
-        print_rank_0(eval_result)
+        # eval_result = trainer.evaluate(eval_dataset=val_dataset)
+        # print_rank_0(eval_result)
+        pass
 
     if args.do_pred:
         reward_model.eval()
         device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
-        reward_model = reward_model.half().to(device)
         sampler = SequentialSampler(test_dataset)
         test_loader = DataLoader(test_dataset, batch_size=args.eval_batch_size, sampler=sampler)
         rewards = []

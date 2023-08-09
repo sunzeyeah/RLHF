@@ -655,7 +655,7 @@ class ChatGLMPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     config_class = ChatGLMConfig
     base_model_prefix = "transformer"
-    _no_split_modules = ["GLM6BBlock"]
+    _no_split_modules = ["GLMBlock"]
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
