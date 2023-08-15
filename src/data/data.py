@@ -288,8 +288,8 @@ class SFTDataset(Dataset):
                 ids1 = [790, 30951, 517, 30910, 30939, 30996, 13, 13, 54761, 31211]
                 # \n\n答：
                 ids2 = [13, 13, 55437, 31211]
-                prompt_ids = self.tokenizer.encode(" " + prompt, add_speical_tokens=False)[1:]
-                label_ids = self.tokenizer.encode(label, add_speical_tokens=False)
+                prompt_ids = self.tokenizer.encode(" " + prompt, add_special_tokens=False)[1:]
+                label_ids = self.tokenizer.encode(label, add_special_tokens=False)
                 num_tokens_to_remove = len(ids1) + len(prompt_ids) + len(ids2) + len(label_ids) + 3 - self.args.max_length
                 if num_tokens_to_remove > 0:
                     for _ in range(num_tokens_to_remove):
