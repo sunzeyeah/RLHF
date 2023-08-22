@@ -162,7 +162,7 @@ def create_dataloader(args, train_dataset, pretrain_dataset=None):
         if pretrain_dataset is not None:
             pretrain_sampler = DistributedSampler(pretrain_dataset)
 
-    # prompt_train_dataloader is only used for generate_experience() where batch size is fiex at 1
+    # prompt_train_dataloader is only used for generate_experience() where batch size is fixed at 1
     prompt_train_dataloader = DataLoader(
         train_dataset,
         # collate_fn=data_collator,

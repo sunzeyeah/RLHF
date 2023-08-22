@@ -113,7 +113,22 @@ class ChatGLMTokenizer(PreTrainedTokenizer):
         return self.tokenizer.convert_id_to_token(index)
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        return self.tokenizer.decode_tokens(tokens)
+        current_sub_tokens = []
+        out_string = ""
+        prev_is_special = False
+        for i, token in enumerate(tokens):
+            # make sure that special tokens are not decoded using sentencepiece model
+            if token in self.all_special_tokens:
+                if not prev_is_special and i != 0:
+                    out_string += " "
+                out_string += self.tokenizer.decode_tokens(current_sub_tokens) + token
+                prev_is_special = True
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+                prev_is_special = False
+        out_string += self.tokenizer.decode_tokens(current_sub_tokens)
+        return out_string
 
     def save_vocabulary(self, save_directory, filename_prefix=None):
         """

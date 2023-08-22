@@ -185,7 +185,7 @@ bash train_rlhf.sh
 <table>
     <tr>  <td>Model</td>  <td>Avg</td>  <td>STEM</td> <td>Social Science</td> <td>Humanities</td> <td>Other</td> </tr>
     <tr>  <td>LLaMA-30B</td>  <td style="color:red"><b>56.33</b></td>  <td>44.68</td>  <td style="color:red"><b>65.64</b></td>  <td style="color:red"><b>54.60</b></td>  <td>61.57</td> </tr>
-    <tr>  <td>xverse-13B</td>  <td>55.24</td>  <td style="color:red">45.60</td>  <td>64.51</td>  <td>50.32</td>  <td style="color:red"><b>63.27</b></td> </tr>
+    <tr>  <td>xverse-13B</td>  <td>55.24</td>  <td style="color:red"><b>45.60</b></td>  <td>64.51</td>  <td>50.32</td>  <td style="color:red"><b>63.27</b></td> </tr>
     <tr>  <td>Qwen-7B-Chat</td>  <td>54.13</td>  <td>41.76</td>  <td>63.43</td>  <td>50.81</td>  <td>62.50</td> </tr>
     <tr>  <td>LLaMA2-13B-chat</td>  <td>53.98</td>  <td>44.52</td>  <td>63.40</td>  <td>49.37</td>  <td>61.21</td> </tr>
     <tr>  <td>Baichuan-13B-Base</td>  <td>53.46</td>  <td>43.86</td>  <td>63.14</td>  <td>49.73</td>  <td>59.28</td> </tr>

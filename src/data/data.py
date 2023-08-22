@@ -379,12 +379,13 @@ class SFTDataset(Dataset):
                 label = item['answers'][0]['answer']
                 score = item['answers'][0]['score']
                 prefix = item.get('prefix', "")
+                system = item.get('system', "")
                 if len(prompt) <= 0 or len(label) <= 0:
                     discard += 1
                     continue
 
                 if not self.concat_samples:
-                    datasets.append({"prompt": prompt, "label": label, "prefix": prefix})
+                    datasets.append({"prompt": prompt, "label": label, "prefix": prefix, "system": system})
                 else:
                     if "chatglm2" not in self.model_name_or_path.lower():
                         assert "glm" not in self.model_name_or_path.lower(), \
