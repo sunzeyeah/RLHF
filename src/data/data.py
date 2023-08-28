@@ -237,6 +237,7 @@ class SFTDataset(Dataset):
             prompt = data['prompt']
             label = data['label']
             prefix = data['prefix']
+            system = data['system']
             if "glm" in self.model_name_or_path.lower() and "chatglm" not in self.model_name_or_path.lower():
                 encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
                 prompt_length = len(encoded_prompt['input_ids'])
@@ -288,6 +289,7 @@ class SFTDataset(Dataset):
                 ids1 = [790, 30951, 517, 30910, 30939, 30996, 13, 13, 54761, 31211]
                 # \n\n答：
                 ids2 = [13, 13, 55437, 31211]
+                prompt = "\n\n".join((system, prompt))
                 prompt_ids = self.tokenizer.encode(" " + prompt, add_special_tokens=False)[1:]
                 label_ids = self.tokenizer.encode(label, add_special_tokens=False)
                 num_tokens_to_remove = len(ids1) + len(prompt_ids) + len(ids2) + len(label_ids) + 3 - self.args.max_length
@@ -562,8 +564,8 @@ class RLHFDataset(Dataset):
     def __getitem__(self, idx):
         data = self.post_list[idx]
         prompt = data['prompt']
-        # label = data['label']
         prefix = data['prefix']
+        system = data['system']
         if "pangu" in self.args.actor_model_path:
             encoded_dict = self.tokenizer(prompt, self.tokenizer.sep_token + prefix,
                                           max_length=self.args.max_prompt_length,
@@ -576,15 +578,18 @@ class RLHFDataset(Dataset):
                 # "labels": encoded_dict['input_ids'],
             }
         elif "chatglm" in self.args.actor_model_path:
-            prompt = f"[Round {1}]\n问：{prompt}\n答："
-            encoded_dict = self.tokenizer(prompt, max_length=self.args.max_prompt_length, return_tensors="pt",
-                                          # padding="max_length",
-                                          truncation="only_first")
-
-            return {
+            prompt = "\n\n".join((system, prompt))
+            prompt = f"[Round {1}]\n\n问：{prompt}\n\n答：" if "chatglm2" in self.args.actor_model_path else f"[Round {0}]\n问：{prompt}\n答："
+            encoded_dict = self.tokenizer(prompt, max_length=self.args.max_prompt_length,
+                                          return_tensors="pt", truncation="only_first")
+            res = {
                 "input_ids": encoded_dict['input_ids'][0],
-                # "labels": encoded_dict['input_ids'][0],
             }
+            if data['reward_score'] is not None:
+                res['reward_score'] = torch.tensor(data['reward_score'])
+            if data['values'] is not None:
+                res['values'] = torch.tensor(data['values'])
+            return res
         elif "glm" in self.args.actor_model_path:
             # encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
             # prompt_length = len(encoded_prompt['input_ids'])
@@ -618,13 +623,15 @@ class RLHFDataset(Dataset):
                 if data_type != "human_generated":
                     continue
                 prompt = item['prompt']
-                label = item['answers'][0]['answer']
-                prefix = item['prefix']
+                prefix = item.get('prefix', "")
+                system = item.get('system', "")
+                reward_score = item.get('reward_score', None)
+                values = item.get('values', None)
 
-                if len(prompt) <= 0 or len(label) <= 0:
+                if len(prompt) <= 0:
                     discard += 1
                     continue
-                datasets.append({"prompt": prompt, "label": label, "prefix": prefix})
+                datasets.append({"prompt": prompt, "system": system, "prefix": prefix, "reward_score": reward_score, "values": values})
         print_rank_0(f"Finished loading {os.path.basename(filename)}, # samples: {len(datasets)}, # discarded: {discard}")
 
         return datasets

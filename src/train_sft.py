@@ -222,8 +222,9 @@ def main():
             for test_data in tqdm(test_dataset.post_list, desc="Prediction"):
                 prompt = test_data['prompt']
                 prefix = test_data['prefix']
-                # label = dev_data['label']
+                system = test_data['system']
                 if "chatglm" in args.model_name_or_path.lower():
+                    prompt = "\n\n".join((system, prompt))
                     encoded_prompt = tokenizer(prompt)
                     prompt_length = len(encoded_prompt['input_ids'])
                     inputs = tokenizer(prompt,

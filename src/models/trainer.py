@@ -1272,12 +1272,12 @@ class DeepSpeedPPOTrainer():
         self.end_of_conversation_token_id = self.tokenizer.eos_token_id
 
         # Those value can be changed
-        self.kl_ctl = 0.02
-        self.clip_reward_value = 5
-        self.cliprange = 0.2
-        self.cliprange_value = 0.2
-        self.gamma = 1.0
-        self.lam = 0.95
+        self.kl_ctl = args.kl_coefficient
+        self.clip_reward_value = args.clip_reward_value
+        self.cliprange = args.clip_range
+        self.cliprange_value = args.clip_range_value
+        self.gamma = args.gamma
+        self.lam = args.lambda_
 
     def generate_sequence(self, inputs):
         self.eval()
@@ -1393,30 +1393,27 @@ class DeepSpeedPPOTrainer():
 
         return outputs, prompt_length
 
-    def generate_experience(self, output_sequences, answer_start_indices, device):
+    def generate_experience(self, output_sequences, answer_start_indices):
         self.eval()
         print_gpu_utilization("generate_experience - before call actor and critic", self.args.local_rank)
         print_gpu_utilization_torch("generate_experience - before call actor and critic", self.args.local_rank)
 
         # pad_token_id = self.tokenizer.pad_token_id
-        # attention_mask = seq.not_equal(pad_token_id).long()
-        input_ids = output_sequences['input_ids'].to(device)
-        attention_mask = output_sequences['attention_mask'].to(device) if "attention_mask" in output_sequences else None
-        position_ids = output_sequences['position_ids'].to(device) if "position_ids" in output_sequences else None
+        input_ids = output_sequences['input_ids']
+        attention_mask = output_sequences['attention_mask'] if "attention_mask" in output_sequences else None
+        position_ids = output_sequences['position_ids'] if "position_ids" in output_sequences else None
+        reward_score = output_sequences['reward_score'] if "reward_score" in output_sequences else None
+        values = output_sequences['values'] if "values" in output_sequences else None
         print_gpu_utilization("generate_experience - after setting output_sequences device", self.args.local_rank)
         print_gpu_utilization_torch("generate_experience - after setting output_sequences device", self.args.local_rank)
 
         with torch.no_grad():
             output = self.actor_model(input_ids, attention_mask=attention_mask, position_ids=position_ids)
             output_ref = self.ref_model(input_ids, attention_mask=attention_mask, position_ids=position_ids)
-            reward_score = self.reward_model(input_ids, attention_mask, position_ids)['chosen_reward'].detach()
-            values = self.critic_model(input_ids, attention_mask, position_ids)['chosen_values'].detach()
-            # reward_score = self.reward_model.forward_value(
-            #     seq, attention_mask,
-            #     prompt_length=self.prompt_length)['chosen_end_scores'].detach(
-            # )
-            # values = self.critic_model.forward_value(
-            #     seq, attention_mask, return_value_only=True).detach()[:, :-1]
+            if self.reward_model is not None:
+                reward_score = self.reward_model(input_ids, attention_mask, position_ids)['chosen_reward'].detach()
+            if self.critic_model is not None:
+                values = self.critic_model(input_ids, attention_mask, position_ids)['chosen_values'].detach()
         print_gpu_utilization("generate_experience - after call actor and critic", self.args.local_rank)
         print_gpu_utilization_torch("generate_experience - after call actor and critic", self.args.local_rank)
 
@@ -1525,17 +1522,21 @@ class DeepSpeedPPOTrainer():
         self.actor_model.step()
         print_gpu_utilization("train_rlhf - after actor step", self.args.local_rank)
         print_gpu_utilization_torch("train_rlhf - after actor step", self.args.local_rank)
-        value = self.critic_model.reward(**batch, use_cache=False)[0][:, :-1] # shape=batch_size * (max_length-1)
-        print_gpu_utilization("train_rlhf - after self.critic_model", self.args.local_rank)
-        print_gpu_utilization_torch("train_rlhf - after self.critic_model", self.args.local_rank)
-        critic_loss = self.critic_loss_fn(value, old_values,
-                                          returns, action_mask)
-        self.critic_model.backward(critic_loss)
-        print_gpu_utilization("train_rlhf - after critic backward", self.args.local_rank)
-        print_gpu_utilization_torch("train_rlhf - after critic backward", self.args.local_rank)
-        self.critic_model.step()
-        print_gpu_utilization("train_rlhf - after critic step", self.args.local_rank)
-        print_gpu_utilization_torch("train_rlhf - after critic step", self.args.local_rank)
+
+        if self.critic_model is not None:
+            value = self.critic_model.reward(**batch, use_cache=False)[0][:, :-1] # shape=batch_size * (max_length-1)
+            print_gpu_utilization("train_rlhf - after self.critic_model", self.args.local_rank)
+            print_gpu_utilization_torch("train_rlhf - after self.critic_model", self.args.local_rank)
+            critic_loss = self.critic_loss_fn(value, old_values,
+                                              returns, action_mask)
+            self.critic_model.backward(critic_loss)
+            print_gpu_utilization("train_rlhf - after critic backward", self.args.local_rank)
+            print_gpu_utilization_torch("train_rlhf - after critic backward", self.args.local_rank)
+            self.critic_model.step()
+            print_gpu_utilization("train_rlhf - after critic step", self.args.local_rank)
+            print_gpu_utilization_torch("train_rlhf - after critic step", self.args.local_rank)
+        else:
+            critic_loss = None
 
         return actor_loss, critic_loss
 
@@ -1550,7 +1551,7 @@ class DeepSpeedPPOTrainer():
         return -pg_objective
 
     def critic_loss_fn(self, values, old_values, returns, mask):
-        # Clipped surrogate objective for value function (? not seen in original paper)
+        # TODO: Clipped surrogate objective for value function (? not seen in original paper)
         values_clipped = torch.clamp(
             values,
             old_values - self.cliprange_value,
@@ -1610,38 +1611,48 @@ class DeepSpeedPPOTrainer():
 
     def _validate_training_mode(self):
         assert self.actor_model.module.training
-        assert self.critic_model.module.training
+        if self.critic_model is not None:
+            assert self.critic_model.module.training
 
     def _validate_evaluation_mode(self):
         assert not self.actor_model.module.training
-        assert not self.critic_model.module.training
         assert not self.ref_model.module.training
-        assert not self.reward_model.module.training
+        if self.critic_model is not None:
+            assert not self.critic_model.module.training
+        if self.reward_model is not None:
+            assert not self.reward_model.module.training
 
     def train(self):
         self.actor_model.train()
-        self.critic_model.train()
+        if self.critic_model is not None:
+            self.critic_model.train()
 
     def eval(self):
         self.actor_model.eval()
-        self.critic_model.eval()
-        self.reward_model.eval()
         self.ref_model.eval()
+        if self.critic_model is not None:
+            self.critic_model.eval()
+        if self.reward_model is not None:
+            self.reward_model.eval()
 
     def dump_model_norms(self, tag):
         actor_model_norm = get_model_norm(self.actor_model)
         ref_model_norm = get_model_norm(self.ref_model)
-        critic_model_norm = get_model_norm(self.critic_model)
-        reward_model_norm = get_model_norm(self.reward_model)
+        if self.critic_model is not None:
+            critic_model_norm = get_model_norm(self.critic_model)
+        if self.reward_model is not None:
+            reward_model_norm = get_model_norm(self.reward_model)
         if self.args.global_rank <= 0:
             logger.info(f'{tag} global_actor_model_norm', actor_model_norm,
                             self.args.local_rank)
             logger.info(f'{tag} global_ref_model_norm', ref_model_norm,
                             self.args.local_rank)
-            logger.info(f'{tag} global_critic_model_norm', critic_model_norm,
-                            self.args.local_rank)
-            logger.info(f'{tag} global_reward_model_norm', reward_model_norm,
-                            self.args.local_rank)
+            if self.critic_model is not None:
+                logger.info(f'{tag} global_critic_model_norm', critic_model_norm,
+                                self.args.local_rank)
+            if self.reward_model is not None:
+                logger.info(f'{tag} global_reward_model_norm', reward_model_norm,
+                                self.args.local_rank)
 
 
 class DeepSpeedPPOPTXTrainer(DeepSpeedPPOTrainer):

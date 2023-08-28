@@ -76,6 +76,19 @@ def get_parser():
     parser.add_argument("--top_k", type=int, default=50)
     parser.add_argument("--top_p", type=float, default=0.8)
     parser.add_argument("--temperature", type=float, default=1.0)
+    parser.add_argument("--kl_coefficient", type=float, default=0.02,
+                        help="Coefficient of KL divergence, used in computing modified reward")
+    parser.add_argument("--clip_reward_value", type=float, default=5.0)
+    parser.add_argument("--clip_range", type=float, default=0.2,
+                        help="Clip range of policy, used in computing clipped policy loss")
+    parser.add_argument("--clip_range_value", type=float, default=0.2,
+                        help="Clip range of value function, used in computing clipped value function loss")
+    parser.add_argument("--gamma", type=float, default=1.0,
+                        help="first decaying factor, used in computing advantages")
+    parser.add_argument("--lambda_", type=float, default=0.95,
+                        help="second decaying factor, used in computing advantages")
+    parser.add_argument('--enable_joint_optimization', action='store_true',
+                        help="Enable joint optimization of policy and reward")
     # deepspeed
     parser.add_argument('--enable_hybrid_engine', action='store_true',
                         help="Enable hybrid engine for actor model to optimize both inference and training through DeepSpeed.")
@@ -219,6 +232,8 @@ def main():
 
     # load tokenizer
     tokenizer_padding_from_right = AutoTokenizer.from_pretrained(args.tokenizer_path, use_cache=False, trust_remote_code=True)
+    if "chatglm2" in args.tokenizer_path:
+        tokenizer_padding_from_right.eop_token_id = tokenizer_padding_from_right.get_command("eop")
     tokenizer_padding_from_left = copy.deepcopy(tokenizer_padding_from_right)
     # tokenizer.pad_token = tokenizer.eos_token
     tokenizer_padding_from_left.padding_side = "left" # PS: padding side slightly affect output of sft generation and reward model result
@@ -285,8 +300,8 @@ def main():
                     except StopIteration:
                         break
                 if len(output_sequences) > 0:
-                    output_sequences = {key: torch.stack(val) for key, val in output_sequences.items()}
-                    output_experiences = trainer.generate_experience(output_sequences, answer_start_indices, device)
+                    output_sequences = {key: torch.stack(val).to(device) for key, val in output_sequences.items()}
+                    output_experiences = trainer.generate_experience(output_sequences, answer_start_indices)
                     exp_dataset = exp_mini_dataset.add(output_experiences)
                 else:
                     exp_dataset = None
