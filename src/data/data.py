@@ -582,14 +582,9 @@ class RLHFDataset(Dataset):
             prompt = f"[Round {1}]\n\n问：{prompt}\n\n答：" if "chatglm2" in self.args.actor_model_path else f"[Round {0}]\n问：{prompt}\n答："
             encoded_dict = self.tokenizer(prompt, max_length=self.args.max_prompt_length,
                                           return_tensors="pt", truncation="only_first")
-            res = {
+            return {
                 "input_ids": encoded_dict['input_ids'][0],
             }
-            if data['reward_score'] is not None:
-                res['reward_score'] = torch.tensor(data['reward_score'])
-            if data['values'] is not None:
-                res['values'] = torch.tensor(data['values'])
-            return res
         elif "glm" in self.args.actor_model_path:
             # encoded_prompt = self.tokenizer(prompt, prefix + self.tokenizer.mask_token)
             # prompt_length = len(encoded_prompt['input_ids'])
@@ -625,13 +620,11 @@ class RLHFDataset(Dataset):
                 prompt = item['prompt']
                 prefix = item.get('prefix', "")
                 system = item.get('system', "")
-                reward_score = item.get('reward_score', None)
-                values = item.get('values', None)
 
                 if len(prompt) <= 0:
                     discard += 1
                     continue
-                datasets.append({"prompt": prompt, "system": system, "prefix": prefix, "reward_score": reward_score, "values": values})
+                datasets.append({"prompt": prompt, "system": system, "prefix": prefix})
         print_rank_0(f"Finished loading {os.path.basename(filename)}, # samples: {len(datasets)}, # discarded: {discard}")
 
         return datasets

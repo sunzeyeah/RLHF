@@ -150,18 +150,16 @@ class DeepSpeedRLHFEngine:
             self.actor_ema = self._init_ema(
                 actor_model_name_or_path=actor_model_name_or_path)
 
-        if critic_model_name_or_path is not None:
-            self.reward = self._init_reward(
+        self.reward = self._init_reward(
+            critic_model_name_or_path=critic_model_name_or_path)
+        if args.enable_joint_optimization:
+            self.critic = self._init_critic(
                 critic_model_name_or_path=critic_model_name_or_path)
-            if args.enable_joint_optimization:
-                self.critic = self._init_critic(
-                    critic_model_name_or_path=critic_model_name_or_path)
 
-                if self.args.critic_gradient_checkpointing:
-                    self.critic.gradient_checkpointing_enable()
+            if self.args.critic_gradient_checkpointing:
+                self.critic.gradient_checkpointing_enable()
         else:
             self.critic = None
-            self.reward = None
 
     def _init_actor(self, actor_model_name_or_path):
         stime = log_init("Actor", self.args.local_rank)

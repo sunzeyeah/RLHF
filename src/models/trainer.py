@@ -1402,18 +1402,18 @@ class DeepSpeedPPOTrainer():
         input_ids = output_sequences['input_ids']
         attention_mask = output_sequences['attention_mask'] if "attention_mask" in output_sequences else None
         position_ids = output_sequences['position_ids'] if "position_ids" in output_sequences else None
-        reward_score = output_sequences['reward_score'] if "reward_score" in output_sequences else None
-        values = output_sequences['values'] if "values" in output_sequences else None
         print_gpu_utilization("generate_experience - after setting output_sequences device", self.args.local_rank)
         print_gpu_utilization_torch("generate_experience - after setting output_sequences device", self.args.local_rank)
 
         with torch.no_grad():
             output = self.actor_model(input_ids, attention_mask=attention_mask, position_ids=position_ids)
             output_ref = self.ref_model(input_ids, attention_mask=attention_mask, position_ids=position_ids)
-            if self.reward_model is not None:
-                reward_score = self.reward_model(input_ids, attention_mask, position_ids)['chosen_reward'].detach()
+            output_reward = self.reward_model(input_ids, attention_mask, position_ids)
+            reward_score = output_reward['chosen_reward'].detach()
             if self.critic_model is not None:
                 values = self.critic_model(input_ids, attention_mask, position_ids)['chosen_values'].detach()
+            else:
+                values = output_reward['chosen_values'].detach()
         print_gpu_utilization("generate_experience - after call actor and critic", self.args.local_rank)
         print_gpu_utilization_torch("generate_experience - after call actor and critic", self.args.local_rank)
 
@@ -1619,8 +1619,7 @@ class DeepSpeedPPOTrainer():
         assert not self.ref_model.module.training
         if self.critic_model is not None:
             assert not self.critic_model.module.training
-        if self.reward_model is not None:
-            assert not self.reward_model.module.training
+        assert not self.reward_model.module.training
 
     def train(self):
         self.actor_model.train()
@@ -1632,16 +1631,14 @@ class DeepSpeedPPOTrainer():
         self.ref_model.eval()
         if self.critic_model is not None:
             self.critic_model.eval()
-        if self.reward_model is not None:
-            self.reward_model.eval()
+        self.reward_model.eval()
 
     def dump_model_norms(self, tag):
         actor_model_norm = get_model_norm(self.actor_model)
         ref_model_norm = get_model_norm(self.ref_model)
         if self.critic_model is not None:
             critic_model_norm = get_model_norm(self.critic_model)
-        if self.reward_model is not None:
-            reward_model_norm = get_model_norm(self.reward_model)
+        reward_model_norm = get_model_norm(self.reward_model)
         if self.args.global_rank <= 0:
             logger.info(f'{tag} global_actor_model_norm', actor_model_norm,
                             self.args.local_rank)
@@ -1650,9 +1647,8 @@ class DeepSpeedPPOTrainer():
             if self.critic_model is not None:
                 logger.info(f'{tag} global_critic_model_norm', critic_model_norm,
                                 self.args.local_rank)
-            if self.reward_model is not None:
-                logger.info(f'{tag} global_reward_model_norm', reward_model_norm,
-                                self.args.local_rank)
+            logger.info(f'{tag} global_reward_model_norm', reward_model_norm,
+                            self.args.local_rank)
 
 
 class DeepSpeedPPOPTXTrainer(DeepSpeedPPOTrainer):
