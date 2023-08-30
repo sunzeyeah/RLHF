@@ -25,7 +25,7 @@ mkdir -p $OUTPUT_DIR
 CUDA_LAUNCH_BLOCKING=1 deepspeed $MAIN \
   --data_dir $DATR_DIR \
   --output_dir $OUTPUT_DIR \
-  --tokneizer_path $TOKENIZER_PATH \
+  --tokenizer_path $TOKENIZER_PATH \
   --model_name_or_path $MODEL_PATH \
   --max_length 512 \
   --logging_steps 10 \
