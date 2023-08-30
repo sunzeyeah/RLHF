@@ -1,6 +1,5 @@
-import copy
-
 import sys
+
 sys.path.insert(0, "/root/autodl-tmp/Code/RLHF")
 sys.path.insert(0, "/mnt/sfevol775196/sunzeye273/Code/chatgpt")
 # sys.path.insert(0, "/mnt/share-pa002-vol682688-prd/sunzeye273/Code/chatgpt")
@@ -9,7 +8,9 @@ import os
 import argparse
 import evaluate
 import torch
+import copy
 
+from torch.utils.data import SequentialSampler, DataLoader
 from tqdm import tqdm
 from transformers import (
     TrainingArguments,
@@ -38,6 +39,7 @@ def get_parser():
     parser.add_argument("--tokenizer_path", type=str, required=True)
     parser.add_argument("--model_name_or_path", type=str, required=True)
 
+    parser.add_argument("--reference_model_name_or_path", type=str, default=None)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--local_rank", type=int, default=0)
     parser.add_argument("--max_length", type=int, default=1024)
@@ -113,10 +115,20 @@ def main():
     # load tokenizer and model
     tokenizer, model, eos_token_id = load_tokenizer_and_model(args)
 
-    # load reference model
-    ref_args = copy.deepcopy(args)
-    ref_args.bits = 4
-    _, ref_model, _ = load_tokenizer_and_model(ref_args)
+    # load reference model or precomputed reference result
+    if args.output_filename is not None:
+        logps = torch.load(os.path.join(args.output_dir, args.output_filename))
+        ref_model = None
+    else:
+        logps = None
+        ref_args = copy.deepcopy(args)
+        ref_args.device_map = "auto"
+        if args.reference_model_name_or_path is not None:
+            ref_args.model_name_or_path = args.reference_model_name_or_path
+        else:
+            ref_args.bits = 4
+        _, ref_model, _ = load_tokenizer_and_model(ref_args)
+        ref_model.eval()
 
     if args.checkpoint is not None:
         load_checkpoint(args, model, strict=False)
@@ -134,11 +146,6 @@ def main():
                                  tokenizer)
     else:
         dev_dataset = None
-    if args.do_pred:
-        test_dataset = SFTDataset(args, os.path.join(args.data_dir, args.test_filename),
-                                  tokenizer, concat_samples=False)
-    else:
-        test_dataset = None
 
     if args.do_train:
         if torch.cuda.is_available():
@@ -203,6 +210,7 @@ def main():
         trainer = DPOTrainer(
             model=model,
             ref_model=ref_model,
+            logps=logps,
             args=training_args,
             beta=args.beta,
             train_dataset=train_dataset,
@@ -211,6 +219,7 @@ def main():
             data_collator=default_data_collator,
             # compute_metrics=compute_metrics,
             # preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+            label_pad_token_id=tokenizer.pad_token_id
         )
         # model.config.use_cache = False  # silence the warnings. Please re-enable for inference!
         trainer.train()
@@ -222,74 +231,64 @@ def main():
         pass
 
     if args.do_pred:
+        def _get_batch_logps(
+                logits: torch.FloatTensor,
+                labels: torch.LongTensor,
+                average_log_prob: bool = False,
+        ) -> torch.FloatTensor:
+            """Compute the log probabilities of the given labels under the given logits.
+
+            Args:
+                logits: Logits of the model (unnormalized). Shape: (batch_size, sequence_length, vocab_size)
+                labels: Labels for which to compute the log probabilities. Label tokens with a value of label_pad_token_id are ignored. Shape: (batch_size, sequence_length)
+                average_log_prob: If True, return the average log probability per (non-masked) token. Otherwise, return the sum of the log probabilities of the (non-masked) tokens.
+
+            Returns:
+                A tensor of shape (batch_size,) containing the average/sum log probabilities of the given labels under the given logits.
+            """
+            if logits.shape[:-1] != labels.shape:
+                raise ValueError("Logits (batch and sequence length dim) and labels must have the same shape.")
+
+            labels = labels[:, 1:].clone()
+            logits = logits[:, :-1, :]
+            loss_mask = labels != tokenizer.pad_token_id
+
+            # dummy token; we'll ignore the losses on these tokens later
+            labels[labels == tokenizer.pad_token_id] = 0
+
+            per_token_logps = torch.gather(logits.log_softmax(-1), dim=2, index=labels.unsqueeze(2)).squeeze(2)
+
+            if average_log_prob:
+                return (per_token_logps * loss_mask).sum(-1) / loss_mask.sum(-1)
+            else:
+                return (per_token_logps * loss_mask).sum(-1)
+
         model.eval()
         device = f"cuda:{args.local_rank}" if torch.cuda.is_available() and args.device_map is not None else "cpu"
-        tokenizer.padding_side = "left"
-        with open(os.path.join(args.output_dir, args.output_filename), "w", encoding="utf-8") as w:
-            w.write("\t".join(["prompt"]+[f"model_answer_{i}" for i in range(args.num_return_sequences)])+"\n")
-            for test_data in tqdm(test_dataset.post_list, desc="Prediction"):
-                prompt = test_data['prompt']
-                prefix = test_data['prefix']
-                system = test_data['system']
-                if "chatglm" in args.model_name_or_path.lower():
-                    prompt = "\n\n".join((system, prompt))
-                    encoded_prompt = tokenizer(prompt)
-                    prompt_length = len(encoded_prompt['input_ids'])
-                    inputs = tokenizer(prompt,
-                                       max_length=min(prompt_length, args.max_length),
-                                       truncation="only_first",
-                                       return_tensors="pt")
-                    # max_gen_length = args.max_length - encoded_dict['input_ids'].shape[1]
-                    # inputs = tokenizer.build_inputs_for_generation(encoded_dict,
-                    #                                                max_gen_length=max_gen_length, padding=True)
-                    inputs = inputs.to(device)
-                    outputs = model.generate(**inputs,
-                                             max_new_tokens=args.max_length_generation,
-                                             eos_token_id=eos_token_id,
-                                             pad_token_id=tokenizer.pad_token_id,
-                                             do_sample=args.do_sample,
-                                             num_return_sequences=args.num_return_sequences,
-                                             top_k=args.top_k,
-                                             top_p=args.top_p,
-                                             temperature=args.temperature)
-                elif "glm" in args.model_name_or_path.lower():
-                    encoded_prompt = tokenizer(prompt, prefix + tokenizer.mask_token)
-                    prompt_length = len(encoded_prompt['input_ids'])
-                    encoded_dict = tokenizer(prompt, prefix + tokenizer.mask_token,
-                                             max_length=min(prompt_length, args.max_length),
-                                             truncation="only_first",
-                                             return_tensors="pt",
-                                             return_token_type_ids=False)
-                    max_gen_length = args.max_length - encoded_dict['input_ids'].shape[1]
-                    inputs = tokenizer.build_inputs_for_generation(encoded_dict,
-                                                                   max_gen_length=max_gen_length, padding=True)
-                    inputs = inputs.to(device)
-                    outputs = model.generate(**inputs,
-                                             max_new_tokens=min(args.max_length_generation, max_gen_length),
-                                             eos_token_id=eos_token_id,
-                                             pad_token_id=tokenizer.pad_token_id,
-                                             do_sample=args.do_sample,
-                                             num_return_sequences=args.num_return_sequences,
-                                             top_k=args.top_k,
-                                             top_p=args.top_p,
-                                             temperature=args.temperature)
-                else:
-                    inputs = tokenizer(prompt, tokenizer.sep_token + prefix, max_length=args.max_length,
-                                       truncation="only_first", add_special_tokens=False,
-                                       return_tensors="pt", return_token_type_ids=False)
-                    # inputs = tokenizer(prompt, add_special_tokens=False, return_token_type_ids=False, return_tensors="pt")
-                    inputs = inputs.to(device)
-                    outputs = model.generate(**inputs,
-                                             max_new_tokens=args.max_length_generation,
-                                             pad_token_id=tokenizer.pad_token_id,
-                                             do_sample=args.do_sample,
-                                             num_return_sequences=args.num_return_sequences,
-                                             top_k=args.top_k,
-                                             top_p=args.top_p,
-                                             temperature=args.temperature)
-                results = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-                w.write("\t".join([prompt]+[result.split(prefix, maxsplit=1)[1] for result in results])+"\n")
 
-    
+        logps = dict()
+        for mode in ["train", "eval"]:
+            logps[mode] = dict()
+            test_filename = os.path.join(args.data_dir, args.test_filename.replace("star", mode))
+            test_dataset = DPODataset(args, test_filename, tokenizer)
+            sampler = SequentialSampler(test_dataset)
+            test_loader = DataLoader(test_dataset, batch_size=args.eval_batch_size, sampler=sampler)
+            with torch.no_grad():
+                for batch in tqdm(test_loader, desc=f"Prediction on {mode}"):
+                    indices = batch['index'].tolist()
+                    chosen_input_ids = batch['chosen_input_ids'].to(device)
+                    chosen_attention_mask = batch['chosen_attention_mask'].to(device) if 'chosen_attention_mask' in batch else None
+                    rejected_input_ids = batch['rejected_input_ids'].to(device)
+                    rejected_attention_mask = batch['rejected_attention_mask'].to(device) if 'rejected_attention_mask' in batch else None
+                    chosen_logits = model(chosen_input_ids, chosen_attention_mask).logits.to(torch.float32)
+                    chosen_logps = _get_batch_logps(chosen_logits, batch["chosen_labels"], average_log_prob=False).detach().cpu()
+                    rejected_logits = model(rejected_input_ids, rejected_attention_mask).logits.to(torch.float32)
+                    rejected_logps = _get_batch_logps(rejected_logits, batch["rejected_labels"], average_log_prob=False).detach().cpu()
+                    for index, chosen_logop, rejected_logp in zip(indices, chosen_logps, rejected_logps):
+                        logps[mode][index] = {"chosen_logop": chosen_logop, "rejected_logp": rejected_logp}
+
+        torch.save(logps, os.path.join(args.output_dir, args.output_filename))
+
+
 if __name__ == "__main__":
     main()

@@ -1736,6 +1736,7 @@ class DPOTrainer(Trainer):
             self,
             model: Union[PreTrainedModel, nn.Module] = None,
             ref_model: Optional[Union[PreTrainedModel, nn.Module]] = None,
+            logps: Optional[Dict[str, Dict[int, Dict[str, torch.FloatTensor]]]] = None,
             beta: float = 0.1,
             args: TrainingArguments = None,
             data_collator: Optional[DataCollator] = None,
@@ -1766,6 +1767,11 @@ class DPOTrainer(Trainer):
             self.ref_model = None
         else:
             self.ref_model = create_reference_model(model)
+
+        if logps:
+            self.logps = logps
+        else:
+            self.logps = None
 
         # if data_collator is None:
         #     if tokenizer is None:
@@ -1972,7 +1978,7 @@ class DPOTrainer(Trainer):
 
         chosen_logits = all_logits[: batch["chosen_input_ids"].shape[0]]
         rejected_logits = all_logits[batch["chosen_input_ids"].shape[0] :]
-        return (chosen_logps, rejected_logps, chosen_logits, rejected_logits)
+        return chosen_logps, rejected_logps, chosen_logits, rejected_logits
 
     def separate_forward(
             self, model: nn.Module, batch: Dict[str, Union[List, torch.LongTensor]]
@@ -2016,24 +2022,34 @@ class DPOTrainer(Trainer):
             policy_rejected_logits,
         ) = self.separate_forward(model, batch)
         # ) = self.concatenated_forward(model, batch)
-        with torch.no_grad():
-            if self.ref_model is None:
-                with self.accelerator.unwrap_model(self.model).pretrained_model.disable_adapter():
+        if self.logps is not None:
+            reference_chosen_logps = []
+            reference_rejected_logps = []
+            for idx in batch['index'].detach().cpu().tolist():
+                reference_chosen_logps.append(self.logps[train_eval][idx]['chosen_logop'])
+                reference_rejected_logps.append(self.logps[train_eval][idx]['rejected_logop'])
+            reference_chosen_logps = torch.stack(reference_chosen_logps).to(self.accelerator.device)
+            reference_rejected_logps = torch.stack(reference_rejected_logps).to(self.accelerator.device)
+        else:
+            with torch.no_grad():
+                if self.ref_model is None:
+                    assert self.is_peft_model, ""
+                    with self.accelerator.unwrap_model(self.model).pretrained_model.disable_adapter():
+                        (
+                            reference_chosen_logps,
+                            reference_rejected_logps,
+                            _,
+                            _,
+                        ) = self.separate_forward(self.model, batch)
+                        # ) = self.concatenated_forward(self.model, batch)
+                else:
                     (
                         reference_chosen_logps,
                         reference_rejected_logps,
                         _,
                         _,
-                    ) = self.separate_forward(self.model, batch)
-                    # ) = self.concatenated_forward(self.model, batch)
-            else:
-                (
-                    reference_chosen_logps,
-                    reference_rejected_logps,
-                    _,
-                    _,
-                ) = self.separate_forward(self.ref_model, batch)
-                # ) = self.concatenated_forward(self.ref_model, batch)
+                    ) = self.separate_forward(self.ref_model, batch)
+                    # ) = self.concatenated_forward(self.ref_model, batch)
 
         losses, chosen_rewards, rejected_rewards = self.dpo_loss(
             policy_chosen_logps,

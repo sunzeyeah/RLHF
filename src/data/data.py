@@ -746,6 +746,7 @@ class DPODataset(Dataset):
     def __getitem__(self, idx):
         pair = self.pairs[idx]
 
+        index = pair["idx"]
         prompt = pair["prompt"]
         chosen_answer = pair["chosen_answer"]
         rejected_answer = pair["rejected_answer"]
@@ -769,6 +770,7 @@ class DPODataset(Dataset):
             chosen_input_ids, chosen_labels = chatglm2_encode(self.tokenizer, prompt, chosen_answer, system, self.args.max_length)
             rejected_input_ids, rejected_labels = chatglm2_encode(self.tokenizer, prompt, rejected_answer, system, self.args.max_length)
             return {
+                "index": torch.tensor(index, dtype=torch.long),
                 "chosen_input_ids": torch.tensor(chosen_input_ids, dtype=torch.long),
                 "rejected_input_ids": torch.tensor(rejected_input_ids, dtype=torch.long),
                 "chosen_labels": torch.tensor(chosen_labels, dtype=torch.long),
@@ -791,6 +793,7 @@ class DPODataset(Dataset):
     @staticmethod
     def load_dataset(filename):
         discard = 0
+        idx = 1
         pairs = []
         with open(filename, "r", encoding="utf-8") as f:
             for line in tqdm(f, desc=f"Loading {os.path.basename(filename)}"):
@@ -812,12 +815,14 @@ class DPODataset(Dataset):
                             and len(prompt) > 0 and len(chosen_answer) > 0 and len(rejected_answer) > 0 \
                             and chosen_answer != rejected_answer:
                         pair = {
+                            "index": idx,
                             "prompt": prompt,
                             "prefix": prefix,
                             "system": system,
                             "chosen_answer": chosen_answer,
                             "rejected_answer": rejected_answer
                         }
+                        idx += 1
                         pairs.append(pair)
                     else:
                         discard += 1
