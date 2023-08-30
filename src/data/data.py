@@ -3,6 +3,8 @@ import os
 import json
 import re
 import random
+from typing import Tuple, List
+
 import torch
 import pandas as pd
 
@@ -10,10 +12,54 @@ from tqdm import tqdm
 from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 import torch.nn.functional as F
+from transformers import PreTrainedTokenizerBase
 
 from src.utils import logger, RESOURCE_PATH
 from src.utils.modeling_utils import _prepare_decoder_attention_mask, qwen_make_context
 from src.utils.file_utils import print_rank_0
+
+
+def chatglm2_encode(tokenizer: PreTrainedTokenizerBase,
+                    prompt: str,
+                    label: str,
+                    system: str = "",
+                    max_length: int = 1024,
+                    ) -> Tuple[List[int], List[int]]:
+    '''Use chatglm2 tokenizer to encode prompt + label with "longest_first" truncation strategy
+
+    :param tokenizer:
+    :param prompt:
+    :param label:
+    :param system:
+    :param max_length:
+    :return:
+    '''
+    gmask_id = tokenizer.get_command("[gMASK]")
+    sop_id = tokenizer.get_command("sop")
+    eop_id = tokenizer.get_command("eop")
+    # [Round {1}]\n\n问：
+    ids1 = [790, 30951, 517, 30910, 30939, 30996, 13, 13, 54761, 31211]
+    # \n\n答：
+    ids2 = [13, 13, 55437, 31211]
+    prompt = "\n\n".join((system, prompt))
+    prompt_ids = tokenizer.encode(" " + prompt, add_special_tokens=False)[1:]
+    label_ids = tokenizer.encode(label, add_special_tokens=False)
+    num_tokens_to_remove = len(ids1) + len(prompt_ids) + len(ids2) + len(label_ids) + 3 - max_length
+    if num_tokens_to_remove > 0:
+        for _ in range(num_tokens_to_remove):
+            if len(prompt_ids) > len(label_ids):
+                prompt_ids.pop()
+            else:
+                label_ids.pop()
+        prompt_ids = [gmask_id, sop_id] + ids1 + prompt_ids + ids2
+        label_ids = label_ids + [eop_id]
+    else:
+        prompt_ids = [gmask_id, sop_id] + ids1 + prompt_ids + ids2
+        label_ids = label_ids + [eop_id] + [tokenizer.pad_token_id] * -num_tokens_to_remove
+    input_ids = prompt_ids + label_ids
+    labels = [tokenizer.pad_token_id] * len(prompt_ids) + label_ids
+    assert len(input_ids) == len(labels) == max_length
+    return input_ids, labels
 
 
 class DataCollatorReward:
@@ -282,31 +328,32 @@ class SFTDataset(Dataset):
                     "labels": encoded_dict['input_ids'],
                 }
             elif "chatglm2" in self.model_name_or_path.lower():
-                gmask_id = self.tokenizer.get_command("[gMASK]")
-                sop_id = self.tokenizer.get_command("sop")
-                eop_id = self.tokenizer.get_command("eop")
-                # [Round {1}]\n\n问：
-                ids1 = [790, 30951, 517, 30910, 30939, 30996, 13, 13, 54761, 31211]
-                # \n\n答：
-                ids2 = [13, 13, 55437, 31211]
-                prompt = "\n\n".join((system, prompt))
-                prompt_ids = self.tokenizer.encode(" " + prompt, add_special_tokens=False)[1:]
-                label_ids = self.tokenizer.encode(label, add_special_tokens=False)
-                num_tokens_to_remove = len(ids1) + len(prompt_ids) + len(ids2) + len(label_ids) + 3 - self.args.max_length
-                if num_tokens_to_remove > 0:
-                    for _ in range(num_tokens_to_remove):
-                        if len(prompt_ids) > len(label_ids):
-                            prompt_ids.pop()
-                        else:
-                            label_ids.pop()
-                    prompt_ids = [gmask_id, sop_id] + ids1 + prompt_ids + ids2
-                    label_ids = label_ids + [eop_id]
-                else:
-                    prompt_ids = [gmask_id, sop_id] + ids1 + prompt_ids + ids2
-                    label_ids = label_ids + [eop_id] + [self.tokenizer.pad_token_id] * -num_tokens_to_remove
-                input_ids = prompt_ids + label_ids
-                labels = [self.tokenizer.pad_token_id] * len(prompt_ids) + label_ids
-                assert len(input_ids) == len(labels) == self.args.max_length
+                input_ids, labels = chatglm2_encode(self.tokenizer, prompt, label, system, self.args.max_length)
+                # gmask_id = self.tokenizer.get_command("[gMASK]")
+                # sop_id = self.tokenizer.get_command("sop")
+                # eop_id = self.tokenizer.get_command("eop")
+                # # [Round {1}]\n\n问：
+                # ids1 = [790, 30951, 517, 30910, 30939, 30996, 13, 13, 54761, 31211]
+                # # \n\n答：
+                # ids2 = [13, 13, 55437, 31211]
+                # prompt = "\n\n".join((system, prompt))
+                # prompt_ids = self.tokenizer.encode(" " + prompt, add_special_tokens=False)[1:]
+                # label_ids = self.tokenizer.encode(label, add_special_tokens=False)
+                # num_tokens_to_remove = len(ids1) + len(prompt_ids) + len(ids2) + len(label_ids) + 3 - self.args.max_length
+                # if num_tokens_to_remove > 0:
+                #     for _ in range(num_tokens_to_remove):
+                #         if len(prompt_ids) > len(label_ids):
+                #             prompt_ids.pop()
+                #         else:
+                #             label_ids.pop()
+                #     prompt_ids = [gmask_id, sop_id] + ids1 + prompt_ids + ids2
+                #     label_ids = label_ids + [eop_id]
+                # else:
+                #     prompt_ids = [gmask_id, sop_id] + ids1 + prompt_ids + ids2
+                #     label_ids = label_ids + [eop_id] + [self.tokenizer.pad_token_id] * -num_tokens_to_remove
+                # input_ids = prompt_ids + label_ids
+                # labels = [self.tokenizer.pad_token_id] * len(prompt_ids) + label_ids
+                # assert len(input_ids) == len(labels) == self.args.max_length
                 return {
                     "input_ids": torch.tensor(input_ids, dtype=torch.long),
                     "attention_mask": torch.ones(len(input_ids), dtype=torch.long),
@@ -437,6 +484,7 @@ class PairwiseDataset(Dataset):
         chosen_answer = pair["chosen_answer"]
         rejected_answer = pair["rejected_answer"]
         prefix = pair['prefix']
+        system = pair['system']
         if "pangu" in self.args.model_name_or_path.lower():
             chosen_encodings_dict = self.tokenizer(prompt, prefix+chosen_answer, max_length=self.args.max_length,
                                                    truncation="longest_first", padding="max_length", return_tensors="pt",
@@ -451,11 +499,16 @@ class PairwiseDataset(Dataset):
                 "rejected_attention_mask": rejected_encodings_dict["attention_mask"],
                 "labels": rejected_encodings_dict["input_ids"],
             }
+        elif "chatglm2" in self.args.model_name_or_path.lower():
+            chosen_input_ids, labels = chatglm2_encode(self.tokenizer, prompt, chosen_answer, system, self.args.max_length)
+            rejected_input_ids, labels = chatglm2_encode(self.tokenizer, prompt, rejected_answer, system, self.args.max_length)
+            return {
+                "chosen_input_ids": torch.tensor(chosen_input_ids, dtype=torch.long),
+                "rejected_input_ids": torch.tensor(rejected_input_ids, dtype=torch.long),
+                "labels": torch.tensor(labels, dtype=torch.long)
+            }
         elif "chatglm" in self.args.model_name_or_path.lower():
-            if "chatglm2" in self.args.model_name_or_path.lower():
-                prompt = f"[Round {1}]\n\n问：{prompt}\n\n答："
-            else:
-                prompt = f"[Round {0}]\n问：{prompt}\n答："
+            prompt = f"[Round {0}]\n问：{prompt}\n答："
             chosen_encodings_dict = self.tokenizer(prompt, chosen_answer, max_length=self.args.max_length,
                                                    truncation="longest_first", padding="max_length", return_tensors="pt")
             rejected_encodings_dict = self.tokenizer(prompt, rejected_answer, max_length=self.args.max_length,
@@ -520,7 +573,8 @@ class PairwiseDataset(Dataset):
                 item = json.loads(line)
                 prompt = item['prompt']
                 answers = item['answers']
-                prefix = item['prefix']
+                prefix = item.get('prefix', "")
+                system = item.get('system', "")
                 chosen_answer, rejected_answer = None, None
                 for i in range(len(answers)-1):
                     answer_1 = answers[i]["answer"]
@@ -536,6 +590,7 @@ class PairwiseDataset(Dataset):
                         pair = {
                             "prompt": prompt,
                             "prefix": prefix,
+                            "system": system,
                             "chosen_answer": chosen_answer,
                             "rejected_answer": rejected_answer
                         }
@@ -674,6 +729,102 @@ class PPODataset:
 
     def free(self):
         self.dataset = []
+
+
+class DPODataset(Dataset):
+    def __init__(self, args, filename, tokenizer):
+        self.pairs = self.load_dataset(filename)
+        self.args = args
+        self.tokenizer = tokenizer
+
+        for k in range(5):
+            print_rank_0(f"DPODataset sample-{k}\n: {self.pairs[k]}")
+
+    def __len__(self):
+        return len(self.pairs)
+
+    def __getitem__(self, idx):
+        pair = self.pairs[idx]
+
+        prompt = pair["prompt"]
+        chosen_answer = pair["chosen_answer"]
+        rejected_answer = pair["rejected_answer"]
+        prefix = pair['prefix']
+        system = pair['system']
+        if "pangu" in self.args.model_name_or_path.lower():
+            chosen_encodings_dict = self.tokenizer(prompt, prefix+chosen_answer, max_length=self.args.max_length,
+                                                   truncation="longest_first", padding="max_length", return_tensors="pt",
+                                                   return_token_type_ids=False)
+            rejected_encodings_dict = self.tokenizer(prompt, prefix+rejected_answer, max_length=self.args.max_length,
+                                                     truncation="longest_first", padding="max_length", return_tensors="pt",
+                                                     return_token_type_ids=False)
+            return {
+                "chosen_input_ids": chosen_encodings_dict["input_ids"],
+                "chosen_attention_mask": chosen_encodings_dict["attention_mask"],
+                "rejected_input_ids": rejected_encodings_dict["input_ids"],
+                "rejected_attention_mask": rejected_encodings_dict["attention_mask"],
+                "labels": rejected_encodings_dict["input_ids"],
+            }
+        elif "chatglm2" in self.args.model_name_or_path.lower():
+            chosen_input_ids, chosen_labels = chatglm2_encode(self.tokenizer, prompt, chosen_answer, system, self.args.max_length)
+            rejected_input_ids, rejected_labels = chatglm2_encode(self.tokenizer, prompt, rejected_answer, system, self.args.max_length)
+            return {
+                "chosen_input_ids": torch.tensor(chosen_input_ids, dtype=torch.long),
+                "rejected_input_ids": torch.tensor(rejected_input_ids, dtype=torch.long),
+                "chosen_labels": torch.tensor(chosen_labels, dtype=torch.long),
+                "rejected_labels": torch.tensor(rejected_labels, dtype=torch.long)
+            }
+        elif "chatglm" in self.args.model_name_or_path.lower():
+            prompt = f"[Round {0}]\n问：{prompt}\n答："
+            chosen_encodings_dict = self.tokenizer(prompt, chosen_answer, max_length=self.args.max_length,
+                                                   truncation="longest_first", padding="max_length", return_tensors="pt")
+            rejected_encodings_dict = self.tokenizer(prompt, rejected_answer, max_length=self.args.max_length,
+                                                     truncation="longest_first", padding="max_length", return_tensors="pt")
+            return {
+                "chosen_input_ids": chosen_encodings_dict["input_ids"][0],
+                "rejected_input_ids": rejected_encodings_dict["input_ids"][0],
+                "labels": rejected_encodings_dict["input_ids"][0],
+            }
+        else:
+            raise ValueError(f"Unsupported model name: {self.args.model_name_or_path}")
+
+    @staticmethod
+    def load_dataset(filename):
+        discard = 0
+        pairs = []
+        with open(filename, "r", encoding="utf-8") as f:
+            for line in tqdm(f, desc=f"Loading {os.path.basename(filename)}"):
+                item = json.loads(line)
+                prompt = item['prompt']
+                answers = item['answers']
+                prefix = item.get('prefix', "")
+                system = item.get('system', "")
+                chosen_answer, rejected_answer = None, None
+                for i in range(len(answers)-1):
+                    answer_1 = answers[i]["answer"]
+                    answer_1_score = answers[i]["score"]
+                    answer_2 = answers[i+1]["answer"]
+                    answer_2_score = answers[i+1]["score"]
+                    if answer_1_score > answer_2_score:
+                        chosen_answer = answer_1
+                    rejected_answer = answer_2
+                    if chosen_answer is not None and rejected_answer is not None \
+                            and len(prompt) > 0 and len(chosen_answer) > 0 and len(rejected_answer) > 0 \
+                            and chosen_answer != rejected_answer:
+                        pair = {
+                            "prompt": prompt,
+                            "prefix": prefix,
+                            "system": system,
+                            "chosen_answer": chosen_answer,
+                            "rejected_answer": rejected_answer
+                        }
+                        pairs.append(pair)
+                    else:
+                        discard += 1
+
+        print_rank_0(f"Finished loading {os.path.basename(filename)}, # pairs: {len(pairs)}, # discarded: {discard}")
+
+        return pairs
 
 
 class OCNLIDataset(Dataset):

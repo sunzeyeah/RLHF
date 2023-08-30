@@ -1,4 +1,6 @@
+from collections import defaultdict
 
+import deepspeed
 import sys
 import json
 import os
@@ -9,16 +11,31 @@ import uuid
 import torch.nn.functional as F
 
 from abc import abstractmethod
+
+from datasets import Dataset
+from deepspeed.runtime.zero import ZeroParamStatus
 from time import time
+from torch import nn
 from tqdm import tqdm
-from typing import Any, Callable,  Iterable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Iterable, Dict, List, Optional, Tuple, Union, Literal
 from torch.utils.data import DataLoader
 from accelerate import Accelerator  # type: ignore
 from ray.air import session
 from ray.air.checkpoint import Checkpoint
 from rich.console import Console
 from rich.table import Table
-from transformers import AutoTokenizer, PretrainedConfig
+from transformers import (
+    AutoTokenizer,
+    PretrainedConfig,
+    Trainer,
+    PreTrainedModel,
+    TrainingArguments,
+    DataCollator,
+    PreTrainedTokenizerBase,
+    TrainerCallback,
+)
+from trl.models import create_reference_model
+from trl.trainer.utils import disable_dropout_in_model, pad_to_length
 
 from src.utils.logger import logger
 from src.utils.config import TRLConfig
@@ -1666,3 +1683,481 @@ class DeepSpeedPPOPTXTrainer(DeepSpeedPPOTrainer):
         self.actor_model.step()
 
         return loss
+
+
+class DPOTrainer(Trainer):
+    r"""
+    Initialize DPOTrainer.
+
+    Args:
+        model (`transformers.PreTrainedModel`):
+            The model to train, preferably an `AutoModelForSequenceClassification`.
+        ref_model (`PreTrainedModelWrapper`):
+            Hugging Face transformer model with a casual language modelling head. Used for implicit reward computation and loss. If no
+            reference model is provided, the trainer will create a reference model with the same architecture as the model to be optimized.
+        beta (`float`, defaults to 0.1):
+            The beta factor in DPO loss. Higher beta means less divergence from the initial policy.
+        args (`transformers.TrainingArguments`):
+            The arguments to use for training.
+        data_collator (`transformers.DataCollator`):
+            The data collator to use for training. If None is specified, the default data collator (`DPODataCollatorWithPadding`) will be used
+            which will pad the sequences to the maximum length of the sequences in the batch, given a dataset of paired sequences.
+        label_pad_token_id (`int`, defaults to `-100`):
+            The label pad token id. This argument is required if you want to use the default data collator.
+        padding_value (`int`, defaults to `0`):
+            The padding value. This argument is required if you want to use the default data collator.
+        truncation_mode (`str`, defaults to `keep_end`):
+            The truncation mode to use, either `keep_end` or `keep_start`. This argument is required if you want to use the default data collator.
+        train_dataset (`datasets.Dataset`):
+            The dataset to use for training.
+        eval_dataset (`datasets.Dataset`):
+            The dataset to use for evaluation.
+        tokenizer (`transformers.PreTrainedTokenizerBase`):
+            The tokenizer to use for training. This argument is required if you want to use the default data collator.
+        model_init (`Callable[[], transformers.PreTrainedModel]`):
+            The model initializer to use for training. If None is specified, the default model initializer will be used.
+        callbacks (`List[transformers.TrainerCallback]`):
+            The callbacks to use for training.
+        optimizers (`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]`):
+            The optimizer and scheduler to use for training.
+        preprocess_logits_for_metrics (`Callable[[torch.Tensor, torch.Tensor], torch.Tensor]`):
+            The function to use to preprocess the logits before computing the metrics.
+        max_length (`int`, defaults to `None`):
+            The maximum length of the sequences in the batch. This argument is required if you want to use the default data collator.
+        max_prompt_length (`int`, defaults to `None`):
+            The maximum length of the prompt. This argument is required if you want to use the default data collator.
+        peft_config (`Dict`, defaults to `None`):
+            The PEFT configuration to use for training. If you pass a PEFT configuration, the model will be wrapped in a PEFT model.
+        disable_dropout (`bool`, defaults to `True`):
+            Whether or not to disable dropouts in `model` and `ref_model`.
+    """
+
+    def __init__(
+            self,
+            model: Union[PreTrainedModel, nn.Module] = None,
+            ref_model: Optional[Union[PreTrainedModel, nn.Module]] = None,
+            beta: float = 0.1,
+            args: TrainingArguments = None,
+            data_collator: Optional[DataCollator] = None,
+            label_pad_token_id: int = -100,
+            padding_value: int = 0,
+            # truncation_mode: str = "keep_end",
+            train_dataset: Optional[Dataset] = None,
+            eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
+            tokenizer: Optional[PreTrainedTokenizerBase] = None,
+            model_init: Optional[Callable[[], PreTrainedModel]] = None,
+            callbacks: Optional[List[TrainerCallback]] = None,
+            optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (
+                    None,
+                    None,
+            ),
+            preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
+            # max_length: Optional[int] = None,
+            # max_prompt_length: Optional[int] = None,
+            # peft_config: Optional[Dict] = None,
+            disable_dropout: bool = True,
+    ):
+        self.is_peft_model = getattr(model, "is_peft_model", False)
+
+        if ref_model:
+            self.ref_model = ref_model
+        elif self.is_peft_model:
+            # The `model` with adapters turned off will be used as the reference model
+            self.ref_model = None
+        else:
+            self.ref_model = create_reference_model(model)
+
+        # if data_collator is None:
+        #     if tokenizer is None:
+        #         raise ValueError(
+        #             "max_length or a tokenizer must be specified when using the default DPODataCollatorWithPadding"
+        #         )
+        #     if max_length is None:
+        #         logger.warn(
+        #             "When using DPODataCollatorWithPadding, you should set `max_length` in the DPOTrainer's init"
+        #             " it will be set to `512` by default, but you should do it yourself in the future.",
+        #             UserWarning,
+        #         )
+        #         max_length = 512
+        #     if max_prompt_length is None:
+        #         logger.warn(
+        #             "When using DPODataCollatorWithPadding, you should set `max_prompt_length` in the DPOTrainer's init"
+        #             " it will be set to `128` by default, but you should do it yourself in the future.",
+        #             UserWarning,
+        #         )
+        #         max_prompt_length = 128
+        #
+        #     data_collator = DPODataCollatorWithPadding(
+        #         tokenizer,
+        #         max_length=max_length,
+        #         max_prompt_length=max_prompt_length,
+        #         label_pad_token_id=label_pad_token_id,
+        #         padding_value=padding_value,
+        #         truncation_mode=truncation_mode,
+        #     )
+        #
+        #     if args.remove_unused_columns:
+        #         args.remove_unused_columns = False
+        #         # warn users
+        #         warnings.warn(
+        #             "When using DPODataCollatorWithPadding, you should set `remove_unused_columns=False` in your TrainingArguments"
+        #             " we have set it for you, but you should do it yourself in the future.",
+        #             UserWarning,
+        #         )
+        #
+        #     self.use_dpo_data_collator = True
+        # else:
+        #     self.use_dpo_data_collator = False
+
+        if disable_dropout:
+            disable_dropout_in_model(model)
+            if self.ref_model is not None:
+                disable_dropout_in_model(self.ref_model)
+
+        self.label_pad_token_id = label_pad_token_id
+        self.padding_value = padding_value
+
+        self.beta = beta
+
+        self._stored_metrics = defaultdict(lambda: defaultdict(list))
+
+        super().__init__(
+            model,
+            args,
+            data_collator,
+            train_dataset,
+            eval_dataset,
+            tokenizer,
+            model_init,
+            None,
+            callbacks,
+            optimizers,
+            preprocess_logits_for_metrics,
+        )
+
+        if not hasattr(self, "accelerator"):
+            raise AttributeError(
+                "Your `Trainer` does not have an `accelerator` object. Consider upgrading `transformers`."
+            )
+
+        if self.ref_model is None:
+            if not hasattr(
+                    self.accelerator.unwrap_model(self.model).pretrained_model,
+                    "disable_adapter",
+            ):
+                raise ValueError(
+                    "You are using a `peft` version that does not support `disable_adapter`. Please update your `peft` version to the latest version."
+                )
+        else:
+            self.ref_model = self.accelerator.prepare_model(self.ref_model, evaluation_mode=True)
+
+    def concatenated_inputs(self, batch: Dict[str, Union[List, torch.LongTensor]]) -> Dict[str, torch.LongTensor]:
+        """Concatenate the chosen and rejected inputs into a single tensor.
+
+        Args:
+            batch: A batch of data. Must contain the keys 'chosen_input_ids' and 'rejected_input_ids', which are tensors of shape (batch_size, sequence_length).
+
+        Returns:
+            A dictionary containing the concatenated inputs under the key 'concatenated_input_ids'.
+        """
+        max_length = max(batch["chosen_input_ids"].shape[1], batch["rejected_input_ids"].shape[1])
+        concatenated_batch = {}
+        for k in batch:
+            if k.startswith("chosen") and isinstance(batch[k], torch.Tensor):
+                pad_value = self.label_pad_token_id if "labels" in k else self.padding_value
+                concatenated_key = k.replace("chosen", "concatenated")
+                concatenated_batch[concatenated_key] = pad_to_length(batch[k], max_length, pad_value=pad_value)
+        for k in batch:
+            if k.startswith("rejected") and isinstance(batch[k], torch.Tensor):
+                pad_value = self.label_pad_token_id if "labels" in k else self.padding_value
+                concatenated_key = k.replace("rejected", "concatenated")
+                concatenated_batch[concatenated_key] = torch.cat(
+                    (
+                        concatenated_batch[concatenated_key],
+                        pad_to_length(batch[k], max_length, pad_value=pad_value),
+                    ),
+                    dim=0,
+                ).to(self.accelerator.device)
+        return concatenated_batch
+
+    def dpo_loss(
+            self,
+            policy_chosen_logps: torch.FloatTensor,
+            policy_rejected_logps: torch.FloatTensor,
+            reference_chosen_logps: torch.FloatTensor,
+            reference_rejected_logps: torch.FloatTensor,
+            reference_free: bool = False,
+    ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
+        """Compute the DPO loss for a batch of policy and reference model log probabilities.
+
+        Args:
+            policy_chosen_logps: Log probabilities of the policy model for the chosen responses. Shape: (batch_size,)
+            policy_rejected_logps: Log probabilities of the policy model for the rejected responses. Shape: (batch_size,)
+            reference_chosen_logps: Log probabilities of the reference model for the chosen responses. Shape: (batch_size,)
+            reference_rejected_logps: Log probabilities of the reference model for the rejected responses. Shape: (batch_size,)
+            beta: Temperature parameter for the DPO loss, typically something in the range of 0.1 to 0.5. We ignore the reference model as beta -> 0.
+            reference_free: If True, we ignore the _provided_ reference model and implicitly use a reference model that assigns equal probability to all responses.
+
+        Returns:
+            A tuple of three tensors: (losses, chosen_rewards, rejected_rewards).
+            The losses tensor contains the DPO loss for each example in the batch.
+            The chosen_rewards and rejected_rewards tensors contain the rewards for the chosen and rejected responses, respectively.
+        """
+        pi_logratios = policy_chosen_logps - policy_rejected_logps
+        ref_logratios = reference_chosen_logps - reference_rejected_logps
+
+        if reference_free:
+            ref_logratios = 0
+
+        logits = pi_logratios - ref_logratios
+
+        losses = -F.logsigmoid(self.beta * logits)
+        chosen_rewards = self.beta * (policy_chosen_logps - reference_chosen_logps).detach()
+        rejected_rewards = self.beta * (policy_rejected_logps - reference_rejected_logps).detach()
+
+        return losses, chosen_rewards, rejected_rewards
+
+    def _get_batch_logps(
+            self,
+            logits: torch.FloatTensor,
+            labels: torch.LongTensor,
+            average_log_prob: bool = False,
+    ) -> torch.FloatTensor:
+        """Compute the log probabilities of the given labels under the given logits.
+
+        Args:
+            logits: Logits of the model (unnormalized). Shape: (batch_size, sequence_length, vocab_size)
+            labels: Labels for which to compute the log probabilities. Label tokens with a value of label_pad_token_id are ignored. Shape: (batch_size, sequence_length)
+            average_log_prob: If True, return the average log probability per (non-masked) token. Otherwise, return the sum of the log probabilities of the (non-masked) tokens.
+
+        Returns:
+            A tensor of shape (batch_size,) containing the average/sum log probabilities of the given labels under the given logits.
+        """
+        if logits.shape[:-1] != labels.shape:
+            raise ValueError("Logits (batch and sequence length dim) and labels must have the same shape.")
+
+        labels = labels[:, 1:].clone()
+        logits = logits[:, :-1, :]
+        loss_mask = labels != self.label_pad_token_id
+
+        # dummy token; we'll ignore the losses on these tokens later
+        labels[labels == self.label_pad_token_id] = 0
+
+        per_token_logps = torch.gather(logits.log_softmax(-1), dim=2, index=labels.unsqueeze(2)).squeeze(2)
+
+        if average_log_prob:
+            return (per_token_logps * loss_mask).sum(-1) / loss_mask.sum(-1)
+        else:
+            return (per_token_logps * loss_mask).sum(-1)
+
+    def concatenated_forward(
+            self, model: nn.Module, batch: Dict[str, Union[List, torch.LongTensor]]
+    ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
+        """Run the given model on the given batch of inputs, concatenating the chosen and rejected inputs together.
+
+        We do this to avoid doing two forward passes, because it's faster for FSDP.
+        """
+        concatenated_batch = self.concatenated_inputs(batch)
+        all_logits = model(
+            concatenated_batch["concatenated_input_ids"],
+            attention_mask=concatenated_batch["concatenated_attention_mask"],
+        ).logits.to(torch.float32)
+        all_logps = self._get_batch_logps(
+            all_logits,
+            concatenated_batch["concatenated_labels"],
+            average_log_prob=False,
+        )
+        chosen_logps = all_logps[: batch["chosen_input_ids"].shape[0]]
+        rejected_logps = all_logps[batch["chosen_input_ids"].shape[0] :]
+
+        chosen_logits = all_logits[: batch["chosen_input_ids"].shape[0]]
+        rejected_logits = all_logits[batch["chosen_input_ids"].shape[0] :]
+        return (chosen_logps, rejected_logps, chosen_logits, rejected_logits)
+
+    def separate_forward(
+            self, model: nn.Module, batch: Dict[str, Union[List, torch.LongTensor]]
+    ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
+        """Run the given model on the given batch of inputs, separately process chosen and rejected inputs.
+
+        """
+        chosen_logits = model(
+            batch["chosen_input_ids"],
+            attention_mask=batch.get("chosen_attention_mask", None),
+        ).logits.to(torch.float32)
+        chosen_logps = self._get_batch_logps(
+            chosen_logits,
+            batch["chosen_labels"],
+            average_log_prob=False,
+        )
+        rejected_logits = model(
+            batch["rejected_input_ids"],
+            attention_mask=batch.get("rejected_attention_mask", None),
+        ).logits.to(torch.float32)
+        rejected_logps = self._get_batch_logps(
+            rejected_logits,
+            batch["rejected_labels"],
+            average_log_prob=False,
+        )
+        return chosen_logps, rejected_logps, chosen_logits, rejected_logits
+
+    def get_batch_metrics(
+            self,
+            model,
+            batch: Dict[str, Union[List, torch.LongTensor]],
+            train_eval: Literal["train", "eval"] = "train",
+    ):
+        """Compute the DPO loss and other metrics for the given batch of inputs for train or test."""
+        metrics = {}
+
+        (
+            policy_chosen_logps,
+            policy_rejected_logps,
+            policy_chosen_logits,
+            policy_rejected_logits,
+        ) = self.separate_forward(model, batch)
+        # ) = self.concatenated_forward(model, batch)
+        with torch.no_grad():
+            if self.ref_model is None:
+                with self.accelerator.unwrap_model(self.model).pretrained_model.disable_adapter():
+                    (
+                        reference_chosen_logps,
+                        reference_rejected_logps,
+                        _,
+                        _,
+                    ) = self.separate_forward(self.model, batch)
+                    # ) = self.concatenated_forward(self.model, batch)
+            else:
+                (
+                    reference_chosen_logps,
+                    reference_rejected_logps,
+                    _,
+                    _,
+                ) = self.separate_forward(self.ref_model, batch)
+                # ) = self.concatenated_forward(self.ref_model, batch)
+
+        losses, chosen_rewards, rejected_rewards = self.dpo_loss(
+            policy_chosen_logps,
+            policy_rejected_logps,
+            reference_chosen_logps,
+            reference_rejected_logps,
+        )
+        reward_accuracies = (chosen_rewards > rejected_rewards).float()
+
+        prefix = "eval_" if train_eval == "eval" else ""
+        metrics[f"{prefix}rewards/chosen"] = chosen_rewards.cpu().numpy().mean()
+        metrics[f"{prefix}rewards/rejected"] = rejected_rewards.cpu().numpy().mean()
+        metrics[f"{prefix}rewards/accuracies"] = reward_accuracies.cpu().numpy().mean()
+        metrics[f"{prefix}rewards/margins"] = (chosen_rewards - rejected_rewards).cpu().numpy().mean()
+        metrics[f"{prefix}logps/rejected"] = policy_rejected_logps.detach().cpu().numpy().mean()
+        metrics[f"{prefix}logps/chosen"] = policy_chosen_logps.detach().cpu().numpy().mean()
+        metrics[f"{prefix}logits/rejected"] = policy_rejected_logits.detach().cpu().numpy().mean()
+        metrics[f"{prefix}logits/chosen"] = policy_chosen_logits.detach().cpu().numpy().mean()
+
+        return losses.mean(), metrics
+
+    def compute_loss(
+            self,
+            model: Union[PreTrainedModel, nn.Module],
+            inputs: Dict[str, Union[torch.Tensor, Any]],
+            return_outputs=False,
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, Dict[str, torch.Tensor]]]:
+        loss, metrics = self.get_batch_metrics(model, inputs, train_eval="train")
+
+        # force log the metrics
+        if self.accelerator.is_main_process:
+            self.store_metrics(metrics, train_eval="train")
+
+        if return_outputs:
+            return (loss, metrics)
+        return loss
+
+    def get_batch_samples(self, model, batch: Dict[str, torch.LongTensor]) -> Tuple[str, str]:
+        """Generate samples from the model and reference model for the given batch of inputs."""
+
+        policy_output = model.generate(
+            batch["prompt_input_ids"],
+            attention_mask=batch["prompt_attention_mask"],
+            max_length=self.config.max_length,
+            do_sample=True,
+            pad_token_id=self.tokenizer.pad_token_id,
+        )
+
+        if self.ref_model is None:
+            with self.accelerator.unwrap_model(self.model).pretrained_model.disable_adapter():
+                reference_output = self.model.generate(
+                    batch["prompt_input_ids"],
+                    attention_mask=batch["prompt_attention_mask"],
+                    max_length=self.config.max_length,
+                    do_sample=True,
+                    pad_token_id=self.tokenizer.pad_token_id,
+                )
+        else:
+            reference_output = self.ref_model.generate(
+                batch["prompt_input_ids"],
+                attention_mask=batch["prompt_attention_mask"],
+                max_length=self.config.max_length,
+                do_sample=True,
+                pad_token_id=self.tokenizer.pad_token_id,
+            )
+
+        policy_output = pad_to_length(policy_output, self.config.max_length, self.tokenizer.pad_token_id)
+        policy_output_decoded = self.tokenizer.batch_decode(policy_output, skip_special_tokens=True)
+
+        reference_output = pad_to_length(reference_output, self.config.max_length, self.tokenizer.pad_token_id)
+        reference_output_decoded = self.tokenizer.batch_decode(reference_output, skip_special_tokens=True)
+
+        return policy_output_decoded, reference_output_decoded
+
+    def prediction_step(
+            self,
+            model: Union[PreTrainedModel, nn.Module],
+            inputs: Dict[str, Union[torch.Tensor, Any]],
+            prediction_loss_only: bool,
+            ignore_keys: Optional[List[str]] = None,
+    ):
+        if ignore_keys is None:
+            if hasattr(model, "config"):
+                ignore_keys = getattr(model.config, "keys_to_ignore_at_inference", [])
+            else:
+                ignore_keys = []
+
+        with torch.no_grad():
+            loss, metrics = self.get_batch_metrics(model, inputs, train_eval="eval")
+
+        # force log the metrics
+        if self.accelerator.is_main_process:
+            self.store_metrics(metrics, train_eval="eval")
+
+        if prediction_loss_only:
+            return loss.detach(), None, None
+
+        # logits for the chosen and rejected samples from model
+        logits_dict = {
+            "logits_test/chosen": metrics["eval_logits/chosen"],
+            "logits_test/rejected": metrics["eval_logits/rejected"],
+        }
+        logits = tuple(v for k, v in logits_dict.items() if k not in ignore_keys)
+        logits = torch.stack(logits).mean(axis=1)
+        labels = torch.zeros(logits.shape[0])
+
+        return loss.detach(), logits, labels
+
+    def store_metrics(self, metrics: Dict[str, float], train_eval: Literal["train", "eval"] = "train") -> None:
+        for key, value in metrics.items():
+            self._stored_metrics[train_eval][key].append(value)
+
+    def log(self, logs: Dict[str, float]) -> None:
+        """
+        Log `logs` on the various objects watching training, including stored metrics.
+
+        Args:
+            logs (`Dict[str, float]`):
+                The values to log.
+        """
+        # logs either has 'loss' or 'eval_loss'
+        train_eval = "train" if "loss" in logs else "eval"
+        # Add averaged stored metrics to logs
+        for key, metrics in self._stored_metrics[train_eval].items():
+            logs[key] = torch.tensor(metrics).mean().item()
+        del self._stored_metrics[train_eval]
+        return super().log(logs)

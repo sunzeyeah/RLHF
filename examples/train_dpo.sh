@@ -6,8 +6,8 @@ MODEL="chatglm2-6B"
 ROOT="/mnt/pa002-28359-vol543625-private"
 #ROOT="/root/autodl-tmp"
 DATR_DIR=$ROOT/Data/chatgpt/processed
-#MAIN=$ROOT/Code/chatgpt/src/train_sft.py
-MAIN=$ROOT/Code/RLHF/src/train_sft.py
+#MAIN=$ROOT/Code/chatgpt/src/train_dpo.py
+MAIN=$ROOT/Code/RLHF/src/train_dpo.py
 #TOKENIZER_PATH=$ROOT/Data/models/$MODEL
 TOKENIZER_PATH=/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/$MODEL
 #MODEL_PATH=$ROOT/Data/models/$MODEL
@@ -30,11 +30,9 @@ CUDA_LAUNCH_BLOCKING=1 deepspeed $MAIN \
   --max_length 512 \
   --logging_steps 10 \
   --save_steps 100 \
-  --metric_for_best_model "eval_rougeLsum" \
   --learning_rate 1e-5 \
   --do_train \
   --train_filename $TRAIN_FILENAME \
-  --concat_samples \
   --train_batch_size 8 \
   --gradient_accumulation_steps 8 \
   --num_epochs 5 \
@@ -43,4 +41,4 @@ CUDA_LAUNCH_BLOCKING=1 deepspeed $MAIN \
   --do_eval \
   --eval_filename $EVAL_FILENAME \
   --eval_batch_size 32 \
-  > out/train_sft_${MODEL}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1 &
+  > out/train_dpo_${MODEL}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1 &

@@ -26,3 +26,5 @@ pynvml
 bitsandbytes>=0.39.0
 peft>=0.4.0
 transformers_stream_generator
+trl
+trlx; trlx
