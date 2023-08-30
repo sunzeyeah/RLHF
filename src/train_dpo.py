@@ -115,21 +115,6 @@ def main():
     # load tokenizer and model
     tokenizer, model, eos_token_id = load_tokenizer_and_model(args)
 
-    # load reference model or precomputed reference result
-    if args.output_filename is not None:
-        logps = torch.load(os.path.join(args.output_dir, args.output_filename))
-        ref_model = None
-    else:
-        logps = None
-        ref_args = copy.deepcopy(args)
-        ref_args.device_map = "auto"
-        if args.reference_model_name_or_path is not None:
-            ref_args.model_name_or_path = args.reference_model_name_or_path
-        else:
-            ref_args.bits = 4
-        _, ref_model, _ = load_tokenizer_and_model(ref_args)
-        ref_model.eval()
-
     if args.checkpoint is not None:
         load_checkpoint(args, model, strict=False)
 
@@ -195,16 +180,20 @@ def main():
         )
         print_rank_0(f"Training Arguments: {training_args}")
 
-        # # Set up the metric
-        # rouge = evaluate.load("rouge")
-        # def compute_metrics(eval_preds):
-        #     labels_ids = eval_preds.label_ids
-        #     pred_ids = eval_preds.predictions
-        #     pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-        #     label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
-        #     result = rouge.compute(predictions=pred_str, references=label_str)
-        #
-        #     return result
+        # load reference model or precomputed reference result
+        if args.output_filename is not None:
+            logps = torch.load(os.path.join(args.output_dir, args.output_filename))
+            ref_model = None
+        else:
+            logps = None
+            ref_args = copy.deepcopy(args)
+            ref_args.device_map = "auto"
+            if args.reference_model_name_or_path is not None:
+                ref_args.model_name_or_path = args.reference_model_name_or_path
+            else:
+                ref_args.bits = 4
+            _, ref_model, _ = load_tokenizer_and_model(ref_args)
+            ref_model.eval()
 
         # Prepare the trainer and start training
         trainer = DPOTrainer(
@@ -280,10 +269,10 @@ def main():
                     chosen_attention_mask = batch['chosen_attention_mask'].to(device) if 'chosen_attention_mask' in batch else None
                     rejected_input_ids = batch['rejected_input_ids'].to(device)
                     rejected_attention_mask = batch['rejected_attention_mask'].to(device) if 'rejected_attention_mask' in batch else None
-                    chosen_logits = model(chosen_input_ids, chosen_attention_mask).logits.to(torch.float32)
-                    chosen_logps = _get_batch_logps(chosen_logits, batch["chosen_labels"], average_log_prob=False).detach().cpu()
-                    rejected_logits = model(rejected_input_ids, rejected_attention_mask).logits.to(torch.float32)
-                    rejected_logps = _get_batch_logps(rejected_logits, batch["rejected_labels"], average_log_prob=False).detach().cpu()
+                    chosen_logits = model(chosen_input_ids, chosen_attention_mask).logits.detach().cpu().to(torch.float32)
+                    chosen_logps = _get_batch_logps(chosen_logits, batch["chosen_labels"], average_log_prob=False)
+                    rejected_logits = model(rejected_input_ids, rejected_attention_mask).logits.detach().cpu().to(torch.float32)
+                    rejected_logps = _get_batch_logps(rejected_logits, batch["rejected_labels"], average_log_prob=False)
                     for index, chosen_logop, rejected_logp in zip(indices, chosen_logps, rejected_logps):
                         logps[mode][index] = {"chosen_logop": chosen_logop, "rejected_logp": rejected_logp}
 

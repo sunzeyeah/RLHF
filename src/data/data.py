@@ -746,7 +746,7 @@ class DPODataset(Dataset):
     def __getitem__(self, idx):
         pair = self.pairs[idx]
 
-        index = pair["idx"]
+        index = pair["index"]
         prompt = pair["prompt"]
         chosen_answer = pair["chosen_answer"]
         rejected_answer = pair["rejected_answer"]
@@ -793,7 +793,7 @@ class DPODataset(Dataset):
     @staticmethod
     def load_dataset(filename):
         discard = 0
-        idx = 1
+        index = 1
         pairs = []
         with open(filename, "r", encoding="utf-8") as f:
             for line in tqdm(f, desc=f"Loading {os.path.basename(filename)}"):
@@ -815,14 +815,14 @@ class DPODataset(Dataset):
                             and len(prompt) > 0 and len(chosen_answer) > 0 and len(rejected_answer) > 0 \
                             and chosen_answer != rejected_answer:
                         pair = {
-                            "index": idx,
+                            "index": index,
                             "prompt": prompt,
                             "prefix": prefix,
                             "system": system,
                             "chosen_answer": chosen_answer,
                             "rejected_answer": rejected_answer
                         }
-                        idx += 1
+                        index += 1
                         pairs.append(pair)
                     else:
                         discard += 1
