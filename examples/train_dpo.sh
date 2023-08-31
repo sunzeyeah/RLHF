@@ -14,8 +14,8 @@ MODEL_PATH=$ROOT/Data/chatgpt/output/sft/$MODEL
 REFERENCE_MODEL_PATH=$ROOT/Data/chatgpt/output/sft/$MODEL
 OUTPUT_DIR=$ROOT/Data/chatgpt/output/dpo/$MODEL
 TRAIN_FILENAME="sft_train_v2.1.jsonl"
-EVAL_FILENAME="sft_eval_v2.1.jsonl"
-TEST_FILENAME="sft_star_v2.1.jsonl"
+EVAL_FILENAME="sft_eval_v1.1.jsonl"
+TEST_FILENAME="${TRAIN_FILENAME},${EVAL_FILENAME}"
 OUTPUT_FILENAME="dpo_logps_v2.1.bin"
 
 #cd $ROOT/Code/chatgpt || exit
@@ -39,7 +39,7 @@ else
       --do_pred \
       --test_filename $TEST_FILENAME \
       --output_filename $OUTPUT_FILENAME \
-      > out/pred_dpo_${MODEL}_"`date "+%Y-%m-%d-%H:%M:%S"`".log
+      > out/pred_dpo_${MODEL}_"`date "+%Y-%m-%d-%H:%M:%S"`".log 2>&1
 fi
 
 #CUDA_VISIBLE_DEVICES=1 deepspeed --master_port 5008 $MAIN \

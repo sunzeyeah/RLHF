@@ -256,9 +256,13 @@ def main():
         device = f"cuda:{args.local_rank}" if torch.cuda.is_available() and args.device_map is not None else "cpu"
 
         logps = dict()
-        for mode in ["train", "eval"]:
+        for test_filename in args.test_filename.split(","):
+            if "train" in test_filename:
+                mode = "train"
+            else:
+                mode = "eval"
             logps[mode] = dict()
-            test_filename = os.path.join(args.data_dir, args.test_filename.replace("star", mode))
+            test_filename = os.path.join(args.data_dir, test_filename)
             test_dataset = DPODataset(args, test_filename, tokenizer)
             sampler = SequentialSampler(test_dataset)
             test_loader = DataLoader(test_dataset, batch_size=args.eval_batch_size, sampler=sampler)
