@@ -4,6 +4,8 @@
 - LLM模型预训练：支持常见模型的预训练，包括：decoder结构（LLaMA、GPT）、encoder结构（GLM）
 - LLM模型评测：参考GPT类模型，基于ZeroShot和FewShot实现
 - ChatGPT模型训练pipeline：根据[Learning to Summarize from human feedback](https://arxiv.org/abs/2009.01325) ，实现3大流程: SFT、Reward Model和RLHF
+  - 支持RLHF阶段 (1) 联合优化reward和policy (2) 单独优化policy，冻结reward 
+  - 支持[DPO](https://arxiv.org/abs/2305.18290)作为Reward+RLHF的替代方案，可显著降低显存占用，同时实现RL的效果
 
 ## Setup
 
@@ -152,6 +154,13 @@ cd examples
 bash train_rlhf.sh
 ```
 
+### 6. DPO
+利用DPO算法替代Reward+RLHF的pipeline，免去训练Reward模型，同时达到RL训练的效果，该方法可显著降低显存占用。基于开源框架[trl](https://github.com/huggingface/trl) 实现
+```bash
+cd examples
+bash train_dpo.sh
+```
+
 
 ## Results
 
@@ -228,9 +237,9 @@ bash train_rlhf.sh
 
 | 模型 | 可训练参数量 | 数据量 | batch size | sequence length | 硬件 | 显存占用 | speed | Hours per epoch |
 | --- | --- | --- | --- | :---: | :---: | :---: | --- | --- |
-| GLM-350M-chinese | 355M | 5.4M | 4 | 512 | V100 16G | 13G | 3.7 s/iter | 88h
-| Pangu-350M | 345M | 5.4M | 48 | 512 | A100 80G | 78G | 1.91 s/iter | 27.5h
-| Pangu-2.6B | 2.6B | 5.4M |  8 | 512 | A100 80G | 79.4G | 9.61 s/iter | 116h
+| GLM-350M-chinese | 355M | 5.4M | 4 | 512 | V100 16G | 13G | 3.7 s/iter | 88h |
+| Pangu-350M | 345M | 5.4M | 48 | 512 | A100 80G | 78G | 1.91 s/iter | 27.5h |
+| Pangu-2.6B | 2.6B | 5.4M |  8 | 512 | A100 80G | 79.4G | 9.61 s/iter | 116h |
 
 SFT模型下载：
 
@@ -295,8 +304,8 @@ do_sample=True
 
 | 模型 | 可训练参数量 | 数据量 | batch size | sequence length | 硬件 | 显存占用 | speed | Hours per epoch |
 | --- | --- | --- | --- | :---: | :---: | :---: | --- | --- |
-| Pangu-350M | 131M | 12M | 32 | 512 | A100 80G | 72.6G | 1.91 s/iter | 105h
-| Pangu-2.6B | 815M | 12M |  8 | 512 | A100 80G | 80.7G |  | 423h
+| Pangu-350M | 131M | 12M | 32 | 512 | A100 80G | 72.6G | 1.91 s/iter | 105h |
+| Pangu-2.6B | 815M | 12M |  8 | 512 | A100 80G | 80.7G |  | 423h |
 
 
 Reward模型下载：
