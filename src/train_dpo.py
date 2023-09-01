@@ -177,6 +177,7 @@ def main():
             per_device_eval_batch_size=args.eval_batch_size,
             # do_predict=args.do_pred,
             # use_legacy_prediction_loop=args.do_pred,
+            remove_unused_columns=False,
         )
         print_rank_0(f"Training Arguments: {training_args}")
 
@@ -277,8 +278,8 @@ def main():
                     chosen_logps = _get_batch_logps(chosen_logits, batch["chosen_labels"], average_log_prob=False)
                     rejected_logits = model(rejected_input_ids, rejected_attention_mask).logits.detach().cpu().to(torch.float32)
                     rejected_logps = _get_batch_logps(rejected_logits, batch["rejected_labels"], average_log_prob=False)
-                    for index, chosen_logop, rejected_logp in zip(indices, chosen_logps, rejected_logps):
-                        logps[mode][index] = {"chosen_logop": chosen_logop, "rejected_logp": rejected_logp}
+                    for index, chosen_logp, rejected_logp in zip(indices, chosen_logps, rejected_logps):
+                        logps[mode][index] = {"chosen_logp": chosen_logp, "rejected_logp": rejected_logp}
 
         torch.save(logps, os.path.join(args.output_dir, args.output_filename))
 

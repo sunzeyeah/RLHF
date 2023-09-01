@@ -1762,6 +1762,7 @@ class DPOTrainer(Trainer):
 
         if logps is not None:
             self.logps = logps
+            self.ref_model = None
         else:
             self.logps = None
             if ref_model:
@@ -1846,7 +1847,7 @@ class DPOTrainer(Trainer):
             )
 
         if self.ref_model is None:
-            if not hasattr(
+            if self.is_peft_model and not hasattr(
                     self.accelerator.unwrap_model(self.model).pretrained_model,
                     "disable_adapter",
             ):
@@ -2025,14 +2026,14 @@ class DPOTrainer(Trainer):
             reference_chosen_logps = []
             reference_rejected_logps = []
             for idx in batch['index'].detach().cpu().tolist():
-                reference_chosen_logps.append(self.logps[train_eval][idx]['chosen_logop'])
-                reference_rejected_logps.append(self.logps[train_eval][idx]['rejected_logop'])
+                reference_chosen_logps.append(self.logps[train_eval][idx]['chosen_logp'])
+                reference_rejected_logps.append(self.logps[train_eval][idx]['rejected_logp'])
             reference_chosen_logps = torch.stack(reference_chosen_logps).to(self.accelerator.device)
             reference_rejected_logps = torch.stack(reference_rejected_logps).to(self.accelerator.device)
         else:
             with torch.no_grad():
                 if self.ref_model is None:
-                    assert self.is_peft_model, ""
+                    assert self.is_peft_model, "When ref_model is None, the policy must be a peft model"
                     with self.accelerator.unwrap_model(self.model).pretrained_model.disable_adapter():
                         (
                             reference_chosen_logps,
