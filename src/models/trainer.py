@@ -1760,18 +1760,17 @@ class DPOTrainer(Trainer):
     ):
         self.is_peft_model = getattr(model, "is_peft_model", False)
 
-        if ref_model:
-            self.ref_model = ref_model
-        elif self.is_peft_model:
-            # The `model` with adapters turned off will be used as the reference model
-            self.ref_model = None
-        else:
-            self.ref_model = create_reference_model(model)
-
-        if logps:
+        if logps is not None:
             self.logps = logps
         else:
             self.logps = None
+            if ref_model:
+                self.ref_model = ref_model
+            elif self.is_peft_model:
+                # The `model` with adapters turned off will be used as the reference model
+                self.ref_model = None
+            else:
+                self.ref_model = create_reference_model(model)
 
         # if data_collator is None:
         #     if tokenizer is None:
