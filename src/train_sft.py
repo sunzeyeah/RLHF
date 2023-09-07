@@ -17,7 +17,7 @@ from transformers import (
 )
 
 from src.utils import RESOURCE_PATH, load_tokenizer_and_model, load_checkpoint
-from src.data.data import SFTDataset
+from src.data.data import SFTDataset, chatglm2_encode
 from src.utils.file_utils import set_seed, print_rank_0
 # from src.models import convert_to_lora_recursively
 
@@ -221,9 +221,21 @@ def main():
             w.write("\t".join(["prompt"]+[f"model_answer_{i}" for i in range(args.num_return_sequences)])+"\n")
             for test_data in tqdm(test_dataset.post_list, desc="Prediction"):
                 prompt = test_data['prompt']
-                prefix = test_data['prefix']
-                system = test_data['system']
-                if "chatglm" in args.model_name_or_path.lower():
+                prefix = test_data.get('prefix', "")
+                system = test_data.get('system', "")
+                if "chatglm2" in args.model_name_or_path.lower():
+                    input_ids, _, prompt_ids = chatglm2_encode(tokenizer, prompt, None, system, args.max_length)
+                    input_ids = torch.tensor([prompt_ids], dtype=torch.long, device=device)
+                    outputs = model.generate(input_ids=input_ids,
+                                             max_new_tokens=args.max_length_generation,
+                                             eos_token_id=eos_token_id,
+                                             pad_token_id=tokenizer.pad_token_id,
+                                             do_sample=args.do_sample,
+                                             num_return_sequences=args.num_return_sequences,
+                                             top_k=args.top_k,
+                                             top_p=args.top_p,
+                                             temperature=args.temperature)
+                elif "chatglm" in args.model_name_or_path.lower():
                     prompt = "\n\n".join((system, prompt))
                     encoded_prompt = tokenizer(prompt)
                     prompt_length = len(encoded_prompt['input_ids'])
@@ -280,7 +292,7 @@ def main():
                                              top_p=args.top_p,
                                              temperature=args.temperature)
                 results = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-                w.write("\t".join([prompt]+[result.split(prefix, maxsplit=1)[1] for result in results])+"\n")
+                w.write("\t".join([prompt]+[result.replace(p, "") for result in results])+"\n")
 
     
 if __name__ == "__main__":

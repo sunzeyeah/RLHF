@@ -21,10 +21,10 @@ from src.utils.file_utils import print_rank_0
 
 def chatglm2_encode(tokenizer: PreTrainedTokenizerBase,
                     prompt: str,
-                    label: str,
+                    label: str = None,
                     system: str = "",
                     max_length: int = 1024,
-                    ) -> Tuple[List[int], List[int]]:
+                    ) -> Tuple[List[int], List[int], List[int]]:
     '''Use chatglm2 tokenizer to encode prompt + label with "longest_first" truncation strategy
 
     :param tokenizer:
@@ -41,9 +41,10 @@ def chatglm2_encode(tokenizer: PreTrainedTokenizerBase,
     ids1 = [790, 30951, 517, 30910, 30939, 30996, 13, 13, 54761, 31211]
     # \n\n答：
     ids2 = [13, 13, 55437, 31211]
-    prompt = "\n\n".join((system, prompt))
+    if len(system) > 0:
+        prompt = system + "\n\n" + prompt
     prompt_ids = tokenizer.encode(" " + prompt, add_special_tokens=False)[1:]
-    label_ids = tokenizer.encode(label, add_special_tokens=False)
+    label_ids = tokenizer.encode(label, add_special_tokens=False) if label is not None else []
     num_tokens_to_remove = len(ids1) + len(prompt_ids) + len(ids2) + len(label_ids) + 3 - max_length
     if num_tokens_to_remove > 0:
         for _ in range(num_tokens_to_remove):
@@ -59,7 +60,7 @@ def chatglm2_encode(tokenizer: PreTrainedTokenizerBase,
     input_ids = prompt_ids + label_ids
     labels = [tokenizer.pad_token_id] * len(prompt_ids) + label_ids
     assert len(input_ids) == len(labels) == max_length
-    return input_ids, labels
+    return input_ids, labels, prompt_ids
 
 
 class DataCollatorReward:
@@ -328,7 +329,7 @@ class SFTDataset(Dataset):
                     "labels": encoded_dict['input_ids'],
                 }
             elif "chatglm2" in self.model_name_or_path.lower():
-                input_ids, labels = chatglm2_encode(self.tokenizer, prompt, label, system, self.args.max_length)
+                input_ids, labels, _ = chatglm2_encode(self.tokenizer, prompt, label, system, self.args.max_length)
                 # gmask_id = self.tokenizer.get_command("[gMASK]")
                 # sop_id = self.tokenizer.get_command("sop")
                 # eop_id = self.tokenizer.get_command("eop")
@@ -500,8 +501,8 @@ class PairwiseDataset(Dataset):
                 "labels": rejected_encodings_dict["input_ids"],
             }
         elif "chatglm2" in self.args.model_name_or_path.lower():
-            chosen_input_ids, labels = chatglm2_encode(self.tokenizer, prompt, chosen_answer, system, self.args.max_length)
-            rejected_input_ids, labels = chatglm2_encode(self.tokenizer, prompt, rejected_answer, system, self.args.max_length)
+            chosen_input_ids, labels, _ = chatglm2_encode(self.tokenizer, prompt, chosen_answer, system, self.args.max_length)
+            rejected_input_ids, labels, _ = chatglm2_encode(self.tokenizer, prompt, rejected_answer, system, self.args.max_length)
             return {
                 "chosen_input_ids": torch.tensor(chosen_input_ids, dtype=torch.long),
                 "rejected_input_ids": torch.tensor(rejected_input_ids, dtype=torch.long),
@@ -767,8 +768,8 @@ class DPODataset(Dataset):
                 "labels": rejected_encodings_dict["input_ids"],
             }
         elif "chatglm2" in self.args.model_name_or_path.lower():
-            chosen_input_ids, chosen_labels = chatglm2_encode(self.tokenizer, prompt, chosen_answer, system, self.args.max_length)
-            rejected_input_ids, rejected_labels = chatglm2_encode(self.tokenizer, prompt, rejected_answer, system, self.args.max_length)
+            chosen_input_ids, chosen_labels, _ = chatglm2_encode(self.tokenizer, prompt, chosen_answer, system, self.args.max_length)
+            rejected_input_ids, rejected_labels, _ = chatglm2_encode(self.tokenizer, prompt, rejected_answer, system, self.args.max_length)
             return {
                 "index": torch.tensor(index, dtype=torch.long),
                 "chosen_input_ids": torch.tensor(chosen_input_ids, dtype=torch.long),
