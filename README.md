@@ -170,9 +170,11 @@ bash train_dpo.sh
 <summary><b>C-Eval 5-shot测试集(test)结果</b></summary>
 <table>
     <tr>  <td>Model</td>  <td>Avg</td>  <td>Avg(Hard)</td> <td>STEM</td> <td>Social Science</td> <td>Humanities</td> <td>Other</td> </tr>
-    <tr>  <td>xverse-13B</td>  <td style="color:red"><b>55.30</b></td>  <td>32.50</td>  <td>45.90</td>  <td>66.70</td>  <td style="color:red"><b>59.50</b></td>  <td style="color:red"><b>57.60</b></td> </tr>    
-    <tr>  <td>Qwen-7B-Chat</td>  <td>54.70</td>  <td>35.40</td>  <td style="color:red"><b>47.90</b></td>  <td style="color:red"><b>68.30</b></td>  <td>58.70</td>  <td>50.00</td> </tr>    
+    <tr>  <td>Baichuan2-13B-Chat</td>  <td style="color:red"><b>56.30</b></td>  <td>34.20</td>  <td style="color:red"><b>48.20</b></td>  <td style="color:red"><b>70.00</b></td>  <td style="color:red"><b>60.50</b></td>  <td>54.20</td> </tr>    
+    <tr>  <td>xverse-13B</td>  <td>55.30</td>  <td>32.50</td>  <td>45.90</td>  <td>66.70</td>  <td>59.50</td>  <td style="color:red"><b>57.60</b></td> </tr>    
+    <tr>  <td>Qwen-7B-Chat</td>  <td>54.70</td>  <td>35.40</td>  <td>47.90</td>  <td>68.30</td>  <td>58.70</td>  <td>50.00</td> </tr>    
     <tr>  <td>Baichuan-13B-Base</td>  <td >53.70</td>  <td style="color:red"><b>35.60</b></td>  <td>46.80</td>  <td>65.80</td>  <td>58.00</td>  <td>50.80</td> </tr>    
+    <tr>  <td>Baichuan2-7B-Chat</td>  <td>52.50</td>  <td>33.80</td>  <td>45.70</td>  <td>64.20</td>  <td>56.60</td>  <td>50.20</td> </tr>
     <tr>  <td>ChatGLM2-6B</td>  <td>51.20</td>  <td>33.40</td>  <td>46.90</td>  <td>63.00</td>  <td>51.60</td>  <td>47.70</td> </tr>
     <tr>  <td>Baichuan-13B-Chat</td>  <td>47.90</td>  <td>31.50</td>  <td>41.40</td>  <td>56.80</td>  <td>53.00</td>  <td>46.50</td> </tr>
     <tr>  <td>Baichuan-7B</td>  <td>44.20</td>  <td>31.70</td>  <td>39.20</td>  <td>53.30</td>  <td>47.30</td>  <td>41.90</td> </tr>
@@ -193,11 +195,13 @@ bash train_dpo.sh
 <summary><b>MMLU 5-shot测试集(test)结果</b></summary>
 <table>
     <tr>  <td>Model</td>  <td>Avg</td>  <td>STEM</td> <td>Social Science</td> <td>Humanities</td> <td>Other</td> </tr>
-    <tr>  <td>LLaMA-30B</td>  <td style="color:red"><b>56.33</b></td>  <td>44.68</td>  <td style="color:red"><b>65.64</b></td>  <td style="color:red"><b>54.60</b></td>  <td>61.57</td> </tr>
-    <tr>  <td>xverse-13B</td>  <td>55.24</td>  <td style="color:red"><b>45.60</b></td>  <td>64.51</td>  <td>50.32</td>  <td style="color:red"><b>63.27</b></td> </tr>
+    <tr>  <td>Baichuan2-13B-Chat</td>  <td style="color:red"><b>56.90</b></td>  <td style="color:red"><b>47.28</b></td>  <td style="color:red"><b>66.23</b></td>  <td>52.90</td>  <td style="color:red"><b>63.50</b></td> </tr>
+    <tr>  <td>LLaMA-30B</td>  <td>56.33</td>  <td>44.68</td>  <td>65.64</td>  <td style="color:red"><b>54.60</b></td>  <td>61.57</td> </tr>
+    <tr>  <td>xverse-13B</td>  <td>55.24</td>  <td>45.60</td>  <td>64.51</td>  <td>50.32</td>  <td>63.27</td> </tr>
     <tr>  <td>Qwen-7B-Chat</td>  <td>54.13</td>  <td>41.76</td>  <td>63.43</td>  <td>50.81</td>  <td>62.50</td> </tr>
     <tr>  <td>LLaMA2-13B-chat</td>  <td>53.98</td>  <td>44.52</td>  <td>63.40</td>  <td>49.37</td>  <td>61.21</td> </tr>
     <tr>  <td>Baichuan-13B-Base</td>  <td>53.46</td>  <td>43.86</td>  <td>63.14</td>  <td>49.73</td>  <td>59.28</td> </tr>
+    <tr>  <td>Baichuan2-7B-Chat</td>  <td>53.11</td>  <td>43.51</td>  <td>62.26</td>  <td>49.58</td>  <td>59.12</td> </tr>
     <tr>  <td>Baichuan-13B-Chat</td>  <td>51.12</td>  <td>41.61</td>  <td>59.11</td>  <td>47.52</td>  <td>58.31</td> </tr>
     <tr>  <td>Ziya-LLaMA-13B-v1.1</td>  <td>51.06</td>  <td>41.89</td>  <td>57.71</td>  <td>49.22</td>  <td>56.54</td> </tr>
     <tr>  <td>LLaMA2-7B-chat</td>  <td>48.10</td>  <td>39.64</td>  <td>56.28</td>  <td>43.61</td>  <td>55.39</td> </tr>
