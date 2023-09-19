@@ -17,7 +17,7 @@ from transformers import (
 )
 
 from src.utils import RESOURCE_PATH, load_tokenizer_and_model, load_checkpoint
-from src.data.data import PretrainDataset
+from src.data.data import PretrainDataset, chatglm2_encode
 from src.utils.file_utils import set_seed, print_rank_0
 # from src.models.llama import LlamaForCausalLM
 
@@ -230,14 +230,28 @@ def main():
             # for line in tqdm(open(test_file, "r", encoding="utf-8"), desc="Prediction"):
             for line in open(test_file, "r", encoding="utf-8"):
                 test_data = json.loads(line.strip("\n"))
-                data_type = test_data['data_type']
+                data_type = test_data.get('data_type', None)
                 if data_types is not None and data_type not in data_types:
                     continue
                 prompt = test_data['prompt']
                 prefix = test_data.get('prefix', None)
+                system = test_data.get('system', None)
                 label = test_data.get('label', None)
-                encoded_prompt = tokenizer(prompt)
-                if "chatglm" in args.model_name_or_path.lower():
+                # encoded_prompt = tokenizer(prompt)
+                if "chatglm2" in args.model_name_or_path.lower():
+                    input_ids, _, prompt_ids = chatglm2_encode(tokenizer, prompt, None, system, args.max_length)
+                    input_ids = torch.tensor([prompt_ids], dtype=torch.long, device=device)
+                    outputs = model.generate(input_ids=input_ids,
+                                             max_new_tokens=args.max_length_generation,
+                                             eos_token_id=eos_token_id,
+                                             pad_token_id=tokenizer.pad_token_id,
+                                             do_sample=args.do_sample,
+                                             num_return_sequences=args.num_return_sequences,
+                                             top_k=args.top_k,
+                                             top_p=args.top_p,
+                                             temperature=args.temperature)
+                    prompt_length = len(prompt_ids)
+                elif "chatglm" in args.model_name_or_path.lower():
                     inputs = tokenizer(prompt, max_length=args.max_length-args.max_length_generation,
                                        truncation="only_first",
                                        return_tensors="pt")
@@ -252,6 +266,7 @@ def main():
                                              top_p=args.top_p,
                                              temperature=args.temperature,
                                              repetition_penalty=args.repetition_penalty)
+                    prompt_length = len(inputs['input_ids'][0])
                 # elif "glm" in args.model_name_or_path.lower():
                 #     encoded_prompt = tokenizer(prompt, prefix + tokenizer.mask_token)
                 #     prompt_length = len(encoded_prompt['input_ids'])
@@ -289,15 +304,18 @@ def main():
                                              top_p=args.top_p,
                                              temperature=args.temperature,
                                              repetition_penalty=args.repetition_penalty)
-                results = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-                p = tokenizer.decode(encoded_prompt['input_ids'], skip_special_tokens=True)
+                    prompt_length = len(inputs['input_ids'][0])
+                results = tokenizer.batch_decode([output[prompt_length:] for output in outputs], skip_special_tokens=True)
+                # p = tokenizer.decode(encoded_prompt['input_ids'], skip_special_tokens=True)
                 answers = []
                 for r in results:
-                    answer = r.replace(p, "").strip()
+                    # answer = r.replace(p, "").strip()
+                    answer = r
                     print_rank_0(f"\nprompt: {prompt}\nanswer: {answer}")
                     answers.append({"answer": answer, "score": None})
                 if w is not None:
-                    w.write(json.dumps({"prompt": prompt, "prefix": prefix, "answers": answers, "label": label}, ensure_ascii=False)+"\n")
+                    w.write(json.dumps({"prompt": prompt, "prefix": prefix, "system": system, "answers": answers,
+                                        "label": label}, ensure_ascii=False)+"\n")
 
             if w is not None:
                 w.close()

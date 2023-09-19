@@ -235,6 +235,7 @@ def main():
                                              top_k=args.top_k,
                                              top_p=args.top_p,
                                              temperature=args.temperature)
+                    prompt_length = len(prompt_ids)
                 elif "chatglm" in args.model_name_or_path.lower():
                     prompt = "\n\n".join((system, prompt))
                     encoded_prompt = tokenizer(prompt)
@@ -256,6 +257,7 @@ def main():
                                              top_k=args.top_k,
                                              top_p=args.top_p,
                                              temperature=args.temperature)
+                    prompt_length = len(inputs['input_ids'][0])
                 elif "glm" in args.model_name_or_path.lower():
                     encoded_prompt = tokenizer(prompt, prefix + tokenizer.mask_token)
                     prompt_length = len(encoded_prompt['input_ids'])
@@ -277,6 +279,7 @@ def main():
                                              top_k=args.top_k,
                                              top_p=args.top_p,
                                              temperature=args.temperature)
+                    prompt_length = len(inputs['input_ids'][0])
                 else:
                     inputs = tokenizer(prompt, tokenizer.sep_token + prefix, max_length=args.max_length,
                                        truncation="only_first", add_special_tokens=False,
@@ -291,8 +294,9 @@ def main():
                                              top_k=args.top_k,
                                              top_p=args.top_p,
                                              temperature=args.temperature)
-                results = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-                w.write("\t".join([prompt]+[result.replace(p, "") for result in results])+"\n")
+                    prompt_length = len(inputs['input_ids'][0])
+                results = tokenizer.batch_decode([output[prompt_length:] for output in outputs], skip_special_tokens=True)
+                w.write("\t".join([prompt]+results)+"\n")
 
     
 if __name__ == "__main__":
