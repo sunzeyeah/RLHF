@@ -20,10 +20,11 @@ from src.utils.file_utils import print_rank_0
 
 
 def chatglm2_encode(tokenizer: PreTrainedTokenizerBase,
-                    prompt: str,
+                    query: str,
                     label: str = None,
                     system: str = "",
                     max_length: int = 1024,
+                    is_prefix: bool = True
                     ) -> Tuple[List[int], List[int], List[int]]:
     '''Use chatglm2 tokenizer to encode prompt + label with "longest_first" truncation strategy
 
@@ -42,21 +43,25 @@ def chatglm2_encode(tokenizer: PreTrainedTokenizerBase,
     # \n\n答：
     ids2 = [13, 13, 55437, 31211]
     if len(system) > 0:
-        prompt = system + "\n\n" + prompt
-    prompt_ids = tokenizer.encode(" " + prompt, add_special_tokens=False)[1:]
+        system_ids = tokenizer.encode(" " + system, add_special_tokens=False)[1:]
+    else:
+        system_ids = []
+    query_ids = tokenizer.encode(" " + query, add_special_tokens=False)[1:]
     label_ids = tokenizer.encode(label, add_special_tokens=False) if label is not None else []
-    num_tokens_to_remove = len(ids1) + len(prompt_ids) + len(ids2) + len(label_ids) + 3 - max_length
+    num_tokens_to_remove = len(ids1) + len(query_ids) + len(system_ids) + len(ids2) + len(label_ids) + 3 - max_length
     if num_tokens_to_remove > 0:
         for _ in range(num_tokens_to_remove):
-            if len(prompt_ids) > len(label_ids):
-                prompt_ids.pop()
+            if len(query_ids) + len(system_ids) > len(label_ids):
+                query_ids.pop()
             else:
                 label_ids.pop()
-        prompt_ids = [gmask_id, sop_id] + ids1 + prompt_ids + ids2
         label_ids = label_ids + [eop_id]
     else:
-        prompt_ids = [gmask_id, sop_id] + ids1 + prompt_ids + ids2
         label_ids = label_ids + [eop_id] + [tokenizer.pad_token_id] * -num_tokens_to_remove
+    if is_prefix:
+        prompt_ids = [gmask_id, sop_id] + ids1 + system_ids + query_ids + ids2
+    else:
+        prompt_ids = [gmask_id, sop_id] + ids1 + query_ids + system_ids + ids2
     input_ids = prompt_ids + label_ids
     labels = [tokenizer.pad_token_id] * len(prompt_ids) + label_ids
     assert len(input_ids) == len(labels) == max_length

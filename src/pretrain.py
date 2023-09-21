@@ -10,6 +10,7 @@ import torch
 import evaluate
 import json
 
+from tqdm import tqdm
 from transformers import (
     Trainer,
     TrainingArguments,
@@ -227,15 +228,15 @@ def main():
                 w = open(os.path.join(args.output_dir, args.output_filename), "w", encoding="utf-8")
             else:
                 w = None
-            # for line in tqdm(open(test_file, "r", encoding="utf-8"), desc="Prediction"):
-            for line in open(test_file, "r", encoding="utf-8"):
+            for line in tqdm(open(test_file, "r", encoding="utf-8"), desc="Prediction"):
+            # for line in open(test_file, "r", encoding="utf-8"):
                 test_data = json.loads(line.strip("\n"))
                 data_type = test_data.get('data_type', None)
                 if data_types is not None and data_type not in data_types:
                     continue
                 prompt = test_data['prompt']
                 prefix = test_data.get('prefix', None)
-                system = test_data.get('system', None)
+                system = test_data.get('system', "")
                 label = test_data.get('label', None)
                 # encoded_prompt = tokenizer(prompt)
                 if "chatglm2" in args.model_name_or_path.lower():
