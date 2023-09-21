@@ -1,4 +1,3 @@
-
 import os
 import json
 import re
@@ -50,17 +49,26 @@ def chatglm2_encode(tokenizer: PreTrainedTokenizerBase,
     else:
         system_ids = []
     query_ids = tokenizer.encode(" " + query, add_special_tokens=False)[1:]
-    label_ids = tokenizer.encode(label, add_special_tokens=False) if label is not None else []
-    num_tokens_to_remove = len(ids1) + len(query_ids) + len(system_ids) + len(ids2) + len(label_ids) + 3 - max_length
+    if label is not None:
+        label_ids = tokenizer.encode(label, add_special_tokens=False)
+        num_special_tokens = 3
+    else:
+        label_ids = []
+        num_special_tokens = 2
+    num_tokens_to_remove = len(ids1) + len(query_ids) + len(system_ids) + len(ids2) + \
+                           len(label_ids) + num_special_tokens - max_length
     if num_tokens_to_remove > 0:
         for _ in range(num_tokens_to_remove):
             if len(query_ids) + len(system_ids) > len(label_ids):
                 query_ids.pop()
             else:
                 label_ids.pop()
-        label_ids = label_ids + [eop_id]
+        if label is not None:
+            label_ids += [eop_id]
     else:
-        label_ids = label_ids + [eop_id] + [tokenizer.pad_token_id] * -num_tokens_to_remove
+        if label is not None:
+            label_ids += [eop_id]
+        label_ids += [tokenizer.pad_token_id] * -num_tokens_to_remove
     if is_prefix:
         prompt_ids = [gmask_id, sop_id] + ids1 + system_ids + query_ids + ids2
     else:
@@ -126,7 +134,8 @@ class PretrainDataset(Dataset):
         self.args = args
         self.tokenizer = tokenizer
         self.concat_samples = concat_samples
-        self.model_name_or_path = args.model_name_or_path if hasattr(args, "model_name_or_path") else args.actor_model_path
+        self.model_name_or_path = args.model_name_or_path if hasattr(args,
+                                                                     "model_name_or_path") else args.actor_model_path
 
         self.post_list = self.load_dataset(filename)
         for k in range(5):
@@ -187,7 +196,7 @@ class PretrainDataset(Dataset):
                                               truncation="longest_first",
                                               padding="max_length",
                                               return_token_type_ids=False,
-                                              return_tensors="pt",)
+                                              return_tensors="pt", )
                 if "pangu" in self.model_name_or_path.lower():
                     return {
                         "input_ids": encoded_dict['input_ids'],
@@ -207,13 +216,14 @@ class PretrainDataset(Dataset):
             input_ids = data['input_ids']
             combined_attention_mask = torch.full((self.args.max_length, self.args.max_length),
                                                  torch.tensor(torch.finfo(torch.float16).min))
-            for i in range(len(eos_ids)-1):
-                attention_mask = torch.ones((1, eos_ids[i+1]-eos_ids[i]), dtype=torch.long)
+            for i in range(len(eos_ids) - 1):
+                attention_mask = torch.ones((1, eos_ids[i + 1] - eos_ids[i]), dtype=torch.long)
                 attention_mask = _prepare_decoder_attention_mask(attention_mask, attention_mask.shape,
-                                                                 input_embeds=torch.ones(1, dtype=torch.float16, device="cpu"),
+                                                                 input_embeds=torch.ones(1, dtype=torch.float16,
+                                                                                         device="cpu"),
                                                                  past_key_values_length=0)
                 logger.debug(f"{i}-th sample, shape: {attention_mask.shape}, attention_mask: {attention_mask}")
-                combined_attention_mask[eos_ids[i]:eos_ids[i+1], eos_ids[i]:eos_ids[i+1]] = attention_mask
+                combined_attention_mask[eos_ids[i]:eos_ids[i + 1], eos_ids[i]:eos_ids[i + 1]] = attention_mask
             logger.debug(f"shape: {combined_attention_mask.shape}, combined_attention_mask: {combined_attention_mask}")
             if "chatglm2" in self.model_name_or_path.lower():
                 return {
@@ -254,20 +264,21 @@ class PretrainDataset(Dataset):
                         prompt = prompt if label is None else "\n\n".join((prompt, label))
                         label = None
                     token_ids = self.tokenizer.encode(prompt, label,
-                                                      max_length=self.args.max_length-length,
+                                                      max_length=self.args.max_length - length,
                                                       truncation="longest_first")
                     if length + len(token_ids) < self.args.max_length:
                         data.extend(token_ids)
                         length += len(token_ids)
                         eos_ids.append(length)
                     else:
-                        data.extend(token_ids[:(self.args.max_length-length)])
+                        data.extend(token_ids[:(self.args.max_length - length)])
                         eos_ids.append(self.args.max_length)
                         datasets.append({"input_ids": data, "eos_ids": eos_ids})
                         data = []
                         eos_ids = [0]
                         length = 0
-        print_rank_0(f"Finished loading {os.path.basename(filename)}, # samples: {len(datasets)}, # discarded: {discard}")
+        print_rank_0(
+            f"Finished loading {os.path.basename(filename)}, # samples: {len(datasets)}, # discarded: {discard}")
 
         return datasets
 
@@ -277,7 +288,8 @@ class SFTDataset(Dataset):
         self.args = args
         self.tokenizer = tokenizer
         self.concat_samples = concat_samples
-        self.model_name_or_path = args.model_name_or_path if hasattr(args, "model_name_or_path") else args.actor_model_path
+        self.model_name_or_path = args.model_name_or_path if hasattr(args,
+                                                                     "model_name_or_path") else args.actor_model_path
 
         self.post_list = self.load_dataset(filename)
         for k in range(5):
@@ -330,7 +342,7 @@ class SFTDataset(Dataset):
                                               truncation="longest_first",
                                               padding="max_length",
                                               return_token_type_ids=False,
-                                              return_tensors="pt",)
+                                              return_tensors="pt", )
                 return {
                     "input_ids": encoded_dict['input_ids'],
                     "attention_mask": encoded_dict['attention_mask'],
@@ -375,7 +387,7 @@ class SFTDataset(Dataset):
                                               truncation="longest_first",
                                               padding="max_length",
                                               return_token_type_ids=False,
-                                              return_tensors="pt",)
+                                              return_tensors="pt", )
                 return {
                     "input_ids": encoded_dict['input_ids'][0],
                     "attention_mask": encoded_dict['attention_mask'][0],
@@ -387,7 +399,7 @@ class SFTDataset(Dataset):
                                               truncation="longest_first",
                                               padding="max_length",
                                               return_token_type_ids=False,
-                                              return_tensors="pt",)
+                                              return_tensors="pt", )
                 result = {
                     "input_ids": encoded_dict['input_ids'][0],
                     "labels": encoded_dict['input_ids'][0],
@@ -400,13 +412,14 @@ class SFTDataset(Dataset):
             input_ids = data['input_ids']
             combined_attention_mask = torch.full((self.args.max_length, self.args.max_length),
                                                  torch.tensor(torch.finfo(torch.float16).min))
-            for i in range(len(eos_ids)-1):
-                attention_mask = torch.ones((1, eos_ids[i+1]-eos_ids[i]), dtype=torch.long)
+            for i in range(len(eos_ids) - 1):
+                attention_mask = torch.ones((1, eos_ids[i + 1] - eos_ids[i]), dtype=torch.long)
                 attention_mask = _prepare_decoder_attention_mask(attention_mask, attention_mask.shape,
-                                                                 input_embeds=torch.ones(1, dtype=torch.float16, device="cpu"),
+                                                                 input_embeds=torch.ones(1, dtype=torch.float16,
+                                                                                         device="cpu"),
                                                                  past_key_values_length=0)
                 logger.debug(f"{i}-th sample, shape: {attention_mask.shape}, attention_mask: {attention_mask}")
-                combined_attention_mask[eos_ids[i]:eos_ids[i+1], eos_ids[i]:eos_ids[i+1]] = attention_mask
+                combined_attention_mask[eos_ids[i]:eos_ids[i + 1], eos_ids[i]:eos_ids[i + 1]] = attention_mask
             logger.debug(f"shape: {combined_attention_mask.shape}, combined_attention_mask: {combined_attention_mask}")
             if "chatglm2" in self.model_name_or_path.lower():
                 return {
@@ -455,21 +468,22 @@ class SFTDataset(Dataset):
                             prompt = prompt if label is None else "\n\n".join((prompt, label))
                             label = None
                         token_ids = self.tokenizer.encode(prompt, label,
-                                                          max_length=self.args.max_length-length,
+                                                          max_length=self.args.max_length - length,
                                                           truncation="longest_first")
                         if length + len(token_ids) < self.args.max_length:
                             data.extend(token_ids)
                             length += len(token_ids)
                             eos_ids.append(length)
                         else:
-                            data.extend(token_ids[:(self.args.max_length-length)])
+                            data.extend(token_ids[:(self.args.max_length - length)])
                             eos_ids.append(self.args.max_length)
                             datasets.append({"input_ids": data, "eos_ids": eos_ids})
                             data = []
                             eos_ids = [0]
                             length = 0
 
-        print_rank_0(f"Finished loading {os.path.basename(filename)}, # samples: {len(datasets)}, # discarded: {discard}")
+        print_rank_0(
+            f"Finished loading {os.path.basename(filename)}, # samples: {len(datasets)}, # discarded: {discard}")
 
         return datasets
 
@@ -495,11 +509,13 @@ class PairwiseDataset(Dataset):
         prefix = pair['prefix']
         system = pair['system']
         if "pangu" in self.args.model_name_or_path.lower():
-            chosen_encodings_dict = self.tokenizer(prompt, prefix+chosen_answer, max_length=self.args.max_length,
-                                                   truncation="longest_first", padding="max_length", return_tensors="pt",
+            chosen_encodings_dict = self.tokenizer(prompt, prefix + chosen_answer, max_length=self.args.max_length,
+                                                   truncation="longest_first", padding="max_length",
+                                                   return_tensors="pt",
                                                    return_token_type_ids=False)
-            rejected_encodings_dict = self.tokenizer(prompt, prefix+rejected_answer, max_length=self.args.max_length,
-                                                     truncation="longest_first", padding="max_length", return_tensors="pt",
+            rejected_encodings_dict = self.tokenizer(prompt, prefix + rejected_answer, max_length=self.args.max_length,
+                                                     truncation="longest_first", padding="max_length",
+                                                     return_tensors="pt",
                                                      return_token_type_ids=False)
             return {
                 "chosen_input_ids": chosen_encodings_dict["input_ids"],
@@ -509,8 +525,10 @@ class PairwiseDataset(Dataset):
                 "labels": rejected_encodings_dict["input_ids"],
             }
         elif "chatglm2" in self.args.model_name_or_path.lower():
-            chosen_input_ids, labels, _ = chatglm2_encode(self.tokenizer, prompt, chosen_answer, system, self.args.max_length)
-            rejected_input_ids, labels, _ = chatglm2_encode(self.tokenizer, prompt, rejected_answer, system, self.args.max_length)
+            chosen_input_ids, labels, _ = chatglm2_encode(self.tokenizer, prompt, chosen_answer, system,
+                                                          self.args.max_length)
+            rejected_input_ids, labels, _ = chatglm2_encode(self.tokenizer, prompt, rejected_answer, system,
+                                                            self.args.max_length)
             return {
                 "chosen_input_ids": torch.tensor(chosen_input_ids, dtype=torch.long),
                 "rejected_input_ids": torch.tensor(rejected_input_ids, dtype=torch.long),
@@ -519,16 +537,18 @@ class PairwiseDataset(Dataset):
         elif "chatglm" in self.args.model_name_or_path.lower():
             prompt = f"[Round {0}]\n问：{prompt}\n答："
             chosen_encodings_dict = self.tokenizer(prompt, chosen_answer, max_length=self.args.max_length,
-                                                   truncation="longest_first", padding="max_length", return_tensors="pt")
+                                                   truncation="longest_first", padding="max_length",
+                                                   return_tensors="pt")
             rejected_encodings_dict = self.tokenizer(prompt, rejected_answer, max_length=self.args.max_length,
-                                                     truncation="longest_first", padding="max_length", return_tensors="pt")
+                                                     truncation="longest_first", padding="max_length",
+                                                     return_tensors="pt")
             return {
                 "chosen_input_ids": chosen_encodings_dict["input_ids"][0],
                 "rejected_input_ids": rejected_encodings_dict["input_ids"][0],
                 "labels": rejected_encodings_dict["input_ids"][0],
             }
         elif "glm" in self.args.model_name_or_path.lower():
-            chosen_prompt_length = len(self.tokenizer.tokenize(prompt+prefix)) + 4
+            chosen_prompt_length = len(self.tokenizer.tokenize(prompt + prefix)) + 4
             rejected_prompt_length = chosen_prompt_length
             chosen_answer_length = len(self.tokenizer.tokenize(chosen_answer)) + 1
             if chosen_prompt_length + chosen_answer_length > self.args.max_length:
@@ -543,8 +563,10 @@ class PairwiseDataset(Dataset):
                                                  truncation="only_first",
                                                  return_tensors="pt",
                                                  return_token_type_ids=False)
-            chosen_encodings_dict = self.tokenizer.build_inputs_for_generation(chosen_encoded_dict, targets=chosen_answer,
-                                                                               max_gen_length=chosen_answer_length, padding=True)
+            chosen_encodings_dict = self.tokenizer.build_inputs_for_generation(chosen_encoded_dict,
+                                                                               targets=chosen_answer,
+                                                                               max_gen_length=chosen_answer_length,
+                                                                               padding=True)
 
             rejected_answer_length = len(self.tokenizer.tokenize(rejected_answer)) + 1
             if rejected_prompt_length + rejected_answer_length > self.args.max_length:
@@ -559,8 +581,10 @@ class PairwiseDataset(Dataset):
                                                    truncation="only_first",
                                                    return_tensors="pt",
                                                    return_token_type_ids=False)
-            rejected_encodings_dict = self.tokenizer.build_inputs_for_generation(rejected_encoded_dict, targets=rejected_answer,
-                                                                                 max_gen_length=rejected_answer_length, padding=True)
+            rejected_encodings_dict = self.tokenizer.build_inputs_for_generation(rejected_encoded_dict,
+                                                                                 targets=rejected_answer,
+                                                                                 max_gen_length=rejected_answer_length,
+                                                                                 padding=True)
             return {
                 "chosen_input_ids": chosen_encodings_dict["input_ids"][0],
                 "chosen_attention_mask": chosen_encodings_dict["attention_mask"][0],
@@ -585,11 +609,11 @@ class PairwiseDataset(Dataset):
                 prefix = item.get('prefix', "")
                 system = item.get('system', "")
                 chosen_answer, rejected_answer = None, None
-                for i in range(len(answers)-1):
+                for i in range(len(answers) - 1):
                     answer_1 = answers[i]["answer"]
                     answer_1_score = answers[i]["score"]
-                    answer_2 = answers[i+1]["answer"]
-                    answer_2_score = answers[i+1]["score"]
+                    answer_2 = answers[i + 1]["answer"]
+                    answer_2_score = answers[i + 1]["score"]
                     if answer_1_score > answer_2_score:
                         chosen_answer = answer_1
                     rejected_answer = answer_2
@@ -689,7 +713,8 @@ class RLHFDataset(Dataset):
                     discard += 1
                     continue
                 datasets.append({"prompt": prompt, "system": system, "prefix": prefix})
-        print_rank_0(f"Finished loading {os.path.basename(filename)}, # samples: {len(datasets)}, # discarded: {discard}")
+        print_rank_0(
+            f"Finished loading {os.path.basename(filename)}, # samples: {len(datasets)}, # discarded: {discard}")
 
         return datasets
 
@@ -762,11 +787,13 @@ class DPODataset(Dataset):
         prefix = pair['prefix']
         system = pair['system']
         if "pangu" in self.args.model_name_or_path.lower():
-            chosen_encodings_dict = self.tokenizer(prompt, prefix+chosen_answer, max_length=self.args.max_length,
-                                                   truncation="longest_first", padding="max_length", return_tensors="pt",
+            chosen_encodings_dict = self.tokenizer(prompt, prefix + chosen_answer, max_length=self.args.max_length,
+                                                   truncation="longest_first", padding="max_length",
+                                                   return_tensors="pt",
                                                    return_token_type_ids=False)
-            rejected_encodings_dict = self.tokenizer(prompt, prefix+rejected_answer, max_length=self.args.max_length,
-                                                     truncation="longest_first", padding="max_length", return_tensors="pt",
+            rejected_encodings_dict = self.tokenizer(prompt, prefix + rejected_answer, max_length=self.args.max_length,
+                                                     truncation="longest_first", padding="max_length",
+                                                     return_tensors="pt",
                                                      return_token_type_ids=False)
             return {
                 "chosen_input_ids": chosen_encodings_dict["input_ids"],
@@ -776,8 +803,10 @@ class DPODataset(Dataset):
                 "labels": rejected_encodings_dict["input_ids"],
             }
         elif "chatglm2" in self.args.model_name_or_path.lower():
-            chosen_input_ids, chosen_labels, _ = chatglm2_encode(self.tokenizer, prompt, chosen_answer, system, self.args.max_length)
-            rejected_input_ids, rejected_labels, _ = chatglm2_encode(self.tokenizer, prompt, rejected_answer, system, self.args.max_length)
+            chosen_input_ids, chosen_labels, _ = chatglm2_encode(self.tokenizer, prompt, chosen_answer, system,
+                                                                 self.args.max_length)
+            rejected_input_ids, rejected_labels, _ = chatglm2_encode(self.tokenizer, prompt, rejected_answer, system,
+                                                                     self.args.max_length)
             return {
                 "index": torch.tensor(index, dtype=torch.long),
                 "chosen_input_ids": torch.tensor(chosen_input_ids, dtype=torch.long),
@@ -788,9 +817,11 @@ class DPODataset(Dataset):
         elif "chatglm" in self.args.model_name_or_path.lower():
             prompt = f"[Round {0}]\n问：{prompt}\n答："
             chosen_encodings_dict = self.tokenizer(prompt, chosen_answer, max_length=self.args.max_length,
-                                                   truncation="longest_first", padding="max_length", return_tensors="pt")
+                                                   truncation="longest_first", padding="max_length",
+                                                   return_tensors="pt")
             rejected_encodings_dict = self.tokenizer(prompt, rejected_answer, max_length=self.args.max_length,
-                                                     truncation="longest_first", padding="max_length", return_tensors="pt")
+                                                     truncation="longest_first", padding="max_length",
+                                                     return_tensors="pt")
             return {
                 "chosen_input_ids": chosen_encodings_dict["input_ids"][0],
                 "rejected_input_ids": rejected_encodings_dict["input_ids"][0],
@@ -812,11 +843,11 @@ class DPODataset(Dataset):
                 prefix = item.get('prefix', "")
                 system = item.get('system', "")
                 chosen_answer, rejected_answer = None, None
-                for i in range(len(answers)-1):
+                for i in range(len(answers) - 1):
                     answer_1 = answers[i]["answer"]
                     answer_1_score = answers[i]["score"]
-                    answer_2 = answers[i+1]["answer"]
-                    answer_2_score = answers[i+1]["score"]
+                    answer_2 = answers[i + 1]["answer"]
+                    answer_2_score = answers[i + 1]["score"]
                     if answer_1_score > answer_2_score:
                         chosen_answer = answer_1
                     rejected_answer = answer_2
@@ -870,7 +901,7 @@ class OCNLIDataset(Dataset):
             prompt_tokens = self.tokenizer.tokenize(prompt)
             for example in examples:
                 example_prompt = example['prompt']
-                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                exmample_tokens = self.tokenizer.tokenize(example_prompt + "\n")
                 if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
                     break
                 else:
@@ -941,7 +972,7 @@ class CMNLIDataset(Dataset):
             prompt_tokens = self.tokenizer.tokenize(prompt)
             for example in examples:
                 example_prompt = example['prompt']
-                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                exmample_tokens = self.tokenizer.tokenize(example_prompt + "\n")
                 if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
                     break
                 else:
@@ -1015,7 +1046,7 @@ class CHIDDataset(Dataset):
             prompt_tokens = self.tokenizer.tokenize(prompt)
             for example in examples:
                 example_prompt = example['prompt']
-                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                exmample_tokens = self.tokenizer.tokenize(example_prompt + "\n")
                 if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
                     break
                 else:
@@ -1095,7 +1126,7 @@ class CMRCDataset(Dataset):
             prompt_tokens = self.tokenizer.tokenize(prompt)
             for example in examples:
                 example_prompt = example['prompt']
-                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                exmample_tokens = self.tokenizer.tokenize(example_prompt + "\n")
                 if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
                     break
                 else:
@@ -1168,7 +1199,7 @@ class CLUEWSCDataset(Dataset):
             prompt_tokens = self.tokenizer.tokenize(prompt)
             for example in examples:
                 example_prompt = example['prompt']
-                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                exmample_tokens = self.tokenizer.tokenize(example_prompt + "\n")
                 if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
                     break
                 else:
@@ -1200,7 +1231,7 @@ class CLUEWSCDataset(Dataset):
                 span2_text = item['target']['span2_text']
                 span1_text = item['target']['span1_text']
                 label = self.label_dict[item['label']]
-                prompt = text[:span2_index] + span1_text + text[span2_index+len(span2_text):]
+                prompt = text[:span2_index] + span1_text + text[span2_index + len(span2_text):]
                 if len(prompt) <= 0:
                     continue
                 datasets.append({"prompt": prompt, "label": label})
@@ -1239,7 +1270,7 @@ class C3Dataset(Dataset):
             prompt_tokens = self.tokenizer.tokenize(prompt)
             for example in examples:
                 example_prompt = example['prompt']
-                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                exmample_tokens = self.tokenizer.tokenize(example_prompt + "\n")
                 if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
                     break
                 else:
@@ -1247,7 +1278,6 @@ class C3Dataset(Dataset):
                     prompt_tokens.extend(exmample_tokens)
             prompts.append(prompt)
             prompt = "\n".join(prompts)
-
 
         encoded_dict = self.tokenizer(prompt, max_length=self.args.max_length,
                                       padding="max_length", truncation="longest_first", return_tensors="pt")
@@ -1314,7 +1344,7 @@ class AFQMCDataset(Dataset):
             prompt_tokens = self.tokenizer.tokenize(prompt)
             for example in examples:
                 example_prompt = example['prompt']
-                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                exmample_tokens = self.tokenizer.tokenize(example_prompt + "\n")
                 if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
                     break
                 else:
@@ -1384,7 +1414,7 @@ class CSLDataset(Dataset):
             prompt_tokens = self.tokenizer.tokenize(prompt)
             for example in examples:
                 example_prompt = example['prompt']
-                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                exmample_tokens = self.tokenizer.tokenize(example_prompt + "\n")
                 if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
                     break
                 else:
@@ -1429,7 +1459,28 @@ class IFLYTEKDataset(Dataset):
     def __init__(self, args, eval_filename, tokenizer, train_filename=None):
         self.tokenizer = tokenizer
         self.args = args
-        self.label_dict = {'0': '打车', '1': '地图导航', '2': '免费WIFI', '3': '租车', '4': '同城服务', '5': '快递物流', '6': '婚庆', '7': '家政', '8': '公共交通', '9': '政务', '10': '社区服务', '11': '薅羊毛', '12': '魔幻', '13': '仙侠', '14': '卡牌', '15': '飞行空战', '16': '射击游戏', '17': '休闲益智', '18': '动作类', '19': '体育竞技', '20': '棋牌中心', '21': '经营养成', '22': '策略', '23': 'MOBA', '24': '辅助工具', '25': '约会社交', '26': '即时通讯', '27': '工作社交', '28': '论坛圈子', '29': '婚恋社交', '30': '情侣社交', '31': '社交工具', '32': '生活社交', '33': '微博博客', '34': '新闻', '35': '漫画', '36': '小说', '37': '技术', '38': '教辅', '39': '问答交流', '40': '搞笑', '41': '杂志', '42': '百科', '43': '影视娱乐', '44': '求职', '45': '兼职', '46': '视频', '47': '短视频', '48': '音乐', '49': '直播', '50': '电台', '51': 'K歌', '52': '成人', '53': '中小学', '54': '职考', '55': '公务员', '56': '英语', '57': '视频教育', '58': '高等教育', '59': '成人教育', '60': '艺术', '61': '语言(非英语)', '62': '旅游资讯', '63': '综合预定', '64': '民航', '65': '铁路', '66': '酒店', '67': '行程管理', '68': '民宿短租', '69': '出国', '70': '工具', '71': '亲子儿童', '72': '母婴', '73': '驾校', '74': '违章', '75': '汽车咨询', '76': '汽车交易', '77': '日常养车', '78': '行车辅助', '79': '租房', '80': '买房', '81': '装修家居', '82': '电子产品', '83': '问诊挂号', '84': '养生保健', '85': '医疗服务', '86': '减肥瘦身', '87': '美妆美业', '88': '菜谱', '89': '餐饮店', '90': '体育咨讯', '91': '运动健身', '92': '支付', '93': '保险', '94': '股票', '95': '借贷', '96': '理财', '97': '彩票', '98': '记账', '99': '银行', '100': '美颜', '101': '影像剪辑', '102': '摄影修图', '103': '相机', '104': '绘画', '105': '二手', '106': '电商', '107': '团购', '108': '外卖', '109': '电影票务', '110': '社区超市', '111': '购物咨询', '112': '笔记', '113': '办公', '114': '日程管理', '115': '女性', '116': '经营', '117': '收款', '118': '其他'}
+        self.label_dict = {'0': '打车', '1': '地图导航', '2': '免费WIFI', '3': '租车', '4': '同城服务', '5': '快递物流',
+                           '6': '婚庆', '7': '家政', '8': '公共交通', '9': '政务', '10': '社区服务', '11': '薅羊毛',
+                           '12': '魔幻', '13': '仙侠', '14': '卡牌', '15': '飞行空战', '16': '射击游戏',
+                           '17': '休闲益智', '18': '动作类', '19': '体育竞技', '20': '棋牌中心', '21': '经营养成',
+                           '22': '策略', '23': 'MOBA', '24': '辅助工具', '25': '约会社交', '26': '即时通讯',
+                           '27': '工作社交', '28': '论坛圈子', '29': '婚恋社交', '30': '情侣社交', '31': '社交工具',
+                           '32': '生活社交', '33': '微博博客', '34': '新闻', '35': '漫画', '36': '小说', '37': '技术',
+                           '38': '教辅', '39': '问答交流', '40': '搞笑', '41': '杂志', '42': '百科', '43': '影视娱乐',
+                           '44': '求职', '45': '兼职', '46': '视频', '47': '短视频', '48': '音乐', '49': '直播',
+                           '50': '电台', '51': 'K歌', '52': '成人', '53': '中小学', '54': '职考', '55': '公务员',
+                           '56': '英语', '57': '视频教育', '58': '高等教育', '59': '成人教育', '60': '艺术',
+                           '61': '语言(非英语)', '62': '旅游资讯', '63': '综合预定', '64': '民航', '65': '铁路',
+                           '66': '酒店', '67': '行程管理', '68': '民宿短租', '69': '出国', '70': '工具',
+                           '71': '亲子儿童', '72': '母婴', '73': '驾校', '74': '违章', '75': '汽车咨询',
+                           '76': '汽车交易', '77': '日常养车', '78': '行车辅助', '79': '租房', '80': '买房',
+                           '81': '装修家居', '82': '电子产品', '83': '问诊挂号', '84': '养生保健', '85': '医疗服务',
+                           '86': '减肥瘦身', '87': '美妆美业', '88': '菜谱', '89': '餐饮店', '90': '体育咨讯',
+                           '91': '运动健身', '92': '支付', '93': '保险', '94': '股票', '95': '借贷', '96': '理财',
+                           '97': '彩票', '98': '记账', '99': '银行', '100': '美颜', '101': '影像剪辑',
+                           '102': '摄影修图', '103': '相机', '104': '绘画', '105': '二手', '106': '电商', '107': '团购',
+                           '108': '外卖', '109': '电影票务', '110': '社区超市', '111': '购物咨询', '112': '笔记',
+                           '113': '办公', '114': '日程管理', '115': '女性', '116': '经营', '117': '收款', '118': '其他'}
 
         dataset = self.load_dataset(eval_filename)
         if train_filename is not None:
@@ -1455,7 +1506,7 @@ class IFLYTEKDataset(Dataset):
             prompt_tokens = self.tokenizer.tokenize(prompt)
             for example in examples:
                 example_prompt = example['prompt']
-                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                exmample_tokens = self.tokenizer.tokenize(example_prompt + "\n")
                 if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
                     break
                 else:
@@ -1544,7 +1595,7 @@ class TNEWSDataset(Dataset):
             prompt_tokens = self.tokenizer.tokenize(prompt)
             for example in examples:
                 example_prompt = example['prompt']
-                exmample_tokens = self.tokenizer.tokenize(example_prompt+"\n")
+                exmample_tokens = self.tokenizer.tokenize(example_prompt + "\n")
                 if len(exmample_tokens) + len(prompt_tokens) + 2 > self.args.max_length:
                     break
                 else:
@@ -1593,7 +1644,8 @@ class CEvalDataset(Dataset):
     def __init__(self, args, eval_filename, tokenizer, train_filename=None):
         self.tokenizer = tokenizer
         self.args = args
-        self.model_name_or_path = args.model_name_or_path if hasattr(args, "model_name_or_path") else args.actor_model_path
+        self.model_name_or_path = args.model_name_or_path if hasattr(args,
+                                                                     "model_name_or_path") else args.actor_model_path
         self.subject_mapping = json.load(open(os.path.join(RESOURCE_PATH, "eval", "ceval", "subject_mapping.json")))
         self.max_length = args.max_length - args.max_length_generation
         self.choices = ["A", "B", "C", "D"]
@@ -1653,13 +1705,13 @@ class CEvalDataset(Dataset):
                 dev_list = self.dev_list[subject_name]
                 for i in range(min(k, len(dev_list))):
                     prompt, answer = self.format_example(dev_list[i], include_answer=True, cot=self.args.cot)
-                    prompt = f"[Round {i+offset}]{sep}问：{prompt}{sep}答：{answer}"
+                    prompt = f"[Round {i + offset}]{sep}问：{prompt}{sep}答：{answer}"
                     history.append(prompt)
             # Concat few-shot/zero-shot examples with question.
             # If length of full prompt exceeds max_length, remove examples until the length is smaller than max_length
-            question = f"[Round {len(history)+offset}]{sep}问：{question}{sep}答："
+            question = f"[Round {len(history) + offset}]{sep}问：{question}{sep}答："
             while True:
-                full_prompt = sep.join(history+[question])
+                full_prompt = sep.join(history + [question])
                 input_ids = self.tokenizer.encode(full_prompt)
                 if len(input_ids) <= self.max_length:
                     break
@@ -1691,7 +1743,7 @@ class CEvalDataset(Dataset):
             # Concat few-shot/zero-shot examples with question.
             # If length of full prompt exceeds max_length, remove examples until the length is smaller than max_length
             while True:
-                full_prompt = "\n\n".join(history+[question])
+                full_prompt = "\n\n".join(history + [question])
                 input_ids = self.tokenizer.encode(full_prompt)
                 if len(input_ids) <= self.max_length:
                     break
@@ -1703,12 +1755,12 @@ class CEvalDataset(Dataset):
             encoded_dict = self.tokenizer(full_prompt, max_length=self.max_length, return_tensors="pt",
                                           truncation="longest_first")
 
-        logger.debug(f"number of shots: {len(history)-1}, full prompt: {full_prompt}")
+        logger.debug(f"number of shots: {len(history) - 1}, full prompt: {full_prompt}")
 
         return {
             "input_ids": encoded_dict["input_ids"],
             "attention_mask": encoded_dict.get("attention_mask", None),
-            "number_of_shots": max(len(history)-1, 0),
+            "number_of_shots": max(len(history) - 1, 0),
             "id": data['id'],
             "subject_name_key": data['subject_name_key'],
             "answer": data.get('answer', None)
@@ -1742,7 +1794,8 @@ class MMLUDataset(Dataset):
     def __init__(self, args, eval_filename, tokenizer, train_filename=None):
         self.tokenizer = tokenizer
         self.args = args
-        self.model_name_or_path = args.model_name_or_path if hasattr(args, "model_name_or_path") else args.actor_model_path
+        self.model_name_or_path = args.model_name_or_path if hasattr(args,
+                                                                     "model_name_or_path") else args.actor_model_path
         self.subject_mapping = json.load(open(os.path.join(RESOURCE_PATH, "eval", "mmlu", "subject_mapping.json")))
         self.choices = ["A", "B", "C", "D"]
         self.max_length = args.max_length - args.max_length_generation
@@ -1793,13 +1846,13 @@ class MMLUDataset(Dataset):
                 dev_list = self.dev_list[subject_name]
                 for i in range(min(k, len(dev_list))):
                     prompt, answer = self.format_example(dev_list[i], include_answer=True)
-                    prompt = f"[Round {i+offset}]{sep}问：{prompt}{sep}答：{answer}"
+                    prompt = f"[Round {i + offset}]{sep}问：{prompt}{sep}答：{answer}"
                     history.append(prompt)
             # Concat few-shot/zero-shot examples with question.
             # If length of full prompt exceeds max_length, remove examples until the length is smaller than max_length
-            question = f"[Round {len(history)+offset}]{sep}问：{question}{sep}答："
+            question = f"[Round {len(history) + offset}]{sep}问：{question}{sep}答："
             while True:
-                full_prompt = sep.join(history+[question])
+                full_prompt = sep.join(history + [question])
                 input_ids = self.tokenizer.encode(full_prompt)
                 if len(input_ids) <= self.max_length:
                     break
@@ -1832,7 +1885,7 @@ class MMLUDataset(Dataset):
             # Concat few-shot/zero-shot examples with question.
             # If length of full prompt exceeds max_length, remove examples until the length is smaller than max_length
             while True:
-                full_prompt = "\n\n".join(history+[question])
+                full_prompt = "\n\n".join(history + [question])
                 input_ids = self.tokenizer.encode(full_prompt)
                 if len(input_ids) <= self.max_length:
                     break
@@ -1848,7 +1901,7 @@ class MMLUDataset(Dataset):
         return {
             "input_ids": encoded_dict["input_ids"],
             "attention_mask": encoded_dict.get("attention_mask", None),
-            "number_of_shots": max(len(history)-1, 0),
+            "number_of_shots": max(len(history) - 1, 0),
             "subject_name_key": data['subject_name_key'],
             "answer": data.get('answer', None)
         }
@@ -1875,4 +1928,3 @@ class MMLUDataset(Dataset):
         print_rank_0(f"Finished loading {dt} dataset")
 
         return datasets
-
