@@ -43,7 +43,7 @@ def chatglm2_encode(tokenizer: PreTrainedTokenizerBase,
     # \n\n答：
     ids2 = [13, 13, 55437, 31211]
     if len(system) > 0:
-        system_ids = tokenizer.encode(" " + system, add_special_tokens=False)[1:]
+        system_ids = tokenizer.encode(" \n\n" + system, add_special_tokens=False)[1:]
     else:
         system_ids = []
     query_ids = tokenizer.encode(" " + query, add_special_tokens=False)[1:]
