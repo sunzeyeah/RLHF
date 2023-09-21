@@ -15,6 +15,7 @@ from transformers import (
     Trainer,
     TrainingArguments,
     default_data_collator,
+    GenerationConfig,
 )
 
 from src.utils import RESOURCE_PATH, load_tokenizer_and_model, load_checkpoint
@@ -112,6 +113,11 @@ def main():
 
     # load tokenizer and model
     tokenizer, model, eos_token_id = load_tokenizer_and_model(args)
+    if "baichuan2" in args.model_name_or_path.lower() or "qwen" in args.model_name_or_path.lower():
+        generation_config = GenerationConfig.from_pretrained(args.model_name_or_path, trust_remote_code=True)
+        generation_config.do_sample = args.do_sample
+        generation_config.max_new_tokens = args.max_length_generation
+        model.generation_config = generation_config
 
     if args.checkpoint is not None:
         load_checkpoint(args, model)
@@ -240,7 +246,12 @@ def main():
                 label = test_data.get('label', None)
                 # encoded_prompt = tokenizer(prompt)
                 if "chatglm2" in args.model_name_or_path.lower():
-                    input_ids, _, prompt_ids = chatglm2_encode(tokenizer, prompt, None, system, args.max_length)
+                    # results, history = model.chat(tokenizer, prompt, history=None, do_sample=False,
+                    #                               max_new_tokens=args.max_length_generation)
+                    # results = [results]
+                    input_ids, _, prompt_ids = chatglm2_encode(tokenizer, query=prompt, label=None,
+                                                               system=system, max_length=args.max_length,
+                                                               is_prefix=True)
                     input_ids = torch.tensor([prompt_ids], dtype=torch.long, device=device)
                     outputs = model.generate(input_ids=input_ids,
                                              max_new_tokens=args.max_length_generation,
@@ -252,6 +263,7 @@ def main():
                                              top_p=args.top_p,
                                              temperature=args.temperature)
                     prompt_length = len(prompt_ids)
+                    results = tokenizer.batch_decode([output[prompt_length:] for output in outputs], skip_special_tokens=True)
                 elif "chatglm" in args.model_name_or_path.lower():
                     inputs = tokenizer(prompt, max_length=args.max_length-args.max_length_generation,
                                        truncation="only_first",
@@ -268,6 +280,7 @@ def main():
                                              temperature=args.temperature,
                                              repetition_penalty=args.repetition_penalty)
                     prompt_length = len(inputs['input_ids'][0])
+                    results = tokenizer.batch_decode([output[prompt_length:] for output in outputs], skip_special_tokens=True)
                 # elif "glm" in args.model_name_or_path.lower():
                 #     encoded_prompt = tokenizer(prompt, prefix + tokenizer.mask_token)
                 #     prompt_length = len(encoded_prompt['input_ids'])
@@ -289,6 +302,13 @@ def main():
                 #                              top_k=args.top_k,
                 #                              top_p=args.top_p,
                 #                              temperature=args.temperature)
+                elif "baichuan2" in args.model_name_or_path.lower():
+                    messages = [{"role": "user", "content": prompt}]
+                    results = model.chat(tokenizer, messages)
+                    results = [results]
+                elif "qwen" in args.model_name_or_path.lower():
+                    results, history = model.chat(tokenizer, prompt, history=None)
+                    results = [results]
                 else:
                     if prefix is not None and len(prefix) > 0:
                         prompt += prefix
@@ -306,7 +326,7 @@ def main():
                                              temperature=args.temperature,
                                              repetition_penalty=args.repetition_penalty)
                     prompt_length = len(inputs['input_ids'][0])
-                results = tokenizer.batch_decode([output[prompt_length:] for output in outputs], skip_special_tokens=True)
+                    results = tokenizer.batch_decode([output[prompt_length:] for output in outputs], skip_special_tokens=True)
                 # p = tokenizer.decode(encoded_prompt['input_ids'], skip_special_tokens=True)
                 answers = []
                 for r in results:
