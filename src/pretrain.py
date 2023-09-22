@@ -225,7 +225,7 @@ def main():
         model.eval()
         # tokenizer.padding_side = "left"
         if args.test_filename is not None:
-            test_file = os.path.join(args.data_dir, args.test_filename)
+            test_file = args.test_filename
         else:
             test_file = os.path.join(RESOURCE_PATH, "test_prompts.jsonl")
         data_types = args.data_types.split(",") if args.data_types is not None else None
