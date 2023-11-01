@@ -169,7 +169,9 @@ def load_tokenizer_and_model(args, with_trainer: bool = True) -> Tuple[PreTraine
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, trust_remote_code=True)
 
     # set eos token
-    if "chatglm2" in args.model_name_or_path.lower():
+    if "chatglm3" in args.model_name_or_path.lower():
+        eos_token_id = [tokenizer.eos_token_id, tokenizer.get_command("<|user|>"), tokenizer.get_command("<|observation|>")]
+    elif "chatglm2" in args.model_name_or_path.lower():
         eos_token_id = tokenizer.get_command("eop") if args.checkpoint is not None else tokenizer.get_command("<eos>")
     elif "chatglm1_1" in args.model_name_or_path.lower():
         eos_token_id = tokenizer.eos_token_id
