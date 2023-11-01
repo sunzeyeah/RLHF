@@ -19,7 +19,7 @@ from transformers import (
 )
 
 from src.utils import RESOURCE_PATH, load_tokenizer_and_model, load_checkpoint
-from src.data.data import PretrainDataset, chatglm2_encode
+from src.data.data import PretrainDataset, chatglm2_encode, chatglm3_encode
 from src.utils.file_utils import set_seed, print_rank_0
 # from src.models.llama import LlamaForCausalLM
 
@@ -245,13 +245,27 @@ def main():
                 system = test_data.get('system', "")
                 label = test_data.get('label', None)
                 # encoded_prompt = tokenizer(prompt)
-                if "chatglm2" in args.model_name_or_path.lower():
+                if "chatglm3" in args.model_name_or_path.lower():
+                    _, _, prompt_ids = chatglm2_encode(tokenizer, query=prompt, label=None,
+                                                       system=system, max_length=args.max_length, is_prefix=True)
+                    input_ids = torch.tensor([prompt_ids], dtype=torch.long, device=device)
+                    outputs = model.generate(input_ids=input_ids,
+                                             max_new_tokens=args.max_length_generation,
+                                             eos_token_id=eos_token_id,
+                                             pad_token_id=tokenizer.pad_token_id,
+                                             do_sample=args.do_sample,
+                                             num_return_sequences=args.num_return_sequences,
+                                             top_k=args.top_k,
+                                             top_p=args.top_p,
+                                             temperature=args.temperature)
+                    prompt_length = len(prompt_ids)
+                    results = tokenizer.batch_decode([output[prompt_length:] for output in outputs], skip_special_tokens=True)
+                elif "chatglm2" in args.model_name_or_path.lower():
                     # results, history = model.chat(tokenizer, prompt, history=None, do_sample=False,
                     #                               max_new_tokens=args.max_length_generation)
                     # results = [results]
-                    input_ids, _, prompt_ids = chatglm2_encode(tokenizer, query=prompt, label=None,
-                                                               system=system, max_length=args.max_length,
-                                                               is_prefix=True)
+                    _, _, prompt_ids = chatglm2_encode(tokenizer, query=prompt, label=None,
+                                                       system=system, max_length=args.max_length, is_prefix=True)
                     input_ids = torch.tensor([prompt_ids], dtype=torch.long, device=device)
                     outputs = model.generate(input_ids=input_ids,
                                              max_new_tokens=args.max_length_generation,

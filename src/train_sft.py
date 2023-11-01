@@ -17,7 +17,7 @@ from transformers import (
 )
 
 from src.utils import RESOURCE_PATH, load_tokenizer_and_model, load_checkpoint
-from src.data.data import SFTDataset, chatglm2_encode
+from src.data.data import SFTDataset, chatglm2_encode, chatglm3_encode
 from src.utils.file_utils import set_seed, print_rank_0
 # from src.models import convert_to_lora_recursively
 
@@ -223,8 +223,21 @@ def main():
                 prompt = test_data['prompt']
                 prefix = test_data.get('prefix', "")
                 system = test_data.get('system', "")
-                if "chatglm2" in args.model_name_or_path.lower():
-                    input_ids, _, prompt_ids = chatglm2_encode(tokenizer, prompt, None, system, args.max_length)
+                if "chatglm3" in args.model_name_or_path.lower():
+                    _, _, prompt_ids = chatglm3_encode(tokenizer, prompt, None, system, args.max_length)
+                    input_ids = torch.tensor([prompt_ids], dtype=torch.long, device=device)
+                    outputs = model.generate(input_ids=input_ids,
+                                             max_new_tokens=args.max_length_generation,
+                                             eos_token_id=eos_token_id,
+                                             pad_token_id=tokenizer.pad_token_id,
+                                             do_sample=args.do_sample,
+                                             num_return_sequences=args.num_return_sequences,
+                                             top_k=args.top_k,
+                                             top_p=args.top_p,
+                                             temperature=args.temperature)
+                    prompt_length = len(prompt_ids)
+                elif "chatglm2" in args.model_name_or_path.lower():
+                    _, _, prompt_ids = chatglm2_encode(tokenizer, prompt, None, system, args.max_length)
                     input_ids = torch.tensor([prompt_ids], dtype=torch.long, device=device)
                     outputs = model.generate(input_ids=input_ids,
                                              max_new_tokens=args.max_length_generation,

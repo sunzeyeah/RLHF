@@ -18,6 +18,68 @@ from src.utils.modeling_utils import _prepare_decoder_attention_mask, qwen_make_
 from src.utils.file_utils import print_rank_0
 
 
+def chatglm3_encode(tokenizer: PreTrainedTokenizerBase,
+                    query: str,
+                    label: str = None,
+                    system: str = "",
+                    max_length: int = 1024,
+                    is_prefix: bool = True
+                    ) -> Tuple[List[int], List[int], List[int]]:
+    '''Use chatglm3 tokenizer to encode prompt + label with "longest_first" truncation strategy
+
+    :param tokenizer:
+    :param prompt:
+    :param label:
+    :param system:
+    :param max_length:
+    :return:
+    '''
+    prefix_tokens = tokenizer.get_prefix_tokens()
+    role_tokens_1 = [tokenizer.get_command(f"<|user|>")] + tokenizer.encode(f"\n", add_special_tokens=False)
+    # Process `system` and `query`
+    if is_prefix:
+        system_ids = tokenizer.encode(system + "\n\n", add_special_tokens=False) if len(system) > 0 else []
+        query_ids = tokenizer.encode(" " + query, add_special_tokens=False)[1:]
+    else:
+        system_ids = tokenizer.encode(" \n\n" + system, add_special_tokens=False)[1:] if len(system) > 0 else []
+        query_ids = tokenizer.encode(query, add_special_tokens=False)
+    # Process `label`
+    role_tokens_2 = [tokenizer.get_command(f"<|assistant|>")]
+    if label is not None:
+        label_ids = tokenizer.encode(label, add_special_tokens=False)
+        end_tokens = [tokenizer.get_command("<eos>")]
+    else:
+        label_ids = []
+        end_tokens = []
+    # Remove overflowing tokens
+    num_tokens_to_remove = len(prefix_tokens) + len(role_tokens_1) + len(query_ids) + len(system_ids) + \
+                           len(role_tokens_2) + len(label_ids) + len(end_tokens) - max_length
+    if num_tokens_to_remove > 0:
+        for _ in range(num_tokens_to_remove):
+            if len(query_ids) + len(system_ids) > len(label_ids) and len(query_ids) > 0:
+                query_ids.pop()
+            elif len(label_ids) > 0:
+                label_ids.pop()
+            else:
+                logger.warn("removing system tokens due to tokens overflowing")
+                system_ids.pop()
+        if label is not None:
+            label_ids += end_tokens
+    else:
+        if label is not None:
+            label_ids += end_tokens
+        label_ids += [tokenizer.pad_token_id] * -num_tokens_to_remove
+
+    if is_prefix:
+        prompt_ids = prefix_tokens + role_tokens_1 + system_ids + query_ids + role_tokens_2
+    else:
+        prompt_ids = prefix_tokens + role_tokens_1 + query_ids + system_ids + role_tokens_2
+    input_ids = prompt_ids + label_ids
+    labels = [tokenizer.pad_token_id] * len(prompt_ids) + label_ids
+    assert len(input_ids) == len(labels) == max_length
+    return input_ids, labels, prompt_ids
+
+
 def chatglm2_encode(tokenizer: PreTrainedTokenizerBase,
                     query: str,
                     label: str = None,
@@ -59,10 +121,13 @@ def chatglm2_encode(tokenizer: PreTrainedTokenizerBase,
                            len(label_ids) + num_special_tokens - max_length
     if num_tokens_to_remove > 0:
         for _ in range(num_tokens_to_remove):
-            if len(query_ids) + len(system_ids) > len(label_ids):
+            if len(query_ids) + len(system_ids) > len(label_ids) and len(query_ids) > 0:
                 query_ids.pop()
-            else:
+            elif len(label_ids) > 0:
                 label_ids.pop()
+            else:
+                logger.warn("removing system tokens due to tokens overflowing")
+                system_ids.pop()
         if label is not None:
             label_ids += [eop_id]
     else:
@@ -348,6 +413,13 @@ class SFTDataset(Dataset):
                     "attention_mask": encoded_dict['attention_mask'],
                     "labels": encoded_dict['input_ids'],
                 }
+            elif "chatglm3" in self.model_name_or_path.lower():
+                input_ids, labels, _ = chatglm3_encode(self.tokenizer, prompt, label, system, self.args.max_length)
+                return {
+                    "input_ids": torch.tensor(input_ids, dtype=torch.long),
+                    # "attention_mask": torch.ones(len(input_ids), dtype=torch.long),
+                    "labels": torch.tensor(labels, dtype=torch.long),
+                }
             elif "chatglm2" in self.model_name_or_path.lower():
                 input_ids, labels, _ = chatglm2_encode(self.tokenizer, prompt, label, system, self.args.max_length)
                 # gmask_id = self.tokenizer.get_command("[gMASK]")
@@ -377,7 +449,7 @@ class SFTDataset(Dataset):
                 # assert len(input_ids) == len(labels) == self.args.max_length
                 return {
                     "input_ids": torch.tensor(input_ids, dtype=torch.long),
-                    "attention_mask": torch.ones(len(input_ids), dtype=torch.long),
+                    # "attention_mask": torch.ones(len(input_ids), dtype=torch.long),
                     "labels": torch.tensor(labels, dtype=torch.long),
                 }
             elif "chatglm" in self.model_name_or_path.lower():
@@ -523,6 +595,16 @@ class PairwiseDataset(Dataset):
                 "rejected_input_ids": rejected_encodings_dict["input_ids"],
                 "rejected_attention_mask": rejected_encodings_dict["attention_mask"],
                 "labels": rejected_encodings_dict["input_ids"],
+            }
+        elif "chatglm3" in self.args.model_name_or_path.lower():
+            chosen_input_ids, labels, _ = chatglm3_encode(self.tokenizer, prompt, chosen_answer, system,
+                                                          self.args.max_length)
+            rejected_input_ids, labels, _ = chatglm3_encode(self.tokenizer, prompt, rejected_answer, system,
+                                                            self.args.max_length)
+            return {
+                "chosen_input_ids": torch.tensor(chosen_input_ids, dtype=torch.long),
+                "rejected_input_ids": torch.tensor(rejected_input_ids, dtype=torch.long),
+                "labels": torch.tensor(labels, dtype=torch.long)
             }
         elif "chatglm2" in self.args.model_name_or_path.lower():
             chosen_input_ids, labels, _ = chatglm2_encode(self.tokenizer, prompt, chosen_answer, system,
@@ -801,6 +883,18 @@ class DPODataset(Dataset):
                 "rejected_input_ids": rejected_encodings_dict["input_ids"],
                 "rejected_attention_mask": rejected_encodings_dict["attention_mask"],
                 "labels": rejected_encodings_dict["input_ids"],
+            }
+        elif "chatglm3" in self.args.model_name_or_path.lower():
+            chosen_input_ids, chosen_labels, _ = chatglm3_encode(self.tokenizer, prompt, chosen_answer, system,
+                                                                 self.args.max_length)
+            rejected_input_ids, rejected_labels, _ = chatglm3_encode(self.tokenizer, prompt, rejected_answer, system,
+                                                                     self.args.max_length)
+            return {
+                "index": torch.tensor(index, dtype=torch.long),
+                "chosen_input_ids": torch.tensor(chosen_input_ids, dtype=torch.long),
+                "rejected_input_ids": torch.tensor(rejected_input_ids, dtype=torch.long),
+                "chosen_labels": torch.tensor(chosen_labels, dtype=torch.long),
+                "rejected_labels": torch.tensor(rejected_labels, dtype=torch.long)
             }
         elif "chatglm2" in self.args.model_name_or_path.lower():
             chosen_input_ids, chosen_labels, _ = chatglm2_encode(self.tokenizer, prompt, chosen_answer, system,
