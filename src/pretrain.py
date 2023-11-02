@@ -346,7 +346,7 @@ def main():
                 for r in results:
                     # answer = r.replace(p, "").strip()
                     answer = r
-                    print_rank_0(f"\nprompt: {prompt}\nanswer: {answer}")
+                    # print_rank_0(f"\nprompt: {prompt}\nanswer: {answer}")
                     answers.append({"answer": answer, "score": None})
                 if w is not None:
                     w.write(json.dumps({"prompt": prompt, "prefix": prefix, "system": system, "answers": answers,
