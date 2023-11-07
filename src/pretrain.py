@@ -246,7 +246,7 @@ def main():
                 label = test_data.get('label', None)
                 # encoded_prompt = tokenizer(prompt)
                 if "chatglm3" in args.model_name_or_path.lower():
-                    _, _, prompt_ids = chatglm2_encode(tokenizer, query=prompt, label=None,
+                    _, _, prompt_ids = chatglm3_encode(tokenizer, query=prompt, label=None,
                                                        system=system, max_length=args.max_length, is_prefix=True)
                     input_ids = torch.tensor([prompt_ids], dtype=torch.long, device=device)
                     outputs = model.generate(input_ids=input_ids,
@@ -357,5 +357,4 @@ def main():
 
 
 if __name__ == "__main__":
-    from transformers import pipeline
     main()
