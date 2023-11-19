@@ -44,11 +44,12 @@ def get_parser():
     parser.add_argument("--max_length_generation", type=int, default=None)
     parser.add_argument("--bits", type=int, default=32,
                         help="bits used to load model, including: 32, 16, 8, 4")
-    # parser.add_argument("--multi_card", action="store_true")
     parser.add_argument("--device_map", type=str, default=None, help="device map to allocate model,"
                                                                      "[None] means cpu"
                                                                      "[0, 1, 2, ...], number means single-card"
                                                                      "[auto, balanced, balanced_low_0] means multi-card")
+    parser.add_argument("--low_cpu_mem_usage", action="store_true", help="whether to enable low cpu memory usage"
+                                                                         "when loading model")
     # train
     parser.add_argument("--do_train", action="store_true")
     parser.add_argument("--train_filename", type=str, default=None)

@@ -312,7 +312,7 @@ class PretrainDataset(Dataset):
             length = 0
             for i, line in tqdm(enumerate(f), desc=f"Loading {os.path.basename(filename)}"):
                 item = json.loads(line)
-                prompt = item['prompt']
+                prompt = str(item['prompt'])
                 label = item.get('label', None)
                 if len(prompt) <= 0:
                     discard += 1
@@ -518,8 +518,8 @@ class SFTDataset(Dataset):
                 data_type = item.get('data_type', "human_generated")
                 if data_type != "human_generated":
                     continue
-                prompt = item['prompt']
-                label = item['answers'][0]['answer']
+                prompt = str(item['prompt'])
+                label = str(item['answers'][0]['answer'])
                 score = item['answers'][0]['score']
                 prefix = item.get('prefix', "")
                 system = item.get('system', "")
@@ -686,15 +686,15 @@ class PairwiseDataset(Dataset):
         with open(filename, "r", encoding="utf-8") as f:
             for line in tqdm(f, desc=f"Loading {os.path.basename(filename)}"):
                 item = json.loads(line)
-                prompt = item['prompt']
+                prompt = str(item['prompt'])
                 answers = item['answers']
                 prefix = item.get('prefix', "")
                 system = item.get('system', "")
                 chosen_answer, rejected_answer = None, None
                 for i in range(len(answers) - 1):
-                    answer_1 = answers[i]["answer"]
+                    answer_1 = str(answers[i]["answer"])
                     answer_1_score = answers[i]["score"]
-                    answer_2 = answers[i + 1]["answer"]
+                    answer_2 = str(answers[i + 1]["answer"])
                     answer_2_score = answers[i + 1]["score"]
                     if answer_1_score > answer_2_score:
                         chosen_answer = answer_1
@@ -787,7 +787,7 @@ class RLHFDataset(Dataset):
                 data_type = item.get('data_type', "human_generated")
                 if data_type != "human_generated":
                     continue
-                prompt = item['prompt']
+                prompt = str(item['prompt'])
                 prefix = item.get('prefix', "")
                 system = item.get('system', "")
 
@@ -932,15 +932,15 @@ class DPODataset(Dataset):
         with open(filename, "r", encoding="utf-8") as f:
             for line in tqdm(f, desc=f"Loading {os.path.basename(filename)}"):
                 item = json.loads(line)
-                prompt = item['prompt']
+                prompt = str(item['prompt'])
                 answers = item['answers']
                 prefix = item.get('prefix', "")
                 system = item.get('system', "")
                 chosen_answer, rejected_answer = None, None
                 for i in range(len(answers) - 1):
-                    answer_1 = answers[i]["answer"]
+                    answer_1 = str(answers[i]["answer"])
                     answer_1_score = answers[i]["score"]
-                    answer_2 = answers[i + 1]["answer"]
+                    answer_2 = str(answers[i + 1]["answer"])
                     answer_2_score = answers[i + 1]["score"]
                     if answer_1_score > answer_2_score:
                         chosen_answer = answer_1

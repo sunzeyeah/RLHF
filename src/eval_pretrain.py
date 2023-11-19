@@ -76,6 +76,8 @@ def get_parser():
     parser.add_argument("--max_length", type=int, default=2048)
     parser.add_argument("--max_length_generation", type=int, default=1, help="Maximum number of newly generated tokens")
     parser.add_argument("--checkpoint", type=str)
+    parser.add_argument("--low_cpu_mem_usage", action="store_true", help="whether to enable low cpu memory usage"
+                                                                         "when loading model")
 
     # eval
     parser.add_argument("--eval_filename", type=str, default=None)

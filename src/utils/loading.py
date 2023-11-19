@@ -204,7 +204,7 @@ def load_tokenizer_and_model(args, with_trainer: bool = True) -> Tuple[PreTraine
     }
     if with_trainer:
         params["device_map"] = args.device_map
-        params["low_cpu_mem_usage"] = True
+        params["low_cpu_mem_usage"] = args.low_cpu_mem_usage
     model = model_class.from_pretrained(args.model_name_or_path,
                                         **params)
     # # cpu
