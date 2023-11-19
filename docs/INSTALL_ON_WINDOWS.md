@@ -3,7 +3,7 @@
 ## 0. Prerequisite
 #### a. 确认NVIDIA GPU架构
 可根据下图
-![image info](./images/torch_cuda_list.png "torch_cuda_list")
+![image info](../images/torch_cuda_list.png "torch_cuda_list")
 
 或运行```torch.cuda.get_device_capability()```获取
 
@@ -12,7 +12,7 @@
 
 - Microsoft Visual Studio 2022安装注意事项如下，`单个组件`需勾选6个额外模块 ，[参考链接](https://blog.csdn.net/feking2/article/details/130160845)：
 
-![image info](./images/microsoft_visual_studio_components.png "microsoft_visual_studio_components")
+![image info](../images/microsoft_visual_studio_components.png "microsoft_visual_studio_components")
 
 - 安装顺序：必须先安装Visual Studio，再安装CUDA
 
